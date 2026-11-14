@@ -66,7 +66,8 @@ program for an extension, see [Configuration](#configuration).
 - **Bookmarks**: **Ctrl+D**, or *Add to Bookmarks* in the menu of empty
   space, bookmarks the current folder (again to remove it); a selected
   folder can be bookmarked from its menu too. Drag bookmarks to reorder them; right-click → *Remove Bookmark*.
-  Bookmarks from `~/.config/gtk-3.0/bookmarks` are shown too.
+  Bookmarks from `~/.config/gtk-3.0/bookmarks` (Nautilus, file choosers)
+  are shown too, and update as soon as another program changes them.
 - **Drives**: see [Drives](#drives).
 - **Folder tree** (bottom third): follows the active view, keeping the
   current folder in the middle. Its root is your home folder, or the drive

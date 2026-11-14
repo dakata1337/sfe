@@ -35,6 +35,8 @@ struct _SfeSidebar {
     GFile* location;
     gulong config_handler;
     gulong devices_handler;
+    GFileMonitor* gtk_bookmarks; /* ~/.config/gtk-3.0/bookmarks */
+    guint rebuild_source;
     bool positioned; /* divider placed at 50% once */
 };
 
@@ -478,6 +480,40 @@ static void on_devices_changed(SfeDevices* devices, gpointer data)
     rebuild(SFE_SIDEBAR(data));
 }
 
+static gboolean rebuild_now(gpointer data)
+{
+    SfeSidebar* self = data;
+    self->rebuild_source = 0;
+    rebuild(self);
+    return G_SOURCE_REMOVE;
+}
+
+/* Another file manager (Nautilus, a file chooser) changed the GTK bookmarks;
+ * they replace the file, which comes as several events: rebuild once. */
+static void on_gtk_bookmarks_changed(GFileMonitor* monitor, GFile* file, GFile* other,
+    GFileMonitorEvent event, gpointer data)
+{
+    (void)monitor, (void)file, (void)other, (void)event;
+    SfeSidebar* self = data;
+    if (self->rebuild_source != 0)
+        g_source_remove(self->rebuild_source);
+    self->rebuild_source = g_timeout_add(150, rebuild_now, self);
+}
+
+static void watch_gtk_bookmarks(SfeSidebar* self)
+{
+    g_autofree char* path = g_build_filename(g_get_user_config_dir(), "gtk-3.0", "bookmarks", NULL);
+    g_autoptr(GFile) file = g_file_new_for_path(path);
+    g_autoptr(GError) error = NULL;
+
+    self->gtk_bookmarks = g_file_monitor_file(file, G_FILE_MONITOR_WATCH_MOVES, NULL, &error);
+    if (self->gtk_bookmarks == NULL) {
+        g_debug("cannot watch %s: %s", path, error->message);
+        return;
+    }
+    g_signal_connect(self->gtk_bookmarks, "changed", G_CALLBACK(on_gtk_bookmarks_changed), self);
+}
+
 static void on_tree_open(SfeDirTree* tree, GFile* dir, gpointer data)
 {
     (void)tree;
@@ -511,6 +547,12 @@ static void sfe_sidebar_dispose(GObject* object)
         g_signal_handler_disconnect(sfe_devices_get_default(), self->devices_handler);
         self->devices_handler = 0;
     }
+    if (self->gtk_bookmarks != NULL) {
+        g_signal_handlers_disconnect_by_data(self->gtk_bookmarks, self);
+        g_file_monitor_cancel(self->gtk_bookmarks);
+        g_clear_object(&self->gtk_bookmarks);
+    }
+    g_clear_handle_id(&self->rebuild_source, g_source_remove);
     g_clear_object(&self->location);
     G_OBJECT_CLASS(sfe_sidebar_parent_class)->dispose(object);
 }
@@ -558,6 +600,7 @@ static void sfe_sidebar_init(SfeSidebar* self)
     self->config_handler = g_signal_connect(sfe_app(), "config-changed", G_CALLBACK(on_config_changed), self);
     self->devices_handler = g_signal_connect(sfe_devices_get_default(), "changed",
         G_CALLBACK(on_devices_changed), self);
+    watch_gtk_bookmarks(self);
     rebuild(self);
 }
 
