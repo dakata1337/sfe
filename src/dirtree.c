@@ -44,6 +44,7 @@ static guint signals[N_SIGNALS];
 
 static void load_node(SfeDirTree* self, GtkTreeIter* iter, bool expand);
 static void reveal(SfeDirTree* self);
+static void probe_for_subdirs(SfeDirTree* self, GFile* dir);
 
 /* ------------------------------------------------------------------------ */
 /* Rows                                                                      */
@@ -192,8 +193,10 @@ static void on_node_changed(GFileMonitor* monitor, GFile* file, GFile* other,
     }
     if (added != NULL && g_file_query_file_type(added, G_FILE_QUERY_INFO_NONE, NULL) == G_FILE_TYPE_DIRECTORY) {
         g_autofree char* name = g_file_get_basename(added);
-        if ((self->show_hidden || name[0] != '.') && !find_child(self, &parent, name, &child))
+        if ((self->show_hidden || name[0] != '.') && !find_child(self, &parent, name, &child)) {
             add_dir_row(self, &parent, added, name, "folder-symbolic");
+            probe_for_subdirs(self, added);
+        }
     }
 }
 
@@ -241,6 +244,87 @@ static void load_job_free(LoadJob* job)
     g_free(job);
 }
 
+/* ------------------------------------------------------------------------ */
+/* Expanders only where there is something to expand                         */
+/* ------------------------------------------------------------------------ */
+
+/* Checks in the background whether `dir` has a (shown) subfolder; if not,
+ * its placeholder goes and the expander disappears. */
+typedef struct {
+    SfeDirTree* self;
+    GFile* dir;
+    GCancellable* cancel;
+} Probe;
+
+static void probe_free(Probe* probe)
+{
+    g_object_unref(probe->self);
+    g_object_unref(probe->dir);
+    g_object_unref(probe->cancel);
+    g_free(probe);
+}
+
+/* No subfolders: drop the expander, but keep watching for new ones. */
+static void mark_childless(Probe* probe)
+{
+    SfeDirTree* self = probe->self;
+    GtkTreeIter iter;
+
+    if (g_cancellable_is_cancelled(probe->cancel) || !iter_for(self, probe->dir, &iter)
+        || node_state(self, &iter) != NODE_UNLOADED)
+        return;
+    remove_placeholders(self, &iter);
+    gtk_tree_store_set(self->store, &iter, COL_STATE, NODE_LOADED, -1);
+    watch_dir(self, probe->dir);
+}
+
+static void on_probe_files(GObject* source, GAsyncResult* res, gpointer data)
+{
+    Probe* probe = data;
+    GFileEnumerator* en = G_FILE_ENUMERATOR(source);
+    GList* files = g_file_enumerator_next_files_finish(en, res, NULL);
+    bool found = false;
+
+    for (GList* l = files; l != NULL; l = l->next) {
+        GFileInfo* info = l->data;
+        found |= g_file_info_get_file_type(info) == G_FILE_TYPE_DIRECTORY
+            && (probe->self->show_hidden || !g_file_info_get_is_hidden(info));
+    }
+    g_list_free_full(files, g_object_unref);
+
+    if (found || files == NULL) {
+        if (!found)
+            mark_childless(probe);
+        g_object_unref(en);
+        probe_free(probe);
+        return;
+    }
+    g_file_enumerator_next_files_async(en, 64, G_PRIORITY_LOW, probe->cancel, on_probe_files, probe);
+}
+
+static void on_probe_enumerate(GObject* source, GAsyncResult* res, gpointer data)
+{
+    Probe* probe = data;
+    GFileEnumerator* en = g_file_enumerate_children_finish(G_FILE(source), res, NULL);
+
+    if (en == NULL) { /* unreadable: nothing to expand either */
+        mark_childless(probe);
+        probe_free(probe);
+        return;
+    }
+    g_file_enumerator_next_files_async(en, 64, G_PRIORITY_LOW, probe->cancel, on_probe_files, probe);
+}
+
+static void probe_for_subdirs(SfeDirTree* self, GFile* dir)
+{
+    Probe* probe = g_new0(Probe, 1);
+    probe->self = g_object_ref(self);
+    probe->dir = g_object_ref(dir);
+    probe->cancel = g_object_ref(self->cancel);
+    g_file_enumerate_children_async(dir, LOAD_ATTRIBUTES, G_FILE_QUERY_INFO_NONE, G_PRIORITY_LOW,
+        probe->cancel, on_probe_enumerate, probe);
+}
+
 static void finish_load(LoadJob* job)
 {
     SfeDirTree* self = job->self;
@@ -254,6 +338,7 @@ static void finish_load(LoadJob* job)
         GFileInfo* info = g_ptr_array_index(job->infos, i);
         g_autoptr(GFile) child = g_file_get_child(job->dir, g_file_info_get_name(info));
         add_dir_row(self, &iter, child, g_file_info_get_display_name(info), "folder-symbolic");
+        probe_for_subdirs(self, child);
     }
     gtk_tree_store_set(self->store, &iter, COL_STATE, NODE_LOADED, -1);
     watch_dir(self, job->dir);
