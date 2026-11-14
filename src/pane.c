@@ -780,7 +780,9 @@ static GtkWidget* build_grid(SfePane* self)
     /* Long names wrap, but without Pango's hyphens ("wallpaper.pn-g"). */
     PangoAttrList* attrs = pango_attr_list_new();
     pango_attr_list_insert(attrs, pango_attr_insert_hyphens_new(FALSE));
-    g_object_set(text, "xalign", 0.5, "alignment", PANGO_ALIGN_CENTER,
+    /* yalign 0: in a row with a two-line name, short names sit right under
+     * their icon instead of being centred with space above and below. */
+    g_object_set(text, "xalign", 0.5, "yalign", 0.0, "alignment", PANGO_ALIGN_CENTER,
         "wrap-mode", PANGO_WRAP_WORD_CHAR, "attributes", attrs, NULL);
     pango_attr_list_unref(attrs);
     gtk_cell_layout_pack_start(layout, text, FALSE);
