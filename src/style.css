@@ -187,7 +187,6 @@
 }
 
 .sfe-window .sfe-sidebar scrollbar slider {
-    min-width: 6px;
     margin: 2px;
 }
 
@@ -266,7 +265,7 @@
     color: @sfe_fg;
 }
 
-/* ---- Scrollbars: thin and unobtrusive --------------------------------- */
+/* ---- Scrollbars: a thin indicator that grows when the pointer is near --- */
 
 .sfe-window scrollbar {
     background-color: transparent;
@@ -274,15 +273,27 @@
 }
 
 .sfe-window scrollbar slider {
-    background-color: alpha(@sfe_fg, 0.25);
+    background-color: alpha(@sfe_fg, 0.3);
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
+    min-width: 8px;
+    min-height: 8px;
+    transition: min-width 150ms ease-out, min-height 150ms ease-out, background-color 150ms ease-out;
+}
+
+/* Overlay scrollbars: thin while the pointer is elsewhere. */
+.sfe-window scrollbar.overlay-indicator:not(.hovering):not(.dragging) slider {
     min-width: 4px;
     min-height: 4px;
 }
 
-.sfe-window scrollbar slider:hover {
-    background-color: alpha(@sfe_fg, 0.45);
+/* GTK adds .hovering when the pointer comes close to the bar. */
+.sfe-window scrollbar.hovering slider,
+.sfe-window scrollbar.dragging slider,
+.sfe-window scrollbar:hover slider {
+    min-width: 10px;
+    min-height: 10px;
+    background-color: alpha(@sfe_fg, 0.5);
 }
 
 /* ---- Check boxes (dialogs, properties) ------------------------------- */
