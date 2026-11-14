@@ -12,6 +12,7 @@
 #include "props.h"
 #include "renamedlg.h"
 #include "split.h"
+#include "trash.h"
 #include <gio/gdesktopappinfo.h>
 #include <string.h>
 
@@ -327,10 +328,87 @@ static void run_extract(const SfeActionTarget* t)
         run_op(t, SFE_OP_EXTRACT, t->files, t->dir);
 }
 
+static bool in_trash(const SfeActionTarget* t)
+{
+    return sfe_trash_is_trash_dir(t->dir);
+}
+
+static bool can_trash(const SfeActionTarget* t)
+{
+    return t->files != NULL && !in_trash(t);
+}
+
+static void run_delete(const SfeActionTarget* t);
+
+/* In the trash itself, Delete deletes permanently (after asking). */
 static void run_trash(const SfeActionTarget* t)
 {
-    if (t->files != NULL)
+    if (in_trash(t))
+        run_delete(t);
+    else if (t->files != NULL)
         run_op(t, SFE_OP_TRASH, t->files, NULL);
+}
+
+static bool can_restore(const SfeActionTarget* t)
+{
+    return t->files != NULL && in_trash(t);
+}
+
+/* Puts trashed items back where they came from (a rename: the home trash
+ * is on the home filesystem); problems are listed at the end. */
+static void run_restore(const SfeActionTarget* t)
+{
+    g_autoptr(GString) problems = g_string_new(NULL);
+    guint failed = 0;
+
+    if (!can_restore(t))
+        return;
+    for (GList* l = t->files; l != NULL; l = l->next) {
+        g_autoptr(GError) error = NULL;
+        if (!sfe_trash_restore(l->data, &error)) {
+            g_string_append_printf(problems, "%s%s", failed++ ? "\n" : "", error->message);
+        }
+    }
+    if (failed > 0)
+        sfe_show_error(widget_of(t), failed == 1 ? "Cannot restore an item" : "Cannot restore some items", problems->str);
+}
+
+typedef struct {
+    SfeWindow* window;
+} EmptyRequest;
+
+static void empty_request_free(gpointer p)
+{
+    EmptyRequest* req = p;
+    g_object_unref(req->window);
+    g_free(req);
+}
+
+static void do_empty_trash(gpointer data)
+{
+    EmptyRequest* req = data;
+    GList* all = sfe_trash_everything();
+    if (all != NULL) {
+        g_autoptr(SfeFileOp) op = sfe_file_op_new(SFE_OP_DELETE, all, NULL);
+        sfe_window_run_op(req->window, op);
+    }
+    g_list_free_full(all, g_object_unref);
+}
+
+static bool can_empty_trash(const SfeActionTarget* t)
+{
+    return in_trash(t) && !sfe_trash_is_empty();
+}
+
+/* Also from the sidebar's Trash row, wherever the active view is. */
+static void run_empty_trash(const SfeActionTarget* t)
+{
+    if (sfe_trash_is_empty())
+        return;
+    EmptyRequest* req = g_new0(EmptyRequest, 1);
+    req->window = g_object_ref(t->window);
+    sfe_confirm(widget_of(t), "Empty the trash?", "Everything in the trash is deleted permanently.",
+        "Empty Trash", true, do_empty_trash, req, empty_request_free);
 }
 
 typedef struct {
@@ -360,7 +438,7 @@ static void run_delete(const SfeActionTarget* t)
 
     DeleteRequest* req = g_new0(DeleteRequest, 1);
     req->window = g_object_ref(t->window);
-    req->files = g_list_copy_deep(t->files, ref_copy, NULL);
+    req->files = sfe_trash_with_info(t->files); /* trashed items lose their info files too */
     if (!sfe_config()->confirm_delete) {
         do_delete(req);
         delete_request_free(req);
@@ -433,9 +511,15 @@ static void on_renamed(GPtrArray* names, gpointer data)
         sfe_pane_reveal(SFE_PANE(data), g_ptr_array_index(names, 0));
 }
 
+/* Not in the trash: a renamed item would lose its trash information. */
+static bool can_rename(const SfeActionTarget* t)
+{
+    return t->files != NULL && !sfe_trash_is_trash_dir(t->dir);
+}
+
 static void run_rename(const SfeActionTarget* t)
 {
-    if (t->files == NULL)
+    if (!can_rename(t))
         return;
     if (t->files->next == NULL)
         sfe_rename_one(widget_of(t), t->files->data, on_renamed, g_object_ref(t->pane), g_object_unref);
@@ -480,6 +564,7 @@ static const struct {
 
 static const SfeAction actions[] = {
     /* name                 label                         shortcuts                         menu          section visible                 run */
+    { "restore",            "Restore",                    { NULL },                         ITEMS,        0, can_restore,             run_restore },
     { "open",               "Open",                       { NULL },                         ITEMS,        0, has_files,               run_open },
     { "new-folder",         "New Folder…",                { "<Control><Shift>n", NULL },    FOLDER,       0, NULL,                    run_new_folder },
     { "new-file",           "New File…",                  { NULL },                         FOLDER,       0, NULL,                    run_new_file },
@@ -487,10 +572,10 @@ static const SfeAction actions[] = {
     { "copy",               "Copy",                       { "<Control>c", NULL },           ITEMS,        1, has_files,               run_copy },
     { "paste",              "Paste",                      { "<Control>v", NULL },           FOLDER,       1, can_paste,               run_paste },
     { "paste-into",         "Paste Into Folder",          { NULL },                         ITEMS,        1, can_paste_into,          run_paste_into },
-    { "rename",             "Rename…",                    { "F2", NULL },                   ITEMS,        2, has_files,               run_rename },
+    { "rename",             "Rename…",                    { "F2", NULL },                   ITEMS,        2, can_rename,              run_rename },
     { "extract",            "Extract Here",               { NULL },                         ITEMS,        2, can_extract,             run_extract },
     { "compress",           "Compress…",                  { NULL },                         ITEMS,        2, can_compress,            run_compress },
-    { "trash",              "Move to Trash",              { "Delete", NULL },               ITEMS,        3, has_files,               run_trash },
+    { "trash",              "Move to Trash",              { "Delete", NULL },               ITEMS,        3, can_trash,               run_trash },
     { "delete",             "Delete Permanently…",        { "<Shift>Delete", NULL },        ITEMS,        3, has_files,               run_delete },
     { "search",             "Search…",                    { "<Control>f", NULL },           FOLDER,       2, NULL,                    run_search },
     { "select-all",         "Select All",                 { "<Control>a", NULL },           FOLDER,       2, NULL,                    run_select_all },
@@ -499,6 +584,7 @@ static const SfeAction actions[] = {
     { "unbookmark-selection", "Remove from Bookmarks",    { NULL },                         ITEMS,        4, can_unbookmark_selection, run_bookmark_selection },
     { "bookmark-folder",    "Add to Bookmarks",           { NULL },                         FOLDER,       4, can_bookmark_folder,     run_bookmark },
     { "unbookmark-folder",  "Remove from Bookmarks",      { NULL },                         FOLDER,       4, can_unbookmark_folder,   run_bookmark },
+    { "empty-trash",        "Empty Trash…",               { NULL },                         FOLDER,       3, can_empty_trash,         run_empty_trash },
     { "properties",         "Properties",                 { "<Alt>Return", NULL },          ITEMS|FOLDER, 9, NULL,                    run_properties },
 
     { "preferences",        "Preferences",                { "<Control>p", NULL },           NONE,         0, NULL,                    run_preferences },

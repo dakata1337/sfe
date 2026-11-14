@@ -56,6 +56,7 @@ core_src = files(
   'src/history.c',
   'src/opener.c',
   'src/rename.c',
+  'src/trash.c',
   'src/util.c',
 )
 core_lib = static_library('sfe-core', core_src,

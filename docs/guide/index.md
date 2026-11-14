@@ -62,7 +62,8 @@ program for an extension, see [Configuration](#configuration).
 
 ![Sidebar with places, bookmarks, drives and the folder tree](images/sidebar.png)
 
-- **Places**: Home, your standard folders, and File System.
+- **Places**: Home, your standard folders, File System and Trash. The Trash
+  icon shows whether it holds anything; right-click it → *Empty Trash…*.
 - **Bookmarks**: **Ctrl+D**, or *Add to Bookmarks* in the menu of empty
   space, bookmarks the current folder (again to remove it); a selected
   folder can be bookmarked from its menu too. Drag bookmarks to reorder them; right-click → *Remove Bookmark*.
@@ -173,7 +174,12 @@ only goes down: `..` and `.` are not allowed.
 
   ![The Compress dialog](images/compress.png)
 - Trashed files go to the standard trash (`~/.local/share/Trash`), so other
-  tools can restore them.
+  tools can restore them. Open **Trash** in the sidebar to see them:
+  **Restore** puts the selection back where it came from (recreating missing
+  folders, never replacing a file that took its place), **Delete** /
+  **Shift+Delete** removes items for good, and *Empty Trash…* in the menu of
+  empty space clears it. Files trashed on other drives stay in that drive's
+  own trash folder (`.Trash-1000`).
 
 ### Custom commands
 

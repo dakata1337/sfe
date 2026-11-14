@@ -5,6 +5,7 @@
 #include "devices.h"
 #include "dialogs.h"
 #include "dirtree.h"
+#include "trash.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -36,6 +37,7 @@ struct _SfeSidebar {
     gulong config_handler;
     gulong devices_handler;
     GFileMonitor* gtk_bookmarks; /* ~/.config/gtk-3.0/bookmarks */
+    GFileMonitor* trash; /* the trash folder: empty / full icon */
     guint rebuild_source;
     bool positioned; /* divider placed at 50% once */
 };
@@ -157,6 +159,13 @@ static void add_places(SfeSidebar* self)
         add_row(self, SECTION_PLACES, special[i].icon, name, file);
     }
     add_row(self, SECTION_PLACES, "drive-harddisk-symbolic", "File System", root);
+
+    /* The home trash; its folder is created like g_file_trash() would. */
+    g_autoptr(GFile) trash = sfe_trash_files_dir();
+    if (!g_file_query_exists(trash, NULL))
+        g_file_make_directory_with_parents(trash, NULL, NULL);
+    add_row(self, SECTION_PLACES, sfe_trash_is_empty() ? "user-trash-symbolic" : "user-trash-full-symbolic",
+        "Trash", trash);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -311,6 +320,7 @@ static void on_row_activated(GtkListBox* list, GtkListBoxRow* row, gpointer data
 }
 
 typedef enum {
+    MENU_EMPTY_TRASH,
     MENU_OPEN_SPLIT,
     MENU_OPEN_NEW_WINDOW,
     MENU_REMOVE_BOOKMARK,
@@ -334,6 +344,12 @@ static void on_menu_item(GtkMenuItem* item, gpointer data)
     GFile* file = g_object_get_data(G_OBJECT(item), "sfe-file");
 
     switch (command) {
+    case MENU_EMPTY_TRASH: { /* the window's action: it asks first */
+        GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(self));
+        if (G_IS_ACTION_GROUP(window))
+            g_action_group_activate_action(G_ACTION_GROUP(window), "empty-trash", NULL);
+        break;
+    }
     case MENU_OPEN_SPLIT: open_location(self, file, SFE_OPEN_SPLIT); break;
     case MENU_OPEN_NEW_WINDOW: open_location(self, file, SFE_OPEN_NEW_WINDOW); break;
     case MENU_REMOVE_BOOKMARK: remove_bookmark(d->bookmark_index); break;
@@ -403,6 +419,8 @@ static void show_row_menu(SfeSidebar* self, GtkListBoxRow* row, GdkEvent* event)
 
     if (d->file != NULL)
         add_open_items(self, menu, row, d->file);
+    if (d->file != NULL && sfe_trash_is_trash_dir(d->file) && !sfe_trash_is_empty())
+        add_menu_item(self, menu, "Empty Trash…", MENU_EMPTY_TRASH, row, NULL);
     if (d->bookmark_index >= 0)
         add_menu_item(self, menu, "Remove Bookmark", MENU_REMOVE_BOOKMARK, row, NULL);
     if (d->device_id != NULL && d->file == NULL)
@@ -530,9 +548,10 @@ static gboolean rebuild_now(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* Another file manager (Nautilus, a file chooser) changed the GTK bookmarks;
- * they replace the file, which comes as several events: rebuild once. */
-static void on_gtk_bookmarks_changed(GFileMonitor* monitor, GFile* file, GFile* other,
+/* Another file manager (Nautilus, a file chooser) changed the GTK bookmarks
+ * (they replace the file, which comes as several events), or the trash
+ * changed: rebuild once. */
+static void on_watched_changed(GFileMonitor* monitor, GFile* file, GFile* other,
     GFileMonitorEvent event, gpointer data)
 {
     (void)monitor, (void)file, (void)other, (void)event;
@@ -553,7 +572,24 @@ static void watch_gtk_bookmarks(SfeSidebar* self)
         g_debug("cannot watch %s: %s", path, error->message);
         return;
     }
-    g_signal_connect(self->gtk_bookmarks, "changed", G_CALLBACK(on_gtk_bookmarks_changed), self);
+    g_signal_connect(self->gtk_bookmarks, "changed", G_CALLBACK(on_watched_changed), self);
+}
+
+static void watch_trash(SfeSidebar* self)
+{
+    g_autoptr(GFile) trash = sfe_trash_files_dir();
+    self->trash = g_file_monitor_directory(trash, G_FILE_MONITOR_WATCH_MOVES, NULL, NULL);
+    if (self->trash != NULL)
+        g_signal_connect(self->trash, "changed", G_CALLBACK(on_watched_changed), self);
+}
+
+static void drop_monitor(SfeSidebar* self, GFileMonitor** monitor)
+{
+    if (*monitor == NULL)
+        return;
+    g_signal_handlers_disconnect_by_data(*monitor, self);
+    g_file_monitor_cancel(*monitor);
+    g_clear_object(monitor);
 }
 
 static void on_tree_open(SfeDirTree* tree, GFile* dir, int where, gpointer data)
@@ -589,11 +625,8 @@ static void sfe_sidebar_dispose(GObject* object)
         g_signal_handler_disconnect(sfe_devices_get_default(), self->devices_handler);
         self->devices_handler = 0;
     }
-    if (self->gtk_bookmarks != NULL) {
-        g_signal_handlers_disconnect_by_data(self->gtk_bookmarks, self);
-        g_file_monitor_cancel(self->gtk_bookmarks);
-        g_clear_object(&self->gtk_bookmarks);
-    }
+    drop_monitor(self, &self->gtk_bookmarks);
+    drop_monitor(self, &self->trash);
     g_clear_handle_id(&self->rebuild_source, g_source_remove);
     g_clear_object(&self->location);
     G_OBJECT_CLASS(sfe_sidebar_parent_class)->dispose(object);
@@ -644,7 +677,8 @@ static void sfe_sidebar_init(SfeSidebar* self)
     self->devices_handler = g_signal_connect(sfe_devices_get_default(), "changed",
         G_CALLBACK(on_devices_changed), self);
     watch_gtk_bookmarks(self);
-    rebuild(self);
+    rebuild(self); /* creates the trash folder if needed */
+    watch_trash(self);
 }
 
 GtkWidget* sfe_sidebar_new(void)

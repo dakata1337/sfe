@@ -36,3 +36,8 @@ test_archive = executable('test-archive', 'test_archive.c',
   dependencies: core_dep,
 )
 test('archive', test_archive)
+
+test_trash = executable('test-trash', 'test_trash.c',
+  dependencies: core_dep,
+)
+test('trash', test_trash)
