@@ -127,9 +127,10 @@ static void report(SfeFileOp* op, const char* verb, GFile* file, guint64 current
     g_mutex_lock(&op->lock);
     if (now - op->last_report >= REPORT_INTERVAL_US && !op->report_pending) {
         g_free(op->status);
-        op->status = name ? g_strdup_printf("%s “%s” — %u of %u", verb, name,
-                                MIN(op->done_items + 1, op->total_items), op->total_items)
-                          : g_strdup(verb);
+        op->status = name == NULL       ? g_strdup(verb)
+            : op->total_items <= 1 ? g_strdup_printf("%s “%s”", verb, name)
+                                   : g_strdup_printf("%s “%s” — %u of %u", verb, name,
+                                       MIN(op->done_items + 1, op->total_items), op->total_items);
         op->fraction = CLAMP(fraction, 0.0, 1.0);
         op->last_report = now;
         op->report_pending = emit = true;
@@ -465,20 +466,18 @@ static void remove_tree(GFile* file)
     g_file_delete(file, NULL, NULL);
 }
 
-/* Runs the extractor; on failure returns false with a message for the user. */
-static bool run_extractor(SfeFileOp* op, const char* archive, const char* dest, char** message)
+/* Runs an archive tool in `cwd` (or here); on failure returns false with
+ * the tool's own message for the user. */
+static bool run_tool(SfeFileOp* op, char** argv, const char* cwd, char** message)
 {
-    g_auto(GStrv) argv = sfe_archive_extract_argv(archive, dest, g_find_program_in_path);
     g_autoptr(GError) error = NULL;
     g_autofree char* err_text = NULL;
+    g_autoptr(GSubprocessLauncher) launcher = g_subprocess_launcher_new(
+        G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_PIPE);
 
-    if (argv == NULL) {
-        *message = g_strdup("No program that can extract this archive is installed "
-                            "(bsdtar, tar, unzip, 7z or unrar).");
-        return false;
-    }
-    g_autoptr(GSubprocess) proc = g_subprocess_newv((const char* const*)argv,
-        G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_PIPE, &error);
+    if (cwd != NULL)
+        g_subprocess_launcher_set_cwd(launcher, cwd);
+    g_autoptr(GSubprocess) proc = g_subprocess_launcher_spawnv(launcher, (const char* const*)argv, &error);
     if (proc == NULL) {
         *message = g_strdup(error->message);
         return false;
@@ -487,13 +486,25 @@ static bool run_extractor(SfeFileOp* op, const char* archive, const char* dest, 
         && g_subprocess_get_successful(proc);
     if (cancelled(op)) {
         g_subprocess_force_exit(proc);
+        g_subprocess_wait(proc, NULL, NULL); /* gone before its output is removed */
         return false;
     }
     if (!ok) {
         g_strstrip(err_text ? err_text : (err_text = g_strdup("")));
-        *message = g_strdup(*err_text ? err_text : error ? error->message : "The archive could not be extracted.");
+        *message = g_strdup(*err_text ? err_text : error ? error->message : "The archive tool failed.");
     }
     return ok;
+}
+
+static bool run_extractor(SfeFileOp* op, const char* archive, const char* dest, char** message)
+{
+    g_auto(GStrv) argv = sfe_archive_extract_argv(archive, dest, g_find_program_in_path);
+    if (argv == NULL) {
+        *message = g_strdup("No program that can extract this archive is installed "
+                            "(bsdtar, tar, unzip, 7z or unrar).");
+        return false;
+    }
+    return run_tool(op, argv, NULL, message);
 }
 
 /* "photos.tar.gz" -> a new folder "photos" (or "photos (2)") in dest_dir. */
@@ -535,6 +546,49 @@ static void extract_item(SfeFileOp* op, GFile* archive)
     }
 }
 
+/* All the sources (in one folder) -> one new archive, dest_dir. An
+ * existing archive is never added to: "photos (2).zip" instead. */
+static void compress_all(SfeFileOp* op)
+{
+    g_autoptr(GFile) archive = g_object_ref(op->dest_dir);
+    g_autoptr(GFile) parent = op->sources ? g_file_get_parent(op->sources->data) : NULL;
+    g_autofree char* cwd = parent ? g_file_get_path(parent) : NULL;
+    g_autoptr(GPtrArray) names = g_ptr_array_new_with_free_func(g_free);
+
+    for (GList* l = op->sources; l != NULL; l = l->next)
+        g_ptr_array_add(names, g_file_get_basename(l->data));
+    g_ptr_array_add(names, NULL);
+
+    if (g_file_query_exists(archive, NULL)) {
+        GFile* renamed = unused_name(archive, false);
+        g_object_unref(archive);
+        archive = renamed;
+    }
+    report(op, "Creating", archive, 0);
+
+    for (;;) {
+        g_autoptr(GError) error = NULL;
+        g_autofree char* path = g_file_get_path(archive);
+        g_autofree char* message = NULL;
+        g_auto(GStrv) argv = path ? sfe_archive_compress_argv(path, (char* const*)names->pdata, g_find_program_in_path) : NULL;
+
+        if (argv == NULL)
+            message = g_strdup(path == NULL || cwd == NULL ? "Only local files can be compressed."
+                                                           : "No program that can create this kind of archive is installed "
+                                                             "(bsdtar, tar, zip or 7z).");
+        else if (cwd != NULL && run_tool(op, argv, cwd, &message)) {
+            op->done_items = op->total_items;
+            return;
+        }
+        g_file_delete(archive, NULL, NULL); /* no half-written archives */
+        if (cancelled(op))
+            return;
+        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_FAILED, message);
+        if (!retry_after(op, op->sources->data, error))
+            return;
+    }
+}
+
 /* ------------------------------------------------------------------------ */
 /* The job                                                                   */
 /* ------------------------------------------------------------------------ */
@@ -549,10 +603,12 @@ static void run_job(GTask* task, gpointer source, gpointer data, GCancellable* c
         for (GList* l = op->sources; l != NULL; l = l->next)
             scan(op, l->data);
     } else {
-        op->total_items = g_list_length(op->sources);
+        op->total_items = op->kind == SFE_OP_COMPRESS ? 1 : g_list_length(op->sources);
     }
 
-    for (GList* l = op->sources; l != NULL && !cancelled(op); l = l->next) {
+    if (op->kind == SFE_OP_COMPRESS)
+        compress_all(op);
+    for (GList* l = op->sources; op->kind != SFE_OP_COMPRESS && l != NULL && !cancelled(op); l = l->next) {
         GFile* src = l->data;
         g_autofree char* name = g_file_get_basename(src);
         g_autoptr(GFile) dest = op->dest_dir ? g_file_get_child(op->dest_dir, name) : NULL;
@@ -563,6 +619,7 @@ static void run_job(GTask* task, gpointer source, gpointer data, GCancellable* c
         case SFE_OP_TRASH: trash_item(op, src); break;
         case SFE_OP_DELETE: delete_recursive(op, src, true); break;
         case SFE_OP_EXTRACT: extract_item(op, src); break;
+        case SFE_OP_COMPRESS: break; /* above, in one go */
         }
     }
 

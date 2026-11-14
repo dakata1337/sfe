@@ -76,6 +76,10 @@
     border-color: @sfe_accent;
 }
 
+.sfe-window label.sfe-error-text {
+    color: @sfe_error;
+}
+
 .sfe-window entry.error {
     border-color: @sfe_error;
     color: @sfe_error;

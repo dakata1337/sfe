@@ -219,6 +219,19 @@ sleep 1.5
 shot properties dialog
 key "" Escape dialog
 
+# Compress… from the context menu (Open, Open With, Cut, Copy, Rename, Compress).
+launch Pictures
+key CTRL f
+type_text "wallpaper"
+key "" Escape
+key SHIFT F10
+sleep 0.5
+for _ in 1 2 3 4 5 6; do key "" Down; done
+key "" Return
+sleep 0.8
+shot compress dialog
+key "" Escape dialog
+
 launch Pictures
 key CTRL p
 sleep 1

@@ -30,6 +30,7 @@ static const char* verb_for(SfeOpKind kind)
     case SFE_OP_TRASH: return "move to the trash";
     case SFE_OP_DELETE: return "delete";
     case SFE_OP_EXTRACT: return "extract";
+    case SFE_OP_COMPRESS: return "compress";
     }
     return "process";
 }

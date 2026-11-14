@@ -29,6 +29,11 @@ depends=(
 optdepends=(
   'polkit-agent: password prompt for mounting internal drives (e.g. hyprpolkitagent, polkit-gnome)'
   'ffmpegthumbnailer: faster, higher-quality video thumbnails'
+  'libarchive: Extract Here (tar, zip, 7z, rar, iso) and Compress (zip, tar.*, 7z) with bsdtar (archive.c)'
+  'unzip: Extract Here for zip without bsdtar (archive.c)'
+  'zip: Compress to zip without bsdtar (archive.c)'
+  '7zip: Extract Here for 7z and rar, Compress to 7z and zip, without bsdtar (archive.c)'
+  'unrar: Extract Here for rar (archive.c)'
   'webp-pixbuf-loader: WebP image thumbnails'
   'libheif: HEIF/AVIF image thumbnails'
   'ntfs-3g: mount NTFS drives'

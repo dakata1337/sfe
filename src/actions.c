@@ -4,6 +4,7 @@
 #include "archive.h"
 #include "bookmarks.h"
 #include "clipboard.h"
+#include "compressdlg.h"
 #include "dialogs.h"
 #include "fileops.h"
 #include "opener.h"
@@ -286,6 +287,43 @@ static void run_paste_into(const SfeActionTarget* t)
         paste_into(t->window, t->files->data);
 }
 
+/* Something is selected and some archive format can be created. */
+static bool can_compress(const SfeActionTarget* t)
+{
+    return t->files != NULL && sfe_compress_available();
+}
+
+typedef struct {
+    SfeWindow* window;
+    GList* files;
+} CompressRequest;
+
+static void compress_request_free(gpointer p)
+{
+    CompressRequest* req = p;
+    g_object_unref(req->window);
+    g_list_free_full(req->files, g_object_unref);
+    g_free(req);
+}
+
+static void on_compress(GFile* archive, gpointer data)
+{
+    CompressRequest* req = data;
+    g_autoptr(SfeFileOp) op = sfe_file_op_new(SFE_OP_COMPRESS, req->files, archive);
+    sfe_window_run_op(req->window, op);
+}
+
+/* The selection becomes one archive in this folder. */
+static void run_compress(const SfeActionTarget* t)
+{
+    if (!can_compress(t))
+        return;
+    CompressRequest* req = g_new0(CompressRequest, 1);
+    req->window = g_object_ref(t->window);
+    req->files = g_list_copy_deep(t->files, ref_copy, NULL);
+    sfe_compress_ask(GTK_WIDGET(t->window), t->files, t->dir, on_compress, req, compress_request_free);
+}
+
 /* Each archive goes into a new folder named after it, in this folder. */
 static void run_extract(const SfeActionTarget* t)
 {
@@ -455,6 +493,7 @@ static const SfeAction actions[] = {
     { "paste-into",         "Paste Into Folder",          { NULL },                         ITEMS,        1, can_paste_into,          run_paste_into },
     { "rename",             "Rename…",                    { "F2", NULL },                   ITEMS,        2, has_files,               run_rename },
     { "extract",            "Extract Here",               { NULL },                         ITEMS,        2, can_extract,             run_extract },
+    { "compress",           "Compress…",                  { NULL },                         ITEMS,        2, can_compress,            run_compress },
     { "trash",              "Move to Trash",              { "Delete", NULL },               ITEMS,        3, has_files,               run_trash },
     { "delete",             "Delete Permanently…",        { "<Shift>Delete", NULL },        ITEMS,        3, has_files,               run_delete },
     { "search",             "Search…",                    { "<Control>f", NULL },           FOLDER,       2, NULL,                    run_search },

@@ -149,6 +149,13 @@ only goes down: `..` and `.` are not allowed.
   folder named after it (`photos.tar.gz` → `photos/`), with progress and
   cancel like a copy. It uses whatever is installed: `bsdtar` (tar, zip, 7z,
   rar, iso), `tar`, `unzip`, `7z` or `unrar`.
+- **Compress…** packs the selection into one archive in the current folder.
+  Pick the name and the format: zip, tar.gz, tar.xz, tar.zst, 7z or tar
+  (only the formats an installed tool can create are listed; sfe remembers
+  the last one). It uses `bsdtar`, `tar`, `zip` or `7z`, and never adds to
+  an existing archive.
+
+  ![The Compress dialog](images/compress.png)
 - Trashed files go to the standard trash (`~/.local/share/Trash`), so other
   tools can restore them.
 
@@ -167,8 +174,8 @@ name = "Open terminal here"
 command = "foot -D %d"
 
 [[actions.files]]
-name = "Compress"
-command = "tar -czf archive.tar.gz %f"
+name = "Edit in Neovim"
+command = "foot nvim %f"
 ```
 
 - `%f` is the selected items; with nothing selected it is the current folder
