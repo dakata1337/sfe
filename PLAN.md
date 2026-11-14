@@ -223,7 +223,7 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 4. ✅ **Splits:** 3-pane layout, v/h split rules, close + slide-left, active-pane tracking.
 5. ✅ **File ops:** action table, context menu, clipboard, copy/move/trash/delete jobs, new file/folder, properties.
 6. ✅ **Rename and mass rename:** name prompt (F2), pattern dialog with template / find-replace / case / counter and live conflict preview (F2 on several, Shift+F2), two-pass rename with rollback. The directory model dropped GtkTreeModelFilter (it emitted criticals when shown rows were removed).
-7. **Fuzzy search overlay** (with unit tests for `fuzzy.c`).
+7. ✅ **Fuzzy search overlay:** tiered `fuzzy.c` scorer with unit tests; the directory model filters and orders by score; a floating card centred in the bottom third of the active pane (Ctrl+F; Up/Down/Enter/Esc).
 8. **Modal workflow:** normal-mode keymap (data-driven, overridable in `[keys]`) with chord handling and showcmd. Split focus / swap commands. The `:` command line with history, argument parsing, and grouped context-aware completion using `fuzzy.c`. All commands from section 7. Unit tests for the keymap parser, the command parser and completion ordering.
 9. **Thumbnails:** images, videos, freedesktop cache, worker pool, lazy loading of visible items only.
 10. **Settings dialog**, UI scaling, `.desktop` file, `meson install`, README.

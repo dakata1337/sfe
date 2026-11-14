@@ -22,3 +22,8 @@ test_rename = executable('test-rename', 'test_rename.c',
   dependencies: core_dep,
 )
 test('rename', test_rename)
+
+test_fuzzy = executable('test-fuzzy', 'test_fuzzy.c',
+  dependencies: core_dep,
+)
+test('fuzzy', test_fuzzy)

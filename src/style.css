@@ -383,3 +383,28 @@ menu.sfe-menu {
     background-color: transparent;
     border: none;
 }
+
+/* ---- Search (Ctrl+F): a floating card over the files -------------------- */
+
+.sfe-window .sfe-search {
+    background-color: @sfe_bg;
+    border: 1px solid alpha(@sfe_fg, 0.12);
+    border-radius: 12px;
+    padding: 6px 12px;
+    margin: 24px; /* room for the shadow */
+    box-shadow: 0 12px 32px alpha(black, 0.35), 0 2px 8px alpha(black, 0.2);
+}
+
+.sfe-window .sfe-search entry,
+.sfe-window .sfe-search entry:focus {
+    background-color: transparent;
+    border-color: transparent;
+    font-size: 1.1em;
+    min-height: 34px;
+    padding: 0 4px;
+}
+
+.sfe-search-icon,
+.sfe-search-count {
+    color: alpha(@sfe_fg, 0.5);
+}

@@ -29,6 +29,9 @@ void sfe_pane_go_up(SfePane* self);
 void sfe_pane_reload(SfePane* self);
 
 void sfe_pane_focus_location(SfePane* self);
+
+/* Opens (or focuses) the floating fuzzy search of this pane. */
+void sfe_pane_start_search(SfePane* self);
 void sfe_pane_focus_view(SfePane* self);
 void sfe_pane_set_view(SfePane* self, SfeViewMode mode);
 SfeViewMode sfe_pane_get_view(SfePane* self);

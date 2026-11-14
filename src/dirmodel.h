@@ -54,6 +54,15 @@ GFile* sfe_dir_model_get_dir(SfeDirModel* self);
 GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self);
 
 void sfe_dir_model_set_show_hidden(SfeDirModel* self, bool show);
+
+/* Shows only files whose name matches `query` (fuzzy, see fuzzy.h), best
+ * match first; NULL or "" shows everything again. Emits "loaded" with the
+ * refilled store. Loading another folder clears the query. */
+void sfe_dir_model_set_query(SfeDirModel* self, const char* query);
+const char* sfe_dir_model_get_query(SfeDirModel* self);
+
+/* Rows shown now, and rows that would be shown without the query. */
+void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* total);
 void sfe_dir_model_set_sort(SfeDirModel* self, SfeSortKey key, GtkSortType order, bool dirs_first);
 void sfe_dir_model_get_sort(SfeDirModel* self, SfeSortKey* key, GtkSortType* order);
 

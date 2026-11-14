@@ -1,11 +1,13 @@
 #include "dirmodel.h"
 
+#include "fuzzy.h"
 #include "icons.h"
 #include <cairo-gobject.h>
 #include <string.h>
 
 #define BATCH_SIZE 256
 #define COLLATE_KEY_ATTR "sfe::collate-key" /* in-memory only, never written */
+#define SCORE_ATTR "sfe::search-score" /* in-memory only: match score of the query */
 
 struct _SfeDirModel {
     GObject parent;
@@ -15,6 +17,7 @@ struct _SfeDirModel {
     GHashTable* rows; /* file name -> GtkTreeIter* into store (shown files) */
     GHashTable* infos; /* file name -> GFileInfo*, every file incl. hidden */
     bool building; /* filling a fresh store, not reacting to changes */
+    char* query; /* search filter, NULL when not searching */
     GFileMonitor* monitor;
     GCancellable* cancel; /* cancels the load and monitor queries of `dir` */
 
@@ -121,9 +124,22 @@ static void store_row(SfeDirModel* self, GtkListStore* store, GtkTreeIter* iter,
         g_value_unset(&values[i]);
 }
 
-static bool is_shown(SfeDirModel* self, GFileInfo* info)
+static bool passes_hidden(SfeDirModel* self, GFileInfo* info)
 {
     return self->show_hidden || !g_file_info_get_is_hidden(info);
+}
+
+/* While searching, a file is shown only if it matches; its score is kept on
+ * the info for sorting. */
+static bool is_shown(SfeDirModel* self, GFileInfo* info)
+{
+    if (!passes_hidden(self, info))
+        return false;
+    if (self->query == NULL)
+        return true;
+    int score = sfe_fuzzy_score(self->query, g_file_info_get_display_name(info));
+    g_file_info_set_attribute_int32(info, SCORE_ATTR, score);
+    return score != SFE_FUZZY_NO_MATCH;
 }
 
 static void remove_row(SfeDirModel* self, const char* name)
@@ -203,6 +219,14 @@ static int compare_rows(GtkTreeModel* model, GtkTreeIter* ia, GtkTreeIter* ib, g
     GFileInfo* a = row_info(model, ia);
     GFileInfo* b = row_info(model, ib);
     int result = 0;
+
+    /* While searching, the best match comes first, whatever the sort. */
+    if (self->query != NULL) {
+        result = compare_numbers(g_file_info_get_attribute_int32(b, SCORE_ATTR),
+            g_file_info_get_attribute_int32(a, SCORE_ATTR));
+        if (result != 0)
+            return self->sort_order == GTK_SORT_DESCENDING ? -result : result;
+    }
 
     if (self->dirs_first && info_is_dir(a) != info_is_dir(b)) {
         /* Directories stay on top in both sort orders. The store inverts
@@ -368,6 +392,8 @@ static void finish_load(LoadJob* job)
         return;
 
     clear_contents(self);
+    if (self->dir == NULL || !g_file_equal(self->dir, job->dir))
+        g_clear_pointer(&self->query, g_free); /* a new folder starts unfiltered */
     g_set_object(&self->dir, job->dir);
     g_set_object(&self->cancel, job->cancel);
 
@@ -471,6 +497,63 @@ GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self)
     return GTK_TREE_MODEL(self->store);
 }
 
+/* Refills the store from the remembered infos (used when the search query
+ * changes: one bulk build is much faster than thousands of row updates in a
+ * sorted store). Emits "loaded" so the views attach the new store. */
+static void rebuild_store(SfeDirModel* self)
+{
+    if (self->infos == NULL)
+        return;
+
+    GtkListStore* old_store = self->store;
+    GHashTable* old_rows = self->rows;
+    g_autoptr(GList) infos = g_hash_table_get_values(self->infos);
+
+    self->store = new_store();
+    self->rows = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    self->building = true;
+    for (GList* l = infos; l != NULL; l = l->next) {
+        g_autoptr(GFileInfo) info = g_object_ref(l->data);
+        add_or_update(self, info);
+    }
+    self->building = false;
+    gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(self->store), 0, compare_rows, self, NULL);
+    apply_sort(self);
+
+    g_signal_emit(self, signals[SIGNAL_LOADED], 0);
+    g_object_unref(old_store);
+    g_hash_table_unref(old_rows);
+}
+
+void sfe_dir_model_set_query(SfeDirModel* self, const char* query)
+{
+    const char* q = query && *query ? query : NULL;
+    if (g_strcmp0(q, self->query) == 0)
+        return;
+    g_free(self->query);
+    self->query = g_strdup(q);
+    rebuild_store(self);
+}
+
+const char* sfe_dir_model_get_query(SfeDirModel* self)
+{
+    return self->query;
+}
+
+void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* total)
+{
+    GHashTableIter it;
+    gpointer info;
+
+    *shown = self->rows ? (int)g_hash_table_size(self->rows) : 0;
+    *total = 0;
+    if (self->infos == NULL)
+        return;
+    g_hash_table_iter_init(&it, self->infos);
+    while (g_hash_table_iter_next(&it, NULL, &info))
+        *total += passes_hidden(self, info);
+}
+
 void sfe_dir_model_set_show_hidden(SfeDirModel* self, bool show)
 {
     if (self->show_hidden == show)
@@ -558,6 +641,7 @@ static void sfe_dir_model_dispose(GObject* object)
     clear_contents(self);
     g_clear_object(&self->cancel);
     g_clear_object(&self->dir);
+    g_clear_pointer(&self->query, g_free);
     G_OBJECT_CLASS(sfe_dir_model_parent_class)->dispose(object);
 }
 

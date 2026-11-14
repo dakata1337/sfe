@@ -7,6 +7,7 @@
 #include "history.h"
 #include "opener.h"
 #include "pathentry.h"
+#include "search.h"
 #include <math.h>
 
 #define LIST_ICON_SIZE 16
@@ -38,6 +39,8 @@ struct _SfePane {
     GtkWidget* split_h_button;
     GtkWidget* close_button;
     GtkWidget* stack;
+    GtkWidget* overlay; /* stack + floating search bar */
+    SfeSearchBar* search;
     GtkWidget* grid; /* GtkIconView */
     GtkWidget* list; /* GtkTreeView */
     GtkWidget* message; /* GtkLabel for errors */
@@ -127,6 +130,10 @@ static void attach_model(SfePane* self)
 /* Shows `dir` without touching the history. */
 static void go_to(SfePane* self, GFile* dir)
 {
+    if (gtk_widget_get_visible(GTK_WIDGET(self->search))) { /* a new folder starts unfiltered */
+        gtk_widget_hide(GTK_WIDGET(self->search));
+        sfe_search_bar_reset(self->search);
+    }
     g_set_object(&self->dir, dir);
     sfe_path_entry_set_dir(self->entry, dir);
     update_buttons(self);
@@ -209,6 +216,137 @@ static void activate_path(SfePane* self, GtkTreePath* path)
 /* Model signals                                                             */
 /* ------------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------------ */
+/* Search (Ctrl+F)                                                           */
+/* ------------------------------------------------------------------------ */
+
+static bool searching(SfePane* self)
+{
+    return gtk_widget_get_visible(GTK_WIDGET(self->search));
+}
+
+static int n_rows(SfePane* self)
+{
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    return model ? gtk_tree_model_iter_n_children(model, NULL) : 0;
+}
+
+/* The highlighted row: the view's cursor, else row 0. Free the result. */
+static GtkTreePath* highlighted(SfePane* self)
+{
+    GtkTreePath* path = NULL;
+    if (self->view == SFE_VIEW_GRID)
+        gtk_icon_view_get_cursor(GTK_ICON_VIEW(self->grid), &path, NULL);
+    else
+        gtk_tree_view_get_cursor(GTK_TREE_VIEW(self->list), &path, NULL);
+    if (path == NULL && n_rows(self) > 0)
+        path = gtk_tree_path_new_first();
+    return path;
+}
+
+static void select_index(SfePane* self, int index)
+{
+    GtkTreePath* path = gtk_tree_path_new_from_indices(index, -1);
+    select_path(self, path);
+    gtk_tree_path_free(path);
+}
+
+static void update_search_count(SfePane* self)
+{
+    int shown, total;
+    sfe_dir_model_get_counts(self->model, &shown, &total);
+    sfe_search_bar_set_count(self->search, shown, total);
+}
+
+void sfe_pane_start_search(SfePane* self)
+{
+    sfe_search_bar_focus(self->search);
+}
+
+/* Hides the search bar and shows every file again. With `keep`, the
+ * highlighted match stays selected in the full listing. */
+static void end_search(SfePane* self, bool keep)
+{
+    if (!searching(self))
+        return;
+
+    g_autofree char* name = NULL;
+    if (keep) {
+        GtkTreePath* path = highlighted(self);
+        g_autoptr(GFile) file = path ? sfe_dir_model_file_at(self->model, path) : NULL;
+        name = file ? g_file_get_basename(file) : NULL;
+        if (path != NULL)
+            gtk_tree_path_free(path);
+    }
+    gtk_widget_hide(GTK_WIDGET(self->search));
+    sfe_search_bar_reset(self->search);
+    sfe_dir_model_set_query(self->model, NULL);
+    if (name != NULL)
+        sfe_pane_reveal(self, name);
+    sfe_pane_focus_view(self);
+}
+
+static void on_search_changed(SfeSearchBar* bar, const char* text, gpointer data)
+{
+    (void)bar;
+    sfe_dir_model_set_query(SFE_PANE(data)->model, text);
+}
+
+static void on_search_move(SfeSearchBar* bar, int delta, gpointer data)
+{
+    (void)bar;
+    SfePane* self = data;
+    GtkTreePath* path = highlighted(self);
+    int rows = n_rows(self);
+
+    if (path == NULL || rows == 0)
+        return;
+    int index = CLAMP(gtk_tree_path_get_indices(path)[0] + delta, 0, rows - 1);
+    gtk_tree_path_free(path);
+    select_index(self, index);
+}
+
+static void on_search_close(SfeSearchBar* bar, gpointer data)
+{
+    (void)bar;
+    end_search(SFE_PANE(data), true);
+}
+
+/* Enter: opens the highlighted match. A folder opens in this pane (which
+ * ends the search); a file opens and stays selected in the full listing. */
+static void search_activate(SfePane* self)
+{
+    GtkTreePath* path = highlighted(self);
+    if (path == NULL)
+        return;
+    g_autoptr(GFile) file = sfe_dir_model_file_at(self->model, path);
+    g_autoptr(GFileInfo) info = sfe_dir_model_info_at(self->model, path);
+    gtk_tree_path_free(path);
+    if (file == NULL || info == NULL)
+        return;
+
+    if (g_file_info_get_file_type(info) != G_FILE_TYPE_DIRECTORY)
+        end_search(self, true);
+    activate_file(self, file, info);
+}
+
+/* Places the search card centred in the bottom third of the pane. */
+static gboolean on_overlay_position(GtkOverlay* overlay, GtkWidget* child, GdkRectangle* alloc, gpointer data)
+{
+    (void)data;
+    int w = gtk_widget_get_allocated_width(GTK_WIDGET(overlay));
+    int h = gtk_widget_get_allocated_height(GTK_WIDGET(overlay));
+    int width = CLAMP(w * 6 / 10, MIN(300, w), 600);
+    int min_h, nat_h;
+
+    gtk_widget_get_preferred_height_for_width(child, width, &min_h, &nat_h);
+    alloc->width = width;
+    alloc->height = nat_h;
+    alloc->x = (w - width) / 2;
+    alloc->y = CLAMP(h * 5 / 6 - nat_h / 2, 0, MAX(0, h - nat_h));
+    return TRUE;
+}
+
 static void on_loaded(SfeDirModel* model, gpointer data)
 {
     (void)model;
@@ -227,6 +365,11 @@ static void on_loaded(SfeDirModel* model, gpointer data)
             gtk_tree_path_free(path);
         }
         g_clear_pointer(&self->select_after_load, g_free);
+    }
+    if (searching(self)) { /* the best match is highlighted */
+        if (n_rows(self) > 0)
+            select_index(self, 0);
+        update_search_count(self);
     }
     if (had_focus)
         gtk_widget_grab_focus(view);
@@ -492,6 +635,10 @@ static gboolean on_view_key_press(GtkWidget* view, GdkEventKey* event, gpointer 
     (void)view;
     guint mods = event->state & gtk_accelerator_get_default_mod_mask();
 
+    if (event->keyval == GDK_KEY_Escape && mods == 0 && searching(SFE_PANE(data))) {
+        end_search(SFE_PANE(data), true);
+        return TRUE;
+    }
     if (event->keyval == GDK_KEY_BackSpace && mods == 0) {
         sfe_pane_go_up(SFE_PANE(data));
         return TRUE;
@@ -801,7 +948,18 @@ static void sfe_pane_init(SfePane* self)
     gtk_stack_add_named(GTK_STACK(self->stack), self->message, "message");
 
     gtk_box_pack_start(GTK_BOX(self), build_top_bar(self), FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(self), self->stack, TRUE, TRUE, 0);
+    self->search = SFE_SEARCH_BAR(sfe_search_bar_new());
+    /* Positioned by on_overlay_position(); FILL keeps the width it gets. */
+    g_signal_connect(self->search, "query-changed", G_CALLBACK(on_search_changed), self);
+    g_signal_connect_swapped(self->search, "activate", G_CALLBACK(search_activate), self);
+    g_signal_connect(self->search, "move", G_CALLBACK(on_search_move), self);
+    g_signal_connect(self->search, "close", G_CALLBACK(on_search_close), self);
+
+    self->overlay = gtk_overlay_new();
+    gtk_container_add(GTK_CONTAINER(self->overlay), self->stack);
+    gtk_overlay_add_overlay(GTK_OVERLAY(self->overlay), GTK_WIDGET(self->search));
+    g_signal_connect(self->overlay, "get-child-position", G_CALLBACK(on_overlay_position), NULL);
+    gtk_box_pack_start(GTK_BOX(self), self->overlay, TRUE, TRUE, 0);
 
     g_signal_connect(self, "button-press-event", G_CALLBACK(on_button_press), self);
     g_signal_connect(self, "notify::scale-factor", G_CALLBACK(on_scale_factor_changed), self);

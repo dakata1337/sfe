@@ -45,6 +45,7 @@ module that needs it.
 | Ctrl+C / Ctrl+X / Ctrl+V | copy / cut / paste files |
 | Delete / Shift+Delete | move to trash / delete permanently (asks first) |
 | Ctrl+A | select all |
+| Ctrl+F | search in the current folder |
 | F2 | rename (one file) / rename with pattern (several) |
 | Shift+F2 | rename with pattern |
 | Ctrl+Shift+N | new folder |
@@ -87,6 +88,18 @@ polkit.addRule(function(action, subject) {
 });
 ```
 Encrypted (LUKS) drives are not supported yet.
+
+## Search
+*Ctrl+F* opens a search field over the files of the active view. As you
+type, only matching files stay visible, best match first:
+
+exact name › name without extension › starts with › word inside the name ›
+anywhere in the name › letters in order (`dm` finds `dirmodel.c`)
+
+The search ignores case unless you type an uppercase letter. *Up* / *Down*
+move between matches, *Enter* opens the highlighted one (a folder opens in
+the view and ends the search) and *Esc* shows all files again with the
+highlighted one still selected.
 
 ## Working with files
 Right-click a selection for *Open*, *Open With*, *Cut*, *Copy*, *Move to

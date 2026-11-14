@@ -302,6 +302,7 @@ static void run_delete(const SfeActionTarget* t)
 }
 
 static void run_select_all(const SfeActionTarget* t) { sfe_pane_select_all(t->pane); }
+static void run_search(const SfeActionTarget* t) { sfe_pane_start_search(t->pane); }
 
 typedef struct {
     SfePane* pane;
@@ -410,6 +411,7 @@ static const SfeAction actions[] = {
     { "rename",             "Rename…",                    { "F2", NULL },                   ITEMS,        2, has_files,               run_rename },
     { "trash",              "Move to Trash",              { "Delete", NULL },               ITEMS,        3, has_files,               run_trash },
     { "delete",             "Delete Permanently…",        { "<Shift>Delete", NULL },        ITEMS,        3, has_files,               run_delete },
+    { "search",             "Search…",                    { "<Control>f", NULL },           FOLDER,       2, NULL,                    run_search },
     { "select-all",         "Select All",                 { "<Control>a", NULL },           FOLDER,       2, NULL,                    run_select_all },
     { "toggle-hidden",      "Show Hidden Files",          { "<Control>h", NULL },           FOLDER,       2, NULL,                    run_toggle_hidden },
     { "bookmark-selection", "Add to Bookmarks",           { NULL },                         ITEMS,        4, can_bookmark_selection,  run_bookmark_selection },
