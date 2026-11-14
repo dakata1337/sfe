@@ -4,5 +4,6 @@
     <file>style.css</file>
     <file alias="icons/scalable/actions/sfe-split-vertical-symbolic.svg">icons/sfe-split-vertical-symbolic.svg</file>
     <file alias="icons/scalable/actions/sfe-split-horizontal-symbolic.svg">icons/sfe-split-horizontal-symbolic.svg</file>
+    <file alias="icons/scalable/apps/sfe.svg">../data/icons/hicolor/scalable/apps/sfe.svg</file>
   </gresource>
 </gresources>

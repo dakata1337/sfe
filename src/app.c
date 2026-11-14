@@ -179,6 +179,7 @@ static void sfe_application_startup(GApplication* gapp)
     G_APPLICATION_CLASS(sfe_application_parent_class)->startup(gapp);
 
     sfe_theme_init();
+    gtk_window_set_default_icon_name("sfe"); /* also bundled, for uninstalled builds */
     load_initial_config(app);
     watch_config(app);
     apply_global_config(app);

@@ -103,4 +103,13 @@ install_data('data/sfe.desktop',
   install_dir: get_option('datadir') / 'applications',
 )
 
+# The logo: icons/hicolor/{scalable,symbolic}/apps/sfe[-symbolic].svg
+install_subdir('data/icons/hicolor',
+  install_dir: get_option('datadir') / 'icons',
+)
+
+# Refreshes the icon cache and desktop database on a plain `meson install`
+# (skipped when packaging with DESTDIR; pacman hooks do it then).
+gnome.post_install(gtk_update_icon_cache: true, update_desktop_database: true)
+
 subdir('tests')
