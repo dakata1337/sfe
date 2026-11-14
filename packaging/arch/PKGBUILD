@@ -16,10 +16,11 @@ license=('LicenseRef-sfe' 'MIT') # MIT: vendored tomlc17
 
 depends=(
   'glib2'             # everything (GIO: files, monitors, D-Bus)
-  'gtk3'              # UI toolkit (window.c, theme.c, ...)
+  'gtk3'              # UI toolkit (window.c, pane.c, theme.c, ...)
+  'cairo'             # HiDPI icon surfaces (icons.c, dirmodel.c)
   'gdk-pixbuf2'       # image loading / image thumbnails (thumbs.c)
   'hicolor-icon-theme' # fallback icon theme
-  'shared-mime-info'  # file type detection
+  'shared-mime-info'  # file type detection and descriptions (dirmodel.c)
   'udisks2'           # unprivileged mounting over D-Bus (devices.c)
   'polkit'            # authorizes udisks2 mount requests (devices.c)
   'xdg-utils'         # xdg-open, the default opener (opener.c)

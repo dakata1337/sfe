@@ -158,10 +158,18 @@ static const GActionEntry app_actions[] = {
 
 static const struct {
     const char* action;
-    const char* accels[2];
+    const char* accels[3]; /* NULL-terminated */
 } app_accels[] = {
     { "app.new-window", { "<Control><Shift>n", NULL } },
     { "app.quit", { "<Control>q", NULL } },
+    { "win.back", { "<Alt>Left", NULL } },
+    { "win.forward", { "<Alt>Right", NULL } },
+    { "win.up", { "<Alt>Up", NULL } },
+    { "win.reload", { "F5", "<Control>r" } },
+    { "win.location", { "<Control>l", NULL } },
+    { "win.view-grid", { "<Control>1", NULL } },
+    { "win.view-list", { "<Control>2", NULL } },
+    { "win.toggle-hidden", { "<Control>h", NULL } },
 };
 
 /* ------------------------------------------------------------------------ */

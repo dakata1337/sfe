@@ -1,10 +1,180 @@
-/* sfe's own styles. Only layout tweaks: all colors come from the GTK theme,
- * so the app follows the system color scheme. */
+/* sfe's flat style.
+ *
+ * Colors come only from the @sfe_* palette, which theme.c fills in from the
+ * active GTK theme / ~/.config/gtk-3.0/gtk.css and refreshes live:
+ *   @sfe_bg @sfe_fg            window background / text
+ *   @sfe_view_bg @sfe_view_fg  file views
+ *   @sfe_sidebar_bg            sidebar
+ *   @sfe_accent @sfe_accent_fg selection / focus
+ *   @sfe_error                 invalid input
+ *
+ * Everything is scoped to .sfe-window so dialogs keep the theme's look. */
+
+.sfe-window {
+    background-color: @sfe_view_bg;
+    color: @sfe_view_fg;
+}
+
+/* No bevels, gradients or shadows anywhere. */
+.sfe-window * {
+    background-image: none;
+    box-shadow: none;
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+    outline-color: transparent;
+}
+
+/* ---- Buttons: flat icons with a soft hover tint ------------------------- */
+
+.sfe-window button {
+    background-color: transparent;
+    border: none;
+    border-radius: 6px;
+    min-width: 26px;
+    min-height: 26px;
+    padding: 2px;
+    color: alpha(@sfe_fg, 0.7);
+    transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+
+.sfe-window button:hover {
+    background-color: alpha(@sfe_fg, 0.08);
+    color: @sfe_fg;
+}
+
+.sfe-window button:active,
+.sfe-window button:checked {
+    background-color: alpha(@sfe_fg, 0.14);
+}
+
+.sfe-window button:disabled {
+    color: alpha(@sfe_fg, 0.25);
+}
+
+/* ---- Path entry: filled, rounded, accent border on focus ---------------- */
+
+.sfe-window entry {
+    background-color: alpha(@sfe_fg, 0.06);
+    color: @sfe_fg;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    min-height: 28px;
+    padding: 0 10px;
+    caret-color: @sfe_accent;
+    transition: border-color 120ms ease-out, background-color 120ms ease-out;
+}
+
+.sfe-window entry:focus {
+    background-color: alpha(@sfe_fg, 0.03);
+    border-color: @sfe_accent;
+}
+
+.sfe-window entry.error {
+    border-color: @sfe_error;
+    color: @sfe_error;
+}
+
+.sfe-window entry selection {
+    background-color: alpha(@sfe_accent, 0.35);
+    color: @sfe_fg;
+}
+
+/* ---- Layout ------------------------------------------------------------- */
+
+.sfe-topbar {
+    padding: 6px 8px;
+}
 
 .sfe-sidebar {
-    border-right: 1px solid alpha(currentColor, 0.15);
+    background-color: @sfe_sidebar_bg;
+}
+
+/* Hairline dividers: a 1px line drawn at the edge of a wider, invisible
+ * handle, so the divider stays easy to grab. */
+.sfe-window paned > separator {
+    background-color: transparent;
+    background-image: image(alpha(@sfe_fg, 0.08));
+    background-size: 1px 1px;
+    min-width: 1px;
+    min-height: 1px;
+}
+
+.sfe-window paned.horizontal > separator {
+    background-repeat: repeat-y;
+    background-position: left;
+    margin: 0 -6px 0 0;
+    padding: 0 6px 0 0;
+}
+
+.sfe-window paned.vertical > separator {
+    background-repeat: repeat-x;
+    background-position: top;
+    margin: 0 0 -6px 0;
+    padding: 0 0 6px 0;
 }
 
 .sfe-placeholder {
-    opacity: 0.6;
+    color: alpha(@sfe_fg, 0.45);
+}
+
+/* ---- File views ------------------------------------------------------- */
+
+.sfe-window iconview,
+.sfe-window treeview.view {
+    background-color: @sfe_view_bg;
+    color: @sfe_view_fg;
+}
+
+/* Translucent accent selection that keeps the normal text color. */
+.sfe-window iconview:selected,
+.sfe-window treeview.view:selected {
+    background-color: alpha(@sfe_accent, 0.22);
+    color: @sfe_view_fg;
+}
+
+.sfe-window iconview:selected:focus,
+.sfe-window treeview.view:selected:focus {
+    background-color: alpha(@sfe_accent, 0.32);
+}
+
+.sfe-window .rubberband,
+.sfe-window rubberband {
+    background-color: alpha(@sfe_accent, 0.15);
+    border: 1px solid alpha(@sfe_accent, 0.6);
+    border-radius: 4px;
+}
+
+/* Column headers: small, dim, no button chrome. */
+.sfe-window treeview.view header button {
+    background-color: transparent;
+    border: none;
+    border-bottom: 1px solid alpha(@sfe_fg, 0.08);
+    border-radius: 0;
+    padding: 4px 10px;
+    color: alpha(@sfe_fg, 0.55);
+    font-weight: 600;
+    font-size: 0.9em;
+}
+
+.sfe-window treeview.view header button:hover {
+    color: @sfe_fg;
+}
+
+/* ---- Scrollbars: thin and unobtrusive --------------------------------- */
+
+.sfe-window scrollbar {
+    background-color: transparent;
+    border: none;
+}
+
+.sfe-window scrollbar slider {
+    background-color: alpha(@sfe_fg, 0.25);
+    border: none;
+    border-radius: 6px;
+    min-width: 4px;
+    min-height: 4px;
+}
+
+.sfe-window scrollbar slider:hover {
+    background-color: alpha(@sfe_fg, 0.45);
 }

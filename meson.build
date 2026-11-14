@@ -15,6 +15,7 @@ cc = meson.get_compiler('c')
 add_project_arguments(cc.get_supported_arguments(
   '-Wno-gnu-statement-expression', # GLib macros (clang)
   '-Wno-missing-field-initializers', # allow partial initializers in tables
+  '-Wno-overlength-strings', # generated GResource data
 ), language: 'c')
 add_project_arguments('-DG_LOG_DOMAIN="sfe"', language: 'c')
 
@@ -23,6 +24,7 @@ add_project_arguments('-DG_LOG_DOMAIN="sfe"', language: 'c')
 glib_dep = dependency('glib-2.0', version: '>= 2.70', include_type: 'system')
 gio_dep  = dependency('gio-unix-2.0', include_type: 'system')
 gtk_dep  = dependency('gtk+-3.0', version: '>= 3.24', include_type: 'system')
+m_dep    = cc.find_library('m', required: false)
 
 # Vendored TOML parser, built with its own (relaxed) warning level.
 tomlc17 = static_library('tomlc17', 'thirdparty/tomlc17/src/tomlc17.c',
@@ -46,6 +48,8 @@ resources = gnome.compile_resources('sfe-resources', 'src/sfe.gresource.xml',
 # Modules that only need GLib (unit-testable without a display).
 core_src = files(
   'src/config.c',
+  'src/history.c',
+  'src/opener.c',
   'src/util.c',
 )
 core_lib = static_library('sfe-core', core_src,
@@ -60,12 +64,16 @@ core_dep = declare_dependency(
 ui_src = files(
   'src/main.c',
   'src/app.c',
+  'src/dirmodel.c',
+  'src/icons.c',
+  'src/pane.c',
+  'src/pathentry.c',
   'src/theme.c',
   'src/window.c',
 )
 
 executable('sfe', ui_src, resources,
-  dependencies: [core_dep, gtk_dep],
+  dependencies: [core_dep, gtk_dep, m_dep],
   install: true,
 )
 

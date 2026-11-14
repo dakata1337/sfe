@@ -32,7 +32,8 @@ src/
   config.{c,h}    defaults, TOML load (tomlc17) + small TOML writer, file watch
   theme.{c,h}     gtk.css watcher / hot reload, UI scaling
   window.{c,h}    main window: sidebar | split tree, global shortcuts
-  sidebar.{c,h}   places, bookmarks, devices list
+  sidebar.{c,h}   places, bookmarks, devices list (top) + directory tree (bottom)
+  dirtree.{c,h}   lazy directory tree that follows the active pane
   devices.{c,h}   UDisks2 D-Bus client (mount/unmount/eject) + mountinfo fallback
   split.{c,h}     up to 3 panes: left | right-top / right-bottom (GtkPaned), focus tracking
   pane.{c,h}      one directory view: path entry, ← → ↑, split/close buttons, view
@@ -90,6 +91,13 @@ Written atomically (temp file + rename). The settings dialog edits it, and a fil
 
 ## 5. Key behaviours
 
+- **Sidebar layout:** a vertical `GtkPaned` with a draggable divider, split 50/50 by default.
+  - **Top half:** flat rows with symbolic icons under dim section headers: *Places* (Home, Desktop, Documents, Downloads, …, Trash, File System), *Bookmarks* and *Devices*. Devices show a mount/eject button.
+  - **Bottom half: directory tree.** A `GtkTreeView` with connector lines (`enable-tree-lines`) that lists directories only.
+    - It follows the active pane: the tree expands down to the active pane's directory and highlights it.
+    - The tree's root is the place that contains the active directory: `~` for anything under home, the mount point for a drive, otherwise `/`.
+    - Children load lazily on expand. Hidden directories follow `show_hidden`. Expanded nodes are watched, so the tree updates live.
+    - Clicking a node navigates the active pane; middle-clicking will open it in a new split once splits exist.
 - **Navigation:** the path entry has tab-completion, Enter navigates, and an invalid path is shown in red. Back/forward is kept per pane; ↑ goes to the parent.
 - **Splits (max 3 panes):** the layout is `sidebar | left | right-top / right-bottom`. Each pane has three buttons next to its path entry: vertical split, horizontal split, close.
   - With a single pane, only vertical split is enabled. It creates `left | right`.
@@ -103,18 +111,30 @@ Written atomically (temp file + rename). The settings dialog edits it, and a fil
 - **Mass rename:** find/replace (plain or regex), prefix/suffix, numbering `{n:03}`, case change, extension kept or changed. A live old→new preview marks collisions in red. Renames run as a two-phase temp-name pass so swaps like a↔b work.
 - **Shortcuts:** Ctrl+C/X/V, F2 rename, Delete → trash, Shift+Delete → delete, Ctrl+H hidden toggle, Ctrl+L path entry, Alt+←/→/↑, Backspace, Ctrl+F, Ctrl+N new folder, Ctrl+D bookmark, Ctrl+, settings.
 
-## 6. Decisions confirmed with you
+## 6. UI style
+
+The style is flat and modern rather than GNOME/Adwaita-like: no gradients, borders or bevels, flat icon buttons with a soft hover tint, a filled rounded path entry, translucent rounded selection, thin overlay scrollbars and 1px hairline dividers.
+
+The style lives in `src/style.css` and contains no hard-coded colors. At runtime `theme.c` builds a small palette (`@sfe_bg`, `@sfe_fg`, `@sfe_view_bg`, `@sfe_accent`, …) from whatever the system provides:
+- It prefers libadwaita-style names (`window_bg_color`, `accent_bg_color`, …), which Noctalia, matugen and adw-gtk3 define.
+- It falls back to classic GTK3 names (`theme_bg_color`, `theme_selected_bg_color`, …).
+
+The palette is rebuilt whenever the GTK theme or `gtk.css` changes, so the flat style always uses the current color scheme. The style is scoped to the `.sfe-window` class.
+
+## 7. Decisions confirmed with you
 
 - Search: an in-window floating overlay (GtkOverlay), centered, in the bottom third.
 - Splits: at most 3 panes (1 left, 2 stacked on the right), as described above.
 - Views: grid + details list, switchable per pane.
 - Mass rename: a built-in dialog with live preview.
+- Look: flat and modern, not GNOME-like, with colors taken from the system theme.
+- Sidebar: places, bookmarks and devices on top; a directory tree in the bottom half.
 
-## 7. Milestones (each one builds and runs)
+## 8. Milestones (each one builds and runs)
 
 1. ✅ **Skeleton:** meson deps, GtkApplication, config load/save with defaults, theme hot reload, empty window.
-2. **Single pane:** async listing, grid + list view, icon theme icons, navigation + history, opener with overrides, hidden toggle, sorting.
-3. **Sidebar:** places, bookmarks (add/remove/reorder), devices via UDisks2 (mount/unmount/eject, auto-navigate after mount).
+2. ✅ **Single pane:** async listing, grid + list view, icon theme icons, navigation + history, opener with overrides, hidden toggle, sorting.
+3. **Sidebar:** places, bookmarks (add/remove/reorder) and devices via UDisks2 (mount/unmount/eject, auto-navigate after mount) in the top half. The directory tree, which follows the active pane, goes in the bottom half (`dirtree.c`).
 4. **Splits:** 3-pane layout, v/h split rules, close + slide-left, active-pane tracking.
 5. **File ops:** action table, context menu, clipboard, copy/move/trash/delete jobs, new file/folder, properties.
 6. **Rename and mass rename.**

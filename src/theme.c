@@ -1,6 +1,7 @@
 #include "theme.h"
 
 #include <gtk/gtk.h>
+#include <stdbool.h>
 
 /* GTK3 reads ~/.config/gtk-3.0/gtk.css exactly once, at startup. To pick up
  * later edits we load the same file into our own provider, one priority step
@@ -10,6 +11,8 @@
 #define RELOAD_DELAY_MS 150
 
 static GtkCssProvider* user_provider; /* NULL until the first change */
+static GtkCssProvider* palette_provider;
+static guint palette_source;
 static GPtrArray* monitors; /* GFileMonitor* */
 static guint reload_source;
 static double ui_scale = 1.0;
@@ -39,11 +42,14 @@ static void reload_user_css(void)
         g_debug("reloaded %s", path);
 }
 
+static void schedule_palette_rebuild(void);
+
 static gboolean reload_timeout(gpointer data)
 {
     (void)data;
     reload_source = 0;
     reload_user_css();
+    schedule_palette_rebuild();
     return G_SOURCE_REMOVE;
 }
 
@@ -95,11 +101,84 @@ static void watch_user_css(void)
     }
 }
 
+/* ------------------------------------------------------------------------ */
+/* Palette                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/* style.css uses only these @sfe_* colors. Each is taken from the first name
+ * the theme or the user's gtk.css defines: libadwaita-style names first
+ * (Noctalia, matugen, adw-gtk3), then classic GTK3 names. The resolved
+ * values are written as plain colors, which also rules out reference cycles
+ * between themes that alias the two naming schemes to each other. */
+typedef struct {
+    const char* name;
+    const char* sources[3]; /* NULL-terminated */
+    const char* fallback; /* CSS color expression */
+} PaletteEntry;
+
+static const PaletteEntry palette[] = {
+    { "sfe_bg", { "window_bg_color", "theme_bg_color" }, "#f6f5f4" },
+    { "sfe_fg", { "window_fg_color", "theme_fg_color" }, "#2e3436" },
+    { "sfe_view_bg", { "view_bg_color", "theme_base_color" }, "@sfe_bg" },
+    { "sfe_view_fg", { "view_fg_color", "theme_text_color" }, "@sfe_fg" },
+    { "sfe_sidebar_bg", { "sidebar_bg_color" }, "@sfe_bg" },
+    { "sfe_accent", { "accent_bg_color", "theme_selected_bg_color" }, "#3584e4" },
+    { "sfe_accent_fg", { "accent_fg_color", "theme_selected_fg_color" }, "#ffffff" },
+    { "sfe_error", { "error_color", "error_bg_color" }, "#e01b24" },
+};
+
+static gboolean rebuild_palette(gpointer data)
+{
+    (void)data;
+    GtkStyleContext* ctx = gtk_style_context_new();
+    GString* css = g_string_new(NULL);
+
+    palette_source = 0;
+    gtk_style_context_set_screen(ctx, gdk_screen_get_default());
+    for (size_t i = 0; i < G_N_ELEMENTS(palette); i++) {
+        const PaletteEntry* e = &palette[i];
+        GdkRGBA color;
+        bool found = false;
+
+        for (int j = 0; e->sources[j] != NULL && !found; j++)
+            found = gtk_style_context_lookup_color(ctx, e->sources[j], &color);
+
+        g_autofree char* value = found ? gdk_rgba_to_string(&color) : g_strdup(e->fallback);
+        g_string_append_printf(css, "@define-color %s %s;\n", e->name, value);
+    }
+    gtk_css_provider_load_from_data(palette_provider, css->str, -1, NULL);
+    g_debug("palette:\n%s", css->str);
+
+    g_string_free(css, TRUE);
+    g_object_unref(ctx);
+    return G_SOURCE_REMOVE;
+}
+
+/* Theme switches can arrive as several setting changes; rebuild once. */
+static void schedule_palette_rebuild(void)
+{
+    if (palette_source == 0)
+        palette_source = g_idle_add(rebuild_palette, NULL);
+}
+
+static void on_theme_setting_changed(GObject* settings, GParamSpec* pspec, gpointer data)
+{
+    (void)settings, (void)pspec, (void)data;
+    schedule_palette_rebuild();
+}
+
 static void load_app_css(void)
 {
     GtkCssProvider* provider = gtk_css_provider_new();
+    GdkScreen* screen = gdk_screen_get_default();
+
+    palette_provider = gtk_css_provider_new();
+    gtk_style_context_add_provider_for_screen(screen,
+        GTK_STYLE_PROVIDER(palette_provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    rebuild_palette(NULL);
+
     gtk_css_provider_load_from_resource(provider, "/org/sfe/style.css");
-    gtk_style_context_add_provider_for_screen(gdk_screen_get_default(),
+    gtk_style_context_add_provider_for_screen(screen,
         GTK_STYLE_PROVIDER(provider), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
     g_object_unref(provider);
 }
@@ -135,8 +214,12 @@ void sfe_theme_set_scale(double scale)
 
 void sfe_theme_init(void)
 {
+    GtkSettings* settings = gtk_settings_get_default();
+
     load_app_css();
     watch_user_css();
-    g_signal_connect(gtk_settings_get_default(), "notify::gtk-xft-dpi",
-        G_CALLBACK(on_dpi_changed), NULL);
+    g_signal_connect(settings, "notify::gtk-xft-dpi", G_CALLBACK(on_dpi_changed), NULL);
+    g_signal_connect(settings, "notify::gtk-theme-name", G_CALLBACK(on_theme_setting_changed), NULL);
+    g_signal_connect(settings, "notify::gtk-application-prefer-dark-theme",
+        G_CALLBACK(on_theme_setting_changed), NULL);
 }
