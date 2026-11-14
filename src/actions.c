@@ -194,6 +194,8 @@ static void run_open_with_other(const SfeActionTarget* t)
     if (t->files == NULL)
         return;
     GtkWidget* dialog = gtk_app_chooser_dialog_new(GTK_WINDOW(t->window), GTK_DIALOG_MODAL, t->files->data);
+    /* Both classes, so its app list, entries and buttons use the palette. */
+    gtk_style_context_add_class(gtk_widget_get_style_context(dialog), "sfe-window");
     gtk_style_context_add_class(gtk_widget_get_style_context(dialog), "sfe-dialog");
     g_signal_connect(dialog, "response", G_CALLBACK(on_app_chosen), g_list_copy_deep(t->files, ref_copy, NULL));
     gtk_widget_show(dialog);

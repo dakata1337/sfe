@@ -342,6 +342,30 @@
     opacity: 0.45;
 }
 
+/* Dialogs that GTK builds with a header bar (e.g. "Other Application…"). */
+.sfe-dialog headerbar,
+.sfe-dialog headerbar:backdrop {
+    background-color: @sfe_bg;
+    color: @sfe_fg;
+    border: none;
+    border-bottom: 1px solid alpha(@sfe_fg, 0.08);
+    box-shadow: none;
+}
+
+.sfe-dialog headerbar .title {
+    color: @sfe_fg;
+}
+
+.sfe-dialog headerbar .subtitle {
+    color: alpha(@sfe_fg, 0.55);
+}
+
+.sfe-dialog scrolledwindow.frame,
+.sfe-dialog frame > border {
+    border-color: alpha(@sfe_fg, 0.12);
+    border-radius: 6px;
+}
+
 /* Number fields (mass rename counter) look like the other entries. */
 .sfe-window spinbutton {
     background-color: alpha(@sfe_fg, 0.06);
