@@ -84,6 +84,11 @@ Up to three views: **left | right-top / right-bottom**.
 | Move focus to the next view | F6 |
 | Close the active view (or the window if it is the last) | Ctrl+W, ✕ button |
 
+In a narrow window (about 700 px for the views) side-by-side views would be
+too cramped, so they stack top / bottom instead; a single view then splits
+with *Split top / bottom* (Ctrl+-). Widen the window and they go back side
+by side.
+
 The view you last used is **active** (accent line under its path bar).
 Shortcuts, the sidebar and the folder tree act on it. Closing the left view
 slides the right column over.

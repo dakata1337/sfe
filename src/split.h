@@ -8,7 +8,10 @@
  *
  * Closing the left pane slides the right column over: right-top becomes
  * the left pane and right-bottom becomes the right one. One pane is
- * "active": the last one that had keyboard focus. */
+ * "active": the last one that had keyboard focus.
+ *
+ * In a narrow window the views stack top / bottom instead of side by side;
+ * the single view then splits with "split top / bottom". */
 
 #include "pane.h"
 #include <gtk/gtk.h>

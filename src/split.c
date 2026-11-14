@@ -2,6 +2,11 @@
 
 #define MAX_PANES 3
 
+/* Below this width side-by-side views are too cramped: the views stack top
+ * and bottom instead. Two thresholds so the layout cannot flicker. */
+#define NARROW_BELOW 700
+#define WIDE_ABOVE 780
+
 struct _SfeSplit {
     GtkBox parent;
 
@@ -12,8 +17,10 @@ struct _SfeSplit {
     int n_panes;
     SfePane* active;
 
-    GtkWidget* outer; /* horizontal: left | right column */
+    GtkWidget* outer; /* horizontal: left | right column (vertical when narrow) */
     GtkWidget* inner; /* vertical: right-top / right-bottom */
+    bool narrow; /* stacked layout for narrow windows */
+    guint relayout_source;
 };
 
 G_DEFINE_TYPE(SfeSplit, sfe_split, GTK_TYPE_BOX)
@@ -73,8 +80,10 @@ static void center_divider(GtkWidget* paned)
 static void update_buttons(SfeSplit* self)
 {
     for (int i = 0; i < self->n_panes; i++) {
-        bool vertical = self->n_panes == 1;
-        bool horizontal = self->n_panes == 2 && i == 1;
+        /* Narrow: side by side does not fit, so the single view splits top
+         * and bottom instead. */
+        bool vertical = self->n_panes == 1 && !self->narrow;
+        bool horizontal = (self->n_panes == 2 && i == 1) || (self->n_panes == 1 && self->narrow);
         bool close = self->n_panes > 1;
         sfe_pane_set_split_buttons(self->panes[i], vertical, horizontal, close);
     }
@@ -192,8 +201,9 @@ static SfePane* add_pane(SfeSplit* self, GFile* dir)
 void sfe_split_split(SfeSplit* self, SfePane* pane, SfeSplitKind kind)
 {
     int index = index_of(self, pane);
-    bool allowed = kind == SFE_SPLIT_VERTICAL ? self->n_panes == 1
-                                              : self->n_panes == 2 && index == 1;
+    bool allowed = kind == SFE_SPLIT_VERTICAL
+        ? self->n_panes == 1 && !self->narrow
+        : (self->n_panes == 2 && index == 1) || (self->n_panes == 1 && self->narrow);
     if (!allowed)
         return;
 
@@ -201,7 +211,7 @@ void sfe_split_split(SfeSplit* self, SfePane* pane, SfeSplitKind kind)
     SfePane* added = add_pane(self, sfe_pane_get_dir(pane));
     sfe_pane_set_view(added, sfe_pane_get_view(pane));
     relayout(self);
-    center_divider(kind == SFE_SPLIT_VERTICAL ? self->outer : self->inner);
+    center_divider(self->n_panes == 2 ? self->outer : self->inner);
 
     set_active(self, added);
     sfe_pane_focus_view(added);
@@ -230,6 +240,36 @@ void sfe_split_close(SfeSplit* self, SfePane* pane)
 }
 
 /* ------------------------------------------------------------------------ */
+/* Narrow windows                                                            */
+/* ------------------------------------------------------------------------ */
+
+static gboolean apply_narrow(gpointer data)
+{
+    SfeSplit* self = data;
+    self->relayout_source = 0;
+    gtk_orientable_set_orientation(GTK_ORIENTABLE(self->outer),
+        self->narrow ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
+    if (self->n_panes > 1)
+        center_divider(self->outer);
+    update_buttons(self);
+    return G_SOURCE_REMOVE;
+}
+
+static void on_size_allocate(GtkWidget* widget, GdkRectangle* alloc, gpointer data)
+{
+    (void)data;
+    SfeSplit* self = SFE_SPLIT(widget);
+    bool narrow = self->narrow ? alloc->width < WIDE_ABOVE : alloc->width < NARROW_BELOW;
+
+    if (narrow == self->narrow)
+        return;
+    self->narrow = narrow;
+    /* Changing the layout while being allocated is not allowed: next idle. */
+    if (self->relayout_source == 0)
+        self->relayout_source = g_idle_add(apply_narrow, self);
+}
+
+/* ------------------------------------------------------------------------ */
 /* GObject                                                                   */
 /* ------------------------------------------------------------------------ */
 
@@ -237,6 +277,7 @@ static void sfe_split_dispose(GObject* object)
 {
     SfeSplit* self = SFE_SPLIT(object);
 
+    g_clear_handle_id(&self->relayout_source, g_source_remove);
     for (int i = 0; i < self->n_panes; i++) {
         g_signal_handlers_disconnect_by_data(self->panes[i], self);
         g_clear_object(&self->panes[i]);
@@ -265,6 +306,7 @@ static void sfe_split_init(SfeSplit* self)
     self->inner = g_object_ref_sink(gtk_paned_new(GTK_ORIENTATION_VERTICAL));
     gtk_widget_show(self->outer);
     gtk_widget_show(self->inner);
+    g_signal_connect(self, "size-allocate", G_CALLBACK(on_size_allocate), NULL);
 }
 
 SfeSplit* sfe_split_new(GFile* dir)

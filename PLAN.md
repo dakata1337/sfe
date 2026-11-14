@@ -106,6 +106,7 @@ Written atomically (temp file + rename). The settings dialog edits it, and a fil
   - With a single pane, only vertical split is enabled. It creates `left | right`.
   - Horizontal split is enabled only on the right pane, and only while the right column has one pane. It creates `right-top / right-bottom`.
   - Close removes that pane. If you close the left pane, the right column slides left, so right-top becomes left and right-bottom becomes right.
+  - Narrow windows (split area under ~700 px) stack the views top / bottom instead of side by side; then the single view splits with the horizontal button, and the vertical one is disabled.
   - Built from two fixed `GtkPaned`s (outer horizontal, inner vertical). The new pane starts in the same directory as the pane it was split from.
   - The "active pane" (last focused, subtly highlighted) receives paste, search and shortcuts.
 - **Clipboard:** one app-wide clipboard, so copy/cut/paste works inside a pane and across panes. Paste conflicts ask Overwrite / Skip / Rename / Apply-to-all. Large jobs run async with a progress bar.
