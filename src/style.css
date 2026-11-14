@@ -98,6 +98,19 @@
     border-bottom-color: alpha(@sfe_accent, 0.7);
 }
 
+/* ...and the other panes are slightly darker. */
+.sfe-window .sfe-split.sfe-multi .sfe-pane:not(.sfe-active),
+.sfe-window .sfe-split.sfe-multi .sfe-pane:not(.sfe-active) iconview,
+.sfe-window .sfe-split.sfe-multi .sfe-pane:not(.sfe-active) treeview.view {
+    background-color: shade(@sfe_view_bg, 0.95);
+}
+
+/* A darker background alone is invisible on dark schemes; dimming the
+ * files is what makes the inactive views read as inactive. */
+.sfe-window .sfe-split.sfe-multi .sfe-pane:not(.sfe-active) overlay {
+    opacity: 0.85;
+}
+
 .sfe-sidebar,
 .sfe-sidebar list,
 .sfe-sidebar treeview.view {

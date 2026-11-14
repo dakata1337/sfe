@@ -91,7 +91,8 @@ too cramped, so they stack top / bottom instead; a single view then splits
 with *Split top / bottom* (Ctrl+-). Widen the window and they go back side
 by side.
 
-The view you last used is **active** (accent line under its path bar).
+The view you last used is **active** (accent line under its path bar; the
+other views are slightly darker).
 Shortcuts, the sidebar and the folder tree act on it. Closing the left view
 slides the right column over.
 
