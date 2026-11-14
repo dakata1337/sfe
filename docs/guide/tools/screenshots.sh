@@ -78,6 +78,14 @@ for ch in sys.stdin.read():
     done
 }
 
+# Stops the sfe this script started (never any other running sfe).
+stop_sfe() {
+    if [ -n "$P" ]; then
+        kill "$P" 2>/dev/null || true
+        sleep 0.3
+    fi
+}
+
 goto() { # PATH (inside the demo home)
     key CTRL l
     key CTRL a
@@ -89,8 +97,7 @@ goto() { # PATH (inside the demo home)
 # Starts sfe in DIR, with the demo home mounted at $FAKE. The real home is
 # mounted back in place so fonts and desktop settings still apply.
 launch() { # DIR [XDG_CONFIG_HOME]
-    pkill -x sfe 2>/dev/null || true
-    sleep 0.3
+    stop_sfe
     mkdir -p "$WORK/realhome"
     # Inside the namespace the user is uid 0; naming uid 0 "alex" makes the
     # properties dialog show "alex" as the owner instead of "root".
@@ -107,8 +114,8 @@ launch() { # DIR [XDG_CONFIG_HOME]
         mount --bind "$DEMO" "$FAKE"
         exec env HOME="$FAKE" XDG_CONFIG_HOME="$CONFIG" XDG_DATA_HOME="$FAKE/.local/share" "$SFE" "$FAKE/$DIR"
     ' >/dev/null 2>&1 &
+    P=$! # unshare execs sh, which execs sfe: the same process
     sleep 2.5
-    P=$(pgrep -nx sfe)
     main=$(window_of "$P" largest)
     if clients | grep -q '"fullscreen": [12]'; then
         dispatch "hl.dsp.window.fullscreen({ window = \"address:$main\" })"
@@ -259,7 +266,7 @@ cp "$DEMO/.config/sfe/config.toml" "$WORK/light/sfe/"
 launch Pictures "$WORK/light"
 shot theme-light
 
-pkill -x sfe || true
+stop_sfe
 
 # Smaller files: the screenshots are flat UI, so a palette loses nothing visible.
 python3 - "$OUT" <<'EOF'

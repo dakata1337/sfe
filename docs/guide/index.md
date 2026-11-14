@@ -83,15 +83,23 @@ Up to three views: **left | right-top / right-bottom**.
 
 | Do this | Keys / button |
 |---|---|
-| Split side by side (only with one view) | Ctrl+\\, ◫ button |
-| Split the right view top / bottom | Ctrl+-, ⊟ button |
+| Split side by side | Ctrl+\\, ◫ button |
+| Split top / bottom | Ctrl+-, ⊟ button |
 | Move focus to the next view | F6 |
 | Close the active view (or the window if it is the last) | Ctrl+W, ✕ button |
 
+The layout always stays one of these:
+
+- **One view** splits either way: side by side (left | right) or top / bottom.
+- **Two views side by side** split top / bottom, and **two views top /
+  bottom** split side by side. Either way the view you split becomes
+  right-top, the new view right-bottom, and the other view moves to the left.
+- **Three views** cannot split further; the buttons that do nothing are
+  greyed out.
+
 In a narrow window (about 700 px for the views) side-by-side views would be
-too cramped, so they stack top / bottom instead; a single view then splits
-with *Split top / bottom* (Ctrl+-). Widen the window and they go back side
-by side.
+too cramped, so they stack top / bottom instead, and a single view only
+splits top / bottom. Widen the window and they go back side by side.
 
 The view you last used is **active** (accent line under its path bar; the
 other views are slightly darker).
@@ -322,7 +330,7 @@ Every shortcut in one place.
 | Alt+Return | properties |
 | Menu, Shift+F10 | context menu |
 | Ctrl+\\ | split side by side |
-| Ctrl+- | split the right view top / bottom |
+| Ctrl+- | split top / bottom |
 | F6 | next view |
 | Ctrl+W | close the view |
 | Ctrl+P | preferences |

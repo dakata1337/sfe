@@ -3,15 +3,18 @@
 /* Up to three directory panes:  left | right-top / right-bottom.
  *
  *   1 pane:   [ left ]
- *   2 panes:  [ left | right ]                 vertical split of the only pane
- *   3 panes:  [ left | right-top / right-bot ] horizontal split of the right pane
+ *   2 panes:  [ left | right ]  or  [ top / bottom ]
+ *   3 panes:  [ left | right-top / right-bottom ]
  *
+ * One pane splits either way. Two side by side split top / bottom and two
+ * top / bottom split side by side: the pane whose button was used becomes
+ * right-top, the new one right-bottom and the other one the left pane.
  * Closing the left pane slides the right column over: right-top becomes
  * the left pane and right-bottom becomes the right one. One pane is
  * "active": the last one that had keyboard focus.
  *
  * In a narrow window the views stack top / bottom instead of side by side;
- * the single view then splits with "split top / bottom". */
+ * the single view then splits only top / bottom. */
 
 #include "pane.h"
 #include <gtk/gtk.h>
@@ -32,6 +35,11 @@ SfePane* sfe_split_get_pane(SfeSplit* self, int index);
 
 /* Splits `pane` if the layout allows it (see above). */
 void sfe_split_split(SfeSplit* self, SfePane* pane, SfeSplitKind kind);
+
+/* Opens `dir` in a new split: a new right pane, or a new right-bottom pane
+ * when there is a right one; with three panes, right-bottom goes to `dir`.
+ * Returns that pane (now active). */
+SfePane* sfe_split_open(SfeSplit* self, GFile* dir);
 
 /* Closes `pane` unless it is the last one. */
 void sfe_split_close(SfeSplit* self, SfePane* pane);

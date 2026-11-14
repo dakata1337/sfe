@@ -169,13 +169,9 @@ static void run_split_vertical(const SfeActionTarget* t)
     sfe_split_split(sfe_window_get_split(t->window), t->pane, SFE_SPLIT_VERTICAL);
 }
 
-/* Only the right pane can be stacked, whichever pane is active. */
 static void run_split_horizontal(const SfeActionTarget* t)
 {
-    SfeSplit* split = sfe_window_get_split(t->window);
-    SfePane* right = sfe_split_get_pane(split, 1);
-    /* With one view this only works in a narrow window (stacked layout). */
-    sfe_split_split(split, right ? right : sfe_split_get_pane(split, 0), SFE_SPLIT_HORIZONTAL);
+    sfe_split_split(sfe_window_get_split(t->window), t->pane, SFE_SPLIT_HORIZONTAL);
 }
 
 /* Closes the active pane, or the window when it is the last one. */

@@ -17,8 +17,9 @@ struct _SfeSplit {
     int n_panes;
     SfePane* active;
 
-    GtkWidget* outer; /* horizontal: left | right column (vertical when narrow) */
+    GtkWidget* outer; /* horizontal: left | right column (vertical when stacked) */
     GtkWidget* inner; /* vertical: right-top / right-bottom */
+    bool stacked; /* two panes split top / bottom rather than side by side */
     bool narrow; /* stacked layout for narrow windows */
     guint relayout_source;
 };
@@ -77,16 +78,39 @@ static void center_divider(GtkWidget* paned)
     g_object_set_data(G_OBJECT(paned), CENTER_HANDLER_KEY, GSIZE_TO_POINTER(handler));
 }
 
+/* What splitting allows (any pane may split; the result is always one of
+ * the layouts above):
+ *   1 pane     side by side or top / bottom (narrow: top / bottom only)
+ *   2 panes    side by side: top / bottom;  top / bottom: side by side
+ *              (the pane split becomes right-top, the new one right-bottom)
+ *   3 panes    nothing */
+static bool can_split(SfeSplit* self, SfeSplitKind kind)
+{
+    switch (self->n_panes) {
+    case 1: return kind == SFE_SPLIT_HORIZONTAL || !self->narrow;
+    case 2: return self->stacked ? kind == SFE_SPLIT_VERTICAL : kind == SFE_SPLIT_HORIZONTAL;
+    default: return false;
+    }
+}
+
 static void update_buttons(SfeSplit* self)
 {
-    for (int i = 0; i < self->n_panes; i++) {
-        /* Narrow: side by side does not fit, so the single view splits top
-         * and bottom instead. */
-        bool vertical = self->n_panes == 1 && !self->narrow;
-        bool horizontal = (self->n_panes == 2 && i == 1) || (self->n_panes == 1 && self->narrow);
-        bool close = self->n_panes > 1;
-        sfe_pane_set_split_buttons(self->panes[i], vertical, horizontal, close);
-    }
+    bool vertical = can_split(self, SFE_SPLIT_VERTICAL);
+    bool horizontal = can_split(self, SFE_SPLIT_HORIZONTAL);
+    for (int i = 0; i < self->n_panes; i++)
+        sfe_pane_set_split_buttons(self->panes[i], vertical, horizontal, self->n_panes > 1);
+}
+
+/* The outer paned stacks for two top / bottom panes and in narrow windows. */
+static bool apply_orientation(SfeSplit* self)
+{
+    GtkOrientation want = self->narrow || (self->n_panes == 2 && self->stacked)
+        ? GTK_ORIENTATION_VERTICAL
+        : GTK_ORIENTATION_HORIZONTAL;
+    if (gtk_orientable_get_orientation(GTK_ORIENTABLE(self->outer)) == want)
+        return false;
+    gtk_orientable_set_orientation(GTK_ORIENTABLE(self->outer), want);
+    return true;
 }
 
 /* Rebuilds the widget tree for the current panes. The panes (and the two
@@ -115,6 +139,11 @@ static void relayout(SfeSplit* self)
         gtk_box_pack_start(GTK_BOX(self), self->outer, TRUE, TRUE, 0);
         break;
     }
+
+    if (self->n_panes == 1)
+        self->stacked = false;
+    if (apply_orientation(self) && self->n_panes > 1)
+        center_divider(self->outer);
 
     GtkStyleContext* style = gtk_widget_get_style_context(GTK_WIDGET(self));
     if (self->n_panes > 1)
@@ -198,23 +227,52 @@ static SfePane* add_pane(SfeSplit* self, GFile* dir)
     return pane;
 }
 
-void sfe_split_split(SfeSplit* self, SfePane* pane, SfeSplitKind kind)
+/* Adds a pane showing `dir`, in the view mode of `like`. Two panes then sit
+ * side by side, or top / bottom when `stacked`; with three, `right_top`
+ * moves to right-top, the other pane to the left and the new one goes
+ * right-bottom. Makes the new pane active. */
+static SfePane* insert_pane(SfeSplit* self, SfePane* like, SfePane* right_top, GFile* dir, bool stacked)
 {
-    int index = index_of(self, pane);
-    bool allowed = kind == SFE_SPLIT_VERTICAL
-        ? self->n_panes == 1 && !self->narrow
-        : (self->n_panes == 2 && index == 1) || (self->n_panes == 1 && self->narrow);
-    if (!allowed)
-        return;
+    SfePane* added = add_pane(self, dir);
 
-    /* The new pane opens the same directory, in the same view mode. */
-    SfePane* added = add_pane(self, sfe_pane_get_dir(pane));
-    sfe_pane_set_view(added, sfe_pane_get_view(pane));
+    sfe_pane_set_view(added, sfe_pane_get_view(like));
+    if (self->n_panes == 2) {
+        self->stacked = stacked;
+    } else {
+        SfePane* other = self->panes[0] == right_top ? self->panes[1] : self->panes[0];
+        self->panes[0] = other;
+        self->panes[1] = right_top;
+        self->stacked = false;
+    }
     relayout(self);
     center_divider(self->n_panes == 2 ? self->outer : self->inner);
 
     set_active(self, added);
     sfe_pane_focus_view(added);
+    return added;
+}
+
+void sfe_split_split(SfeSplit* self, SfePane* pane, SfeSplitKind kind)
+{
+    if (index_of(self, pane) < 0 || !can_split(self, kind))
+        return;
+    /* The new pane opens the same directory. */
+    insert_pane(self, pane, pane, sfe_pane_get_dir(pane), kind == SFE_SPLIT_HORIZONTAL);
+}
+
+SfePane* sfe_split_open(SfeSplit* self, GFile* dir)
+{
+    switch (self->n_panes) {
+    case 1: /* a new right pane */
+        return insert_pane(self, self->panes[0], NULL, dir, false);
+    case 2: /* a new right-bottom pane under the right (or bottom) one */
+        return insert_pane(self, self->active, self->panes[1], dir, false);
+    default: /* the right-bottom pane goes there */
+        sfe_pane_navigate(self->panes[2], dir);
+        set_active(self, self->panes[2]);
+        sfe_pane_focus_view(self->panes[2]);
+        return self->panes[2];
+    }
 }
 
 void sfe_split_close(SfeSplit* self, SfePane* pane)
@@ -247,9 +305,7 @@ static gboolean apply_narrow(gpointer data)
 {
     SfeSplit* self = data;
     self->relayout_source = 0;
-    gtk_orientable_set_orientation(GTK_ORIENTABLE(self->outer),
-        self->narrow ? GTK_ORIENTATION_VERTICAL : GTK_ORIENTATION_HORIZONTAL);
-    if (self->n_panes > 1)
+    if (apply_orientation(self) && self->n_panes > 1)
         center_divider(self->outer);
     update_buttons(self);
     return G_SOURCE_REMOVE;
