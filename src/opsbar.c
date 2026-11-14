@@ -29,6 +29,7 @@ static const char* verb_for(SfeOpKind kind)
     case SFE_OP_MOVE: return "move";
     case SFE_OP_TRASH: return "move to the trash";
     case SFE_OP_DELETE: return "delete";
+    case SFE_OP_EXTRACT: return "extract";
     }
     return "process";
 }

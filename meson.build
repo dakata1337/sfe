@@ -47,6 +47,7 @@ resources = gnome.compile_resources('sfe-resources', 'src/sfe.gresource.xml',
 
 # Modules that only need GLib (unit-testable without a display).
 core_src = files(
+  'src/archive.c',
   'src/bookmarks.c',
   'src/config.c',
   'src/devices.c',

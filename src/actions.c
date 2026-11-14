@@ -1,6 +1,7 @@
 #include "actions.h"
 
 #include "app.h"
+#include "archive.h"
 #include "bookmarks.h"
 #include "clipboard.h"
 #include "dialogs.h"
@@ -80,6 +81,19 @@ static bool can_paste(const SfeActionTarget* t)
 static bool can_paste_into(const SfeActionTarget* t)
 {
     return single_dir(t) && sfe_clipboard_has_files();
+}
+
+/* Every selected file is an archive that an installed tool can extract. */
+static bool can_extract(const SfeActionTarget* t)
+{
+    if (t->files == NULL)
+        return false;
+    for (GList* l = t->files; l != NULL; l = l->next) {
+        g_autofree char* name = g_file_get_basename(l->data);
+        if (is_dir(l->data) || !sfe_archive_can_extract(name))
+            return false;
+    }
+    return true;
 }
 
 static bool can_bookmark_selection(const SfeActionTarget* t)
@@ -271,6 +285,13 @@ static void run_paste_into(const SfeActionTarget* t)
         paste_into(t->window, t->files->data);
 }
 
+/* Each archive goes into a new folder named after it, in this folder. */
+static void run_extract(const SfeActionTarget* t)
+{
+    if (can_extract(t))
+        run_op(t, SFE_OP_EXTRACT, t->files, t->dir);
+}
+
 static void run_trash(const SfeActionTarget* t)
 {
     if (t->files != NULL)
@@ -431,6 +452,7 @@ static const SfeAction actions[] = {
     { "paste",              "Paste",                      { "<Control>v", NULL },           FOLDER,       1, can_paste,               run_paste },
     { "paste-into",         "Paste Into Folder",          { NULL },                         ITEMS,        1, can_paste_into,          run_paste_into },
     { "rename",             "Rename…",                    { "F2", NULL },                   ITEMS,        2, has_files,               run_rename },
+    { "extract",            "Extract Here",               { NULL },                         ITEMS,        2, can_extract,             run_extract },
     { "trash",              "Move to Trash",              { "Delete", NULL },               ITEMS,        3, has_files,               run_trash },
     { "delete",             "Delete Permanently…",        { "<Shift>Delete", NULL },        ITEMS,        3, has_files,               run_delete },
     { "search",             "Search…",                    { "<Control>f", NULL },           FOLDER,       2, NULL,                    run_search },

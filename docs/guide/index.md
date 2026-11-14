@@ -145,6 +145,10 @@ only goes down: `..` and `.` are not allowed.
 
   ![The file already exists dialog](images/conflict.png)
 
+- **Extract Here** (in the menu of archives) unpacks each archive into a new
+  folder named after it (`photos.tar.gz` → `photos/`), with progress and
+  cancel like a copy. It uses whatever is installed: `bsdtar` (tar, zip, 7z,
+  rar, iso), `tar`, `unzip`, `7z` or `unrar`.
 - Trashed files go to the standard trash (`~/.local/share/Trash`), so other
   tools can restore them.
 

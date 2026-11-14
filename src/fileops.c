@@ -1,5 +1,6 @@
 #include "fileops.h"
 
+#include "archive.h"
 #include "util.h"
 
 #include <string.h>
@@ -449,6 +450,91 @@ static void trash_item(SfeFileOp* op, GFile* file)
     op->done_items++;
 }
 
+/* Removes a folder tree without asking (cleanup after a failed extraction). */
+static void remove_tree(GFile* file)
+{
+    if (g_file_query_file_type(file, NOFOLLOW, NULL) == G_FILE_TYPE_DIRECTORY) {
+        g_autoptr(GFileEnumerator) en = g_file_enumerate_children(file, "standard::name", NOFOLLOW, NULL, NULL);
+        GFileInfo* info;
+        while (en != NULL && (info = g_file_enumerator_next_file(en, NULL, NULL)) != NULL) {
+            g_autoptr(GFile) child = g_file_get_child(file, g_file_info_get_name(info));
+            remove_tree(child);
+            g_object_unref(info);
+        }
+    }
+    g_file_delete(file, NULL, NULL);
+}
+
+/* Runs the extractor; on failure returns false with a message for the user. */
+static bool run_extractor(SfeFileOp* op, const char* archive, const char* dest, char** message)
+{
+    g_auto(GStrv) argv = sfe_archive_extract_argv(archive, dest, g_find_program_in_path);
+    g_autoptr(GError) error = NULL;
+    g_autofree char* err_text = NULL;
+
+    if (argv == NULL) {
+        *message = g_strdup("No program that can extract this archive is installed "
+                            "(bsdtar, tar, unzip, 7z or unrar).");
+        return false;
+    }
+    g_autoptr(GSubprocess) proc = g_subprocess_newv((const char* const*)argv,
+        G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_PIPE, &error);
+    if (proc == NULL) {
+        *message = g_strdup(error->message);
+        return false;
+    }
+    bool ok = g_subprocess_communicate_utf8(proc, NULL, op->cancel, NULL, &err_text, &error)
+        && g_subprocess_get_successful(proc);
+    if (cancelled(op)) {
+        g_subprocess_force_exit(proc);
+        return false;
+    }
+    if (!ok) {
+        g_strstrip(err_text ? err_text : (err_text = g_strdup("")));
+        *message = g_strdup(*err_text ? err_text : error ? error->message : "The archive could not be extracted.");
+    }
+    return ok;
+}
+
+/* "photos.tar.gz" -> a new folder "photos" (or "photos (2)") in dest_dir. */
+static void extract_item(SfeFileOp* op, GFile* archive)
+{
+    g_autofree char* archive_path = g_file_get_path(archive);
+    g_autofree char* base = g_file_get_basename(archive);
+    g_autofree char* folder_name = sfe_archive_folder_name(base);
+    g_autoptr(GFile) folder = g_file_get_child(op->dest_dir, folder_name);
+
+    if (g_file_query_exists(folder, NULL)) {
+        GFile* renamed = unused_name(folder, true);
+        g_object_unref(folder);
+        folder = renamed;
+    }
+    report(op, "Extracting", archive, 0);
+
+    for (;;) {
+        g_autoptr(GError) error = NULL;
+        g_autofree char* dest = g_file_get_path(folder);
+        g_autofree char* message = NULL;
+
+        if (!g_file_make_directory(folder, op->cancel, &error)) {
+            if (!retry_after(op, archive, error))
+                return;
+            continue;
+        }
+        if (archive_path != NULL && run_extractor(op, archive_path, dest, &message)) {
+            op->done_items++;
+            return;
+        }
+        remove_tree(folder); /* no half-extracted folders */
+        if (cancelled(op))
+            return;
+        g_set_error_literal(&error, G_IO_ERROR, G_IO_ERROR_FAILED,
+            message ? message : "Only local archives can be extracted.");
+        if (!retry_after(op, archive, error))
+            return;
+    }
+}
+
 /* ------------------------------------------------------------------------ */
 /* The job                                                                   */
 /* ------------------------------------------------------------------------ */
@@ -476,6 +562,7 @@ static void run_job(GTask* task, gpointer source, gpointer data, GCancellable* c
         case SFE_OP_MOVE: move_item(op, src, dest); break;
         case SFE_OP_TRASH: trash_item(op, src); break;
         case SFE_OP_DELETE: delete_recursive(op, src, true); break;
+        case SFE_OP_EXTRACT: extract_item(op, src); break;
         }
     }
 

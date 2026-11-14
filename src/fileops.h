@@ -22,6 +22,7 @@ typedef enum {
     SFE_OP_MOVE,
     SFE_OP_TRASH,
     SFE_OP_DELETE,
+    SFE_OP_EXTRACT, /* archives -> a new folder each, inside dest_dir */
 } SfeOpKind;
 
 typedef enum {
@@ -40,7 +41,7 @@ typedef enum {
 #define SFE_TYPE_FILE_OP (sfe_file_op_get_type())
 G_DECLARE_FINAL_TYPE(SfeFileOp, sfe_file_op, SFE, FILE_OP, GObject)
 
-/* `sources` is a list of GFile*; `dest_dir` is used by copy and move. */
+/* `sources` is a list of GFile*; `dest_dir` is used by copy, move and extract. */
 SfeFileOp* sfe_file_op_new(SfeOpKind kind, GList* sources, GFile* dest_dir);
 void sfe_file_op_start(SfeFileOp* op);
 void sfe_file_op_cancel(SfeFileOp* op);
