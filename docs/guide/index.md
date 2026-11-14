@@ -68,8 +68,9 @@ program for an extension, see [Configuration](#configuration).
   folder can be bookmarked from its menu too. Drag bookmarks to reorder them; right-click → *Remove Bookmark*.
   Bookmarks from `~/.config/gtk-3.0/bookmarks` are shown too.
 - **Drives**: see [Drives](#drives).
-- **Folder tree** (bottom third): follows the active view. Its root is your
-  home folder, or the drive the folder is on. Click a folder to open it.
+- **Folder tree** (bottom third): follows the active view, keeping the
+  current folder in the middle. Its root is your home folder, or the drive
+  the folder is on. Click a folder to open it.
 - Middle-click, or right-click → *Open in New Window*, opens a place in a new
   window. The Menu key or Shift+F10 opens the menu from the keyboard.
 

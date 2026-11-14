@@ -28,6 +28,7 @@ struct _SfeDirTree {
     GtkTreeStore* store;
     GFile* root;
     GFile* location; /* what the tree should highlight */
+    GFile* centered; /* the location last scrolled to the middle */
     GCancellable* cancel; /* cancelled when the tree is rebuilt */
     GHashTable* monitors; /* path of a loaded directory -> GFileMonitor* */
     bool show_hidden;
@@ -460,6 +461,7 @@ static void rebuild(SfeDirTree* self, GFile* root)
     g_object_unref(self->cancel);
     self->cancel = g_cancellable_new();
     g_set_object(&self->root, root);
+    g_clear_object(&self->centered);
 
     g_hash_table_remove_all(self->monitors); /* before the rows they watch go */
     /* Clearing deselects the current row; that is not the user choosing a
@@ -475,6 +477,9 @@ static void rebuild(SfeDirTree* self, GFile* root)
     load_node(self, &iter, true);
 }
 
+/* Highlights the location's row and scrolls it to the middle, once per
+ * location change: later loads (the user expanding other folders) must not
+ * pull the view back. */
 static void select_iter(SfeDirTree* self, GtkTreeIter* iter)
 {
     g_autoptr(GtkTreePath) path = gtk_tree_model_get_path(model(self), iter);
@@ -482,7 +487,10 @@ static void select_iter(SfeDirTree* self, GtkTreeIter* iter)
 
     self->selecting = true;
     gtk_tree_selection_select_iter(selection, iter);
-    gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(self), path, NULL, FALSE, 0, 0);
+    if (self->centered == NULL || !g_file_equal(self->centered, self->location)) {
+        gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(self), path, NULL, TRUE, 0.5, 0);
+        g_set_object(&self->centered, self->location);
+    }
     self->selecting = false;
 }
 
@@ -571,6 +579,7 @@ static void sfe_dir_tree_dispose(GObject* object)
     g_clear_object(&self->store);
     g_clear_object(&self->root);
     g_clear_object(&self->location);
+    g_clear_object(&self->centered);
     G_OBJECT_CLASS(sfe_dir_tree_parent_class)->dispose(object);
 }
 
