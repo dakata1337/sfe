@@ -44,6 +44,8 @@ void sfe_pane_set_active(SfePane* self, bool active);
 
 /* Selected files as a list of GFile* (free with g_list_free_full(l, g_object_unref)). */
 GList* sfe_pane_get_selected_files(SfePane* self);
+/* Every file shown, in display order (same freeing as above). */
+GList* sfe_pane_get_all_files(SfePane* self);
 void sfe_pane_select_all(SfePane* self);
 
 /* Opens files like double-clicking them (directories open in this pane). */

@@ -371,10 +371,15 @@ static void run_rename(const SfeActionTarget* t)
         sfe_rename_many(widget_of(t), t->files, on_renamed, g_object_ref(t->pane), g_object_unref);
 }
 
+/* With nothing selected, every file shown in the folder is renamed. */
 static void run_mass_rename(const SfeActionTarget* t)
 {
-    if (t->files != NULL)
-        sfe_rename_many(widget_of(t), t->files, on_renamed, g_object_ref(t->pane), g_object_unref);
+    GList* all = t->files ? NULL : sfe_pane_get_all_files(t->pane);
+    GList* files = t->files ? t->files : all;
+
+    if (files != NULL)
+        sfe_rename_many(widget_of(t), files, on_renamed, g_object_ref(t->pane), g_object_unref);
+    g_list_free_full(all, g_object_unref);
 }
 
 static void run_properties(const SfeActionTarget* t)

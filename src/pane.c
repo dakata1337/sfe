@@ -541,6 +541,23 @@ void sfe_pane_set_view(SfePane* self, SfeViewMode mode)
         gtk_widget_grab_focus(active_view(self));
 }
 
+GList* sfe_pane_get_all_files(SfePane* self)
+{
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    GtkTreeIter iter;
+    GList* files = NULL;
+
+    if (model == NULL || !gtk_tree_model_get_iter_first(model, &iter))
+        return NULL;
+    do {
+        GFile* file = NULL;
+        gtk_tree_model_get(model, &iter, SFE_COL_FILE, &file, -1);
+        if (file != NULL)
+            files = g_list_prepend(files, file);
+    } while (gtk_tree_model_iter_next(model, &iter));
+    return g_list_reverse(files);
+}
+
 GList* sfe_pane_get_selected_files(SfePane* self)
 {
     GList* paths = NULL;
