@@ -15,42 +15,24 @@ G_DEFINE_QUARK(sfe-config-error-quark, sfe_config_error)
 /* Option table: one row per scalar option.                                  */
 /* ------------------------------------------------------------------------ */
 
-typedef enum {
-    OPT_BOOL,
-    OPT_INT,
-    OPT_DOUBLE,
-    OPT_STRING,
-    OPT_ENUM,
-} OptType;
-
-typedef struct {
-    const char* section;
-    const char* key;
-    OptType type;
-    size_t offset; /* offsetof(SfeConfig, field) */
-    const char* help; /* written as a comment above the key */
-    double min, max; /* OPT_INT, OPT_DOUBLE */
-    const char* const* choices; /* OPT_ENUM: NULL-terminated, index == value */
-} Option;
-
 static const char* const view_names[] = { "grid", "list", NULL };
 static const char* const sort_names[] = { "name", "size", "modified", "type", NULL };
 
 #define FIELD(f) offsetof(SfeConfig, f)
 
-static const Option options[] = {
-    { "general", "start_path", OPT_STRING, FIELD(start_path), "Directory opened by new windows" },
-    { "general", "show_hidden", OPT_BOOL, FIELD(show_hidden), "Show files whose name starts with a dot" },
-    { "general", "ui_scale", OPT_DOUBLE, FIELD(ui_scale), "Scale factor for text and icons (0.5 - 3.0)", .min = 0.5, .max = 3.0 },
-    { "general", "view", OPT_ENUM, FIELD(view), "Default view: grid | list", .choices = view_names },
-    { "general", "icon_size", OPT_INT, FIELD(icon_size), "Icon size in the grid view, in pixels (16 - 256)", .min = 16, .max = 256 },
-    { "general", "sort_by", OPT_ENUM, FIELD(sort_by), "Sort order: name | size | modified | type", .choices = sort_names },
-    { "general", "dirs_first", OPT_BOOL, FIELD(dirs_first), "List directories before files" },
-    { "general", "confirm_delete", OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently" },
-    { "general", "decorations", OPT_BOOL, FIELD(decorations), "Draw a window title bar (turn off on tiling compositors)" },
-    { "preview", "thumbnails", OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails" },
-    { "preview", "thumbnail_max_mb", OPT_INT, FIELD(thumbnail_max_mb), "Skip thumbnails for files larger than this (MiB)", .min = 1, .max = 1 << 20 },
-    { "sidebar", "show_gtk_bookmarks", OPT_BOOL, FIELD(show_gtk_bookmarks), "Also list bookmarks from ~/.config/gtk-3.0/bookmarks" },
+static const SfeOption options[] = {
+    { "general", "start_path", SFE_OPT_STRING, FIELD(start_path), "Directory opened by new windows", .label = "Start folder" },
+    { "general", "show_hidden", SFE_OPT_BOOL, FIELD(show_hidden), "Show files whose name starts with a dot", .label = "Show hidden files" },
+    { "general", "ui_scale", SFE_OPT_DOUBLE, FIELD(ui_scale), "Scale factor for text and icons (0.5 - 3.0)", .min = 0.5, .max = 3.0, .label = "Scale" },
+    { "general", "view", SFE_OPT_ENUM, FIELD(view), "Default view: grid | list", .choices = view_names, .label = "Default view" },
+    { "general", "icon_size", SFE_OPT_INT, FIELD(icon_size), "Icon size in the grid view, in pixels (16 - 256)", .min = 16, .max = 256, .label = "Icon size" },
+    { "general", "sort_by", SFE_OPT_ENUM, FIELD(sort_by), "Sort order: name | size | modified | type", .choices = sort_names, .label = "Sort by" },
+    { "general", "dirs_first", SFE_OPT_BOOL, FIELD(dirs_first), "List directories before files", .label = "Folders first" },
+    { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },
+    { "general", "decorations", SFE_OPT_BOOL, FIELD(decorations), "Draw a window title bar (turn off on tiling compositors)", .label = "Window title bar" },
+    { "preview", "thumbnails", SFE_OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails", .label = "Thumbnails" },
+    { "preview", "thumbnail_max_mb", SFE_OPT_INT, FIELD(thumbnail_max_mb), "Skip thumbnails for files larger than this (MiB)", .min = 1, .max = 1 << 20, .label = "Thumbnail size limit (MiB)" },
+    { "sidebar", "show_gtk_bookmarks", SFE_OPT_BOOL, FIELD(show_gtk_bookmarks), "Also list bookmarks from ~/.config/gtk-3.0/bookmarks", .label = "Show GTK bookmarks" },
 };
 
 /* Order in which sections are written. */
@@ -65,9 +47,20 @@ static bool is_scalar_section(const char* name)
     return false;
 }
 
-static void* field_ptr(const SfeConfig* cfg, const Option* opt)
+static void* field_ptr(const SfeConfig* cfg, const SfeOption* opt)
 {
     return (char*)cfg + opt->offset;
+}
+
+const SfeOption* sfe_config_options(size_t* n)
+{
+    *n = G_N_ELEMENTS(options);
+    return options;
+}
+
+void* sfe_config_field(const SfeConfig* cfg, const SfeOption* opt)
+{
+    return field_ptr(cfg, opt);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -112,7 +105,7 @@ void sfe_config_free(SfeConfig* cfg)
     if (cfg == NULL)
         return;
     for (size_t i = 0; i < G_N_ELEMENTS(options); i++) {
-        if (options[i].type == OPT_STRING)
+        if (options[i].type == SFE_OPT_STRING)
             g_free(*(char**)field_ptr(cfg, &options[i]));
     }
     g_ptr_array_unref(cfg->bookmarks);
@@ -148,10 +141,10 @@ char* sfe_config_default_path(void)
 /* Reading                                                                   */
 /* ------------------------------------------------------------------------ */
 
-static const Option* find_option(const char* section, const char* key, int key_len)
+static const SfeOption* find_option(const char* section, const char* key, int key_len)
 {
     for (size_t i = 0; i < G_N_ELEMENTS(options); i++) {
-        const Option* o = &options[i];
+        const SfeOption* o = &options[i];
         if (strcmp(o->section, section) == 0 && (int)strlen(o->key) == key_len
             && memcmp(o->key, key, key_len) == 0)
             return o;
@@ -159,24 +152,24 @@ static const Option* find_option(const char* section, const char* key, int key_l
     return NULL;
 }
 
-static void read_option(SfeConfig* cfg, const Option* opt, toml_datum_t v)
+static void read_option(SfeConfig* cfg, const SfeOption* opt, toml_datum_t v)
 {
     void* field = field_ptr(cfg, opt);
 
     switch (opt->type) {
-    case OPT_BOOL:
+    case SFE_OPT_BOOL:
         if (v.type == TOML_BOOLEAN) {
             *(bool*)field = v.u.boolean;
             return;
         }
         break;
-    case OPT_INT:
+    case SFE_OPT_INT:
         if (v.type == TOML_INT64 && v.u.int64 >= opt->min && v.u.int64 <= opt->max) {
             *(int*)field = (int)v.u.int64;
             return;
         }
         break;
-    case OPT_DOUBLE: {
+    case SFE_OPT_DOUBLE: {
         double d = v.type == TOML_FP64 ? v.u.fp64
             : v.type == TOML_INT64     ? (double)v.u.int64
                                        : NAN;
@@ -186,14 +179,14 @@ static void read_option(SfeConfig* cfg, const Option* opt, toml_datum_t v)
         }
         break;
     }
-    case OPT_STRING:
+    case SFE_OPT_STRING:
         if (v.type == TOML_STRING) {
             g_free(*(char**)field);
             *(char**)field = g_strdup(v.u.s);
             return;
         }
         break;
-    case OPT_ENUM:
+    case SFE_OPT_ENUM:
         if (v.type == TOML_STRING) {
             for (int i = 0; opt->choices[i] != NULL; i++) {
                 if (g_ascii_strcasecmp(opt->choices[i], v.u.s) == 0) {
@@ -295,7 +288,7 @@ static void read_section(SfeConfig* cfg, const char* section, toml_datum_t tab)
         const char* key = tab.u.tab.key[i];
         int len = tab.u.tab.len[i];
         toml_datum_t v = tab.u.tab.value[i];
-        const Option* opt = find_option(section, key, len);
+        const SfeOption* opt = find_option(section, key, len);
 
         if (opt != NULL)
             read_option(cfg, opt, v);
@@ -404,17 +397,17 @@ static void append_double(GString* out, double d)
         g_string_append(out, ".0");
 }
 
-static void append_option(GString* out, const SfeConfig* cfg, const Option* opt)
+static void append_option(GString* out, const SfeConfig* cfg, const SfeOption* opt)
 {
     const void* field = field_ptr(cfg, opt);
 
     g_string_append_printf(out, "# %s\n%s = ", opt->help, opt->key);
     switch (opt->type) {
-    case OPT_BOOL: g_string_append(out, *(const bool*)field ? "true" : "false"); break;
-    case OPT_INT: g_string_append_printf(out, "%d", *(const int*)field); break;
-    case OPT_DOUBLE: append_double(out, *(const double*)field); break;
-    case OPT_STRING: append_string(out, *(char* const*)field ? *(char* const*)field : ""); break;
-    case OPT_ENUM: append_string(out, opt->choices[*(const int*)field]); break;
+    case SFE_OPT_BOOL: g_string_append(out, *(const bool*)field ? "true" : "false"); break;
+    case SFE_OPT_INT: g_string_append_printf(out, "%d", *(const int*)field); break;
+    case SFE_OPT_DOUBLE: append_double(out, *(const double*)field); break;
+    case SFE_OPT_STRING: append_string(out, *(char* const*)field ? *(char* const*)field : ""); break;
+    case SFE_OPT_ENUM: append_string(out, opt->choices[*(const int*)field]); break;
     }
     g_string_append(out, "\n\n");
 }

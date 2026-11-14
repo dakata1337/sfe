@@ -313,6 +313,33 @@
     color: @sfe_accent_fg;
 }
 
+/* ---- Switches (Preferences) ------------------------------------------ */
+
+.sfe-window switch {
+    background-color: alpha(@sfe_fg, 0.15);
+    border: none;
+    border-radius: 14px;
+    min-height: 24px;
+    color: transparent; /* no ON/OFF text */
+}
+
+.sfe-window switch:checked {
+    background-color: @sfe_accent;
+}
+
+.sfe-window switch slider {
+    background-color: @sfe_fg;
+    border: none;
+    border-radius: 12px;
+    min-width: 20px;
+    min-height: 20px;
+    margin: 2px;
+}
+
+.sfe-window switch:checked slider {
+    background-color: @sfe_accent_fg;
+}
+
 /* ---- Progress of file operations -------------------------------------- */
 
 .sfe-opsbar {

@@ -7,6 +7,7 @@
 #include "dialogs.h"
 #include "fileops.h"
 #include "opener.h"
+#include "prefs.h"
 #include "props.h"
 #include "renamedlg.h"
 #include "split.h"
@@ -341,6 +342,7 @@ static void run_delete(const SfeActionTarget* t)
 
 static void run_select_all(const SfeActionTarget* t) { sfe_pane_select_all(t->pane); }
 static void run_search(const SfeActionTarget* t) { sfe_pane_start_search(t->pane); }
+static void run_preferences(const SfeActionTarget* t) { sfe_show_preferences(widget_of(t)); }
 
 typedef struct {
     SfePane* pane;
@@ -464,6 +466,7 @@ static const SfeAction actions[] = {
     { "unbookmark-folder",  "Remove from Bookmarks",      { NULL },                         FOLDER,       4, can_unbookmark_folder,   run_bookmark },
     { "properties",         "Properties",                 { "<Alt>Return", NULL },          ITEMS|FOLDER, 9, NULL,                    run_properties },
 
+    { "preferences",        "Preferences",                { "<Control>p", NULL },           NONE,         0, NULL,                    run_preferences },
     { "mass-rename",        "Rename with Pattern…",       { "<Shift>F2", NULL },            NONE,         0, NULL,                    run_mass_rename },
     { "open-with-other",    "Other Application…",         { NULL },                         NONE,         0, NULL,                    run_open_with_other },
     { "back",               "Back",                       { "<Alt>Left", NULL },            NONE,         0, NULL,                    run_back },

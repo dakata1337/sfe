@@ -219,6 +219,12 @@ sleep 1.5
 shot properties dialog
 key "" Escape dialog
 
+launch Pictures
+key CTRL p
+sleep 1
+shot preferences dialog
+key "" Escape dialog
+
 # A long copy to show the progress bar.
 mkdir -p "$DEMO/Backup/photos"
 python3 -c "

@@ -239,7 +239,13 @@ mounting, configuration reloads).
 
 ## Configuration
 
-The settings live in `~/.config/sfe/config.toml`, which is created with
+**Ctrl+P** opens *Preferences*: start folder, hidden files, scale, view,
+icon size, sorting, delete confirmation, window title bar and GTK
+bookmarks. Changes apply immediately.
+
+![Preferences](images/preferences.png)
+
+All settings live in `~/.config/sfe/config.toml`, which is created with
 comments on first start. Changes apply while sfe is running.
 
 ```toml
@@ -297,5 +303,6 @@ Every shortcut in one place.
 | Ctrl+- | split the right view top / bottom |
 | F6 | next view |
 | Ctrl+W | close the view |
+| Ctrl+P | preferences |
 | Ctrl+N | new window |
 | Ctrl+Q | quit |

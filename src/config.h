@@ -65,6 +65,34 @@ typedef struct {
     GPtrArray* actions; /* SfeUserAction* */
 } SfeConfig;
 
+/* ------------------------------------------------------------------------ */
+/* The option table (scalar options), for generic code such as Preferences */
+
+typedef enum {
+    SFE_OPT_BOOL, /* bool */
+    SFE_OPT_INT, /* int, between min and max */
+    SFE_OPT_DOUBLE, /* double, between min and max */
+    SFE_OPT_STRING, /* char* */
+    SFE_OPT_ENUM, /* int: index into choices */
+} SfeOptionType;
+
+typedef struct {
+    const char* section;
+    const char* key;
+    SfeOptionType type;
+    size_t offset; /* offsetof(SfeConfig, field) */
+    const char* help; /* written as a comment above the key; tooltip in Preferences */
+    const char* label; /* short name in Preferences */
+    double min, max; /* SFE_OPT_INT, SFE_OPT_DOUBLE */
+    const char* const* choices; /* SFE_OPT_ENUM: NULL-terminated, index == value */
+} SfeOption;
+
+/* Every scalar option (n receives the count), in file order. */
+const SfeOption* sfe_config_options(size_t* n);
+
+/* Where `opt` lives in `cfg` (cast to bool*, int*, double* or char**). */
+void* sfe_config_field(const SfeConfig* cfg, const SfeOption* opt);
+
 #define SFE_CONFIG_ERROR (sfe_config_error_quark())
 GQuark sfe_config_error_quark(void);
 

@@ -80,6 +80,7 @@ ui_src = files(
   'src/opsbar.c',
   'src/pane.c',
   'src/pathentry.c',
+  'src/prefs.c',
   'src/props.c',
   'src/renamedlg.c',
   'src/search.c',
