@@ -2,6 +2,7 @@
 
 #include "dialogs.h"
 #include "rename.h"
+#include <stdbool.h>
 
 #define TEMPLATE_HINT "{name} name   {ext} extension   {n} counter   {n:03} counter padded to 3 digits"
 
@@ -44,18 +45,18 @@ static void request_free(gpointer p)
     g_free(req);
 }
 
-/* Renames and reports; returns whether it worked. */
-static bool perform(GtkWidget* parent, Request* req, char** names)
+/* Renames `files` to `names` and reports; returns whether it worked. */
+static bool perform(GtkWidget* parent, Request* req, GFile** files, char** names, int n)
 {
     g_autoptr(GError) error = NULL;
 
-    if (!sfe_rename_files(req->files, names, req->n, &error)) {
+    if (!sfe_rename_files(files, names, n, &error)) {
         sfe_show_error(parent, "Renaming failed", error->message);
         return false;
     }
     if (req->done != NULL) {
         g_autoptr(GPtrArray) list = g_ptr_array_new();
-        for (int i = 0; i < req->n; i++)
+        for (int i = 0; i < n; i++)
             g_ptr_array_add(list, names[i]);
         req->done(list, req->data);
     }
@@ -103,7 +104,7 @@ static void on_one_name(const char* name, gpointer data)
         return;
     }
     if (status == SFE_RENAME_OK)
-        perform(one->parent, one->req, names);
+        perform(one->parent, one->req, one->req->files, names, 1);
 }
 
 void sfe_rename_one(GtkWidget* parent, GFile* file, SfeRenamedFunc done, gpointer data, GDestroyNotify destroy)
@@ -128,8 +129,19 @@ enum {
     N_COLS,
 };
 
+/* "Include" switch, shown when renaming a whole folder. */
+typedef enum {
+    INCLUDE_ALL,
+    INCLUDE_FILES,
+    INCLUDE_FOLDERS,
+} Include;
+
 typedef struct {
     Request* req;
+    Include include;
+    GFile** files; /* the included subset of req->files (borrowed) */
+    gboolean* is_dir;
+    int n;
     GtkWidget* dialog;
     GtkWidget* template_;
     GtkWidget* find;
@@ -149,6 +161,8 @@ static void many_free(gpointer p)
 {
     Many* m = p;
     request_free(m->req);
+    g_free(m->files);
+    g_free(m->is_dir);
     g_object_unref(m->store);
     g_strfreev(m->names);
     g_free(m);
@@ -197,21 +211,21 @@ static void update_preview(Many* m)
     }
 
     g_strfreev(m->names);
-    m->names = g_new0(char*, m->req->n + 1);
-    for (int i = 0; i < m->req->n; i++) {
-        g_autofree char* old = g_file_get_basename(m->req->files[i]);
+    m->names = g_new0(char*, m->n + 1);
+    for (int i = 0; i < m->n; i++) { /* numbered among the included items only */
+        g_autofree char* old = g_file_get_basename(m->files[i]);
         g_autofree char* display = g_filename_display_name(old);
-        m->names[i] = sfe_renamer_apply(renamer, display, m->req->is_dir[i], i);
+        m->names[i] = sfe_renamer_apply(renamer, display, m->is_dir[i], i);
     }
 
-    SfeRenameStatus* status = g_new0(SfeRenameStatus, m->req->n);
-    int problems = sfe_rename_check(m->req->files, m->names, m->req->n, status);
+    SfeRenameStatus* status = g_new0(SfeRenameStatus, MAX(m->n, 1));
+    int problems = sfe_rename_check(m->files, m->names, m->n, status);
     int changes = 0;
     g_autofree char* color = error_color(m->dialog);
     GtkTreeIter iter;
     bool valid = gtk_tree_model_get_iter_first(GTK_TREE_MODEL(m->store), &iter);
 
-    for (int i = 0; i < m->req->n && valid; i++) {
+    for (int i = 0; i < m->n && valid; i++) {
         g_autofree char* escaped = g_markup_escape_text(m->names[i], -1);
         g_autofree char* markup = NULL;
         switch (status[i]) {
@@ -235,11 +249,59 @@ static void update_preview(Many* m)
         g_autofree char* text = g_strdup_printf("%d name%s cannot be used", problems, problems == 1 ? "" : "s");
         set_status(m, text, true);
     } else {
-        g_autofree char* text = g_strdup_printf("%d of %d will be renamed", changes, m->req->n);
+        g_autofree char* text = g_strdup_printf("%d of %d will be renamed", changes, m->n);
         set_status(m, text, false);
     }
     m->valid = problems == 0 && changes > 0;
     gtk_dialog_set_response_sensitive(GTK_DIALOG(m->dialog), GTK_RESPONSE_ACCEPT, m->valid);
+}
+
+/* Picks the included items and refills the preview list with them. */
+static void apply_include(Many* m)
+{
+    m->n = 0;
+    gtk_list_store_clear(m->store);
+    for (int i = 0; i < m->req->n; i++) {
+        bool dir = m->req->is_dir[i];
+        if ((m->include == INCLUDE_FILES && dir) || (m->include == INCLUDE_FOLDERS && !dir))
+            continue;
+        m->files[m->n] = m->req->files[i];
+        m->is_dir[m->n] = dir;
+        m->n++;
+        g_autofree char* name = g_file_get_basename(m->req->files[i]);
+        g_autofree char* display = g_filename_display_name(name);
+        gtk_list_store_insert_with_values(m->store, NULL, -1, COL_OLD, display, COL_NEW, display, -1);
+    }
+    update_preview(m);
+}
+
+static void on_include_toggled(GtkToggleButton* button, gpointer data)
+{
+    if (!gtk_toggle_button_get_active(button))
+        return; /* the button that was switched off */
+    Many* m = data;
+    m->include = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(button), "sfe-include"));
+    apply_include(m);
+}
+
+static GtkWidget* build_include_switch(Many* m)
+{
+    static const char* const labels[] = { "All", "Files", "Folders" };
+    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    GtkWidget* first = NULL;
+
+    gtk_style_context_add_class(gtk_widget_get_style_context(box), GTK_STYLE_CLASS_LINKED);
+    gtk_style_context_add_class(gtk_widget_get_style_context(box), "sfe-include");
+    gtk_widget_set_halign(box, GTK_ALIGN_START);
+    for (int i = 0; i < 3; i++) {
+        GtkWidget* b = gtk_radio_button_new_with_label_from_widget(first ? GTK_RADIO_BUTTON(first) : NULL, labels[i]);
+        gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(b), FALSE); /* a segmented button, no dot */
+        g_object_set_data(G_OBJECT(b), "sfe-include", GINT_TO_POINTER(i));
+        g_signal_connect(b, "toggled", G_CALLBACK(on_include_toggled), m);
+        gtk_box_pack_start(GTK_BOX(box), b, FALSE, FALSE, 0);
+        first = first ? first : b;
+    }
+    return box;
 }
 
 static void on_input_changed(GtkWidget* widget, gpointer data)
@@ -254,7 +316,7 @@ static void on_many_response(GtkDialog* dialog, int response, gpointer data)
 
     if (response == GTK_RESPONSE_ACCEPT) {
         update_preview(m); /* the disk may have changed since the last keystroke */
-        if (!m->valid || !perform(GTK_WIDGET(dialog), m->req, m->names))
+        if (!m->valid || !perform(GTK_WIDGET(dialog), m->req, m->files, m->names, m->n))
             return; /* keep the dialog open */
     }
     gtk_widget_destroy(GTK_WIDGET(dialog)); /* frees m */
@@ -295,24 +357,24 @@ static GtkWidget* build_preview(Many* m)
     return sw;
 }
 
-void sfe_rename_many(GtkWidget* parent, GList* files, SfeRenamedFunc done, gpointer data, GDestroyNotify destroy)
+void sfe_rename_many(GtkWidget* parent, GList* files, bool include_switch, SfeRenamedFunc done,
+    gpointer data, GDestroyNotify destroy)
 {
     Many* m = g_new0(Many, 1);
     m->req = request_new(files, done, data, destroy);
+    m->files = g_new0(GFile*, MAX(m->req->n, 1));
+    m->is_dir = g_new0(gboolean, MAX(m->req->n, 1));
     m->dialog = sfe_dialog_new(parent, "Rename Files");
     m->store = gtk_list_store_new(N_COLS, G_TYPE_STRING, G_TYPE_STRING);
     g_object_set_data_full(G_OBJECT(m->dialog), "sfe-rename", m, many_free);
-
-    for (int i = 0; i < m->req->n; i++) {
-        g_autofree char* name = g_file_get_basename(m->req->files[i]);
-        g_autofree char* display = g_filename_display_name(name);
-        gtk_list_store_insert_with_values(m->store, NULL, -1, COL_OLD, display, COL_NEW, display, -1);
-    }
 
     GtkWidget* grid = gtk_grid_new();
     gtk_grid_set_row_spacing(GTK_GRID(grid), 8);
     gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
     int row = 0;
+
+    if (include_switch)
+        labeled(GTK_GRID(grid), row++, "Include", build_include_switch(m));
 
     m->template_ = labeled(GTK_GRID(grid), row++, "New name", gtk_entry_new());
     gtk_entry_set_text(GTK_ENTRY(m->template_), "{name}{ext}");
@@ -381,7 +443,7 @@ void sfe_rename_many(GtkWidget* parent, GList* files, SfeRenamedFunc done, gpoin
     g_signal_connect(m->dialog, "response", G_CALLBACK(on_many_response), m);
     gtk_dialog_set_default_response(GTK_DIALOG(m->dialog), GTK_RESPONSE_ACCEPT);
 
-    update_preview(m);
+    apply_include(m); /* fills the preview */
     gtk_widget_show_all(m->dialog);
     gtk_widget_grab_focus(m->find);
 }

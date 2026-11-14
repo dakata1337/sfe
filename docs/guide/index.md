@@ -188,7 +188,9 @@ selected, ready to type over.
 ![Rename one file](images/rename-one.png)
 
 **F2** on several files, or **Shift+F2**, opens the pattern dialog. With
-nothing selected, Shift+F2 renames every file shown in the folder:
+nothing selected, Shift+F2 renames the whole folder, and an **Include: All |
+Files | Folders** switch at the top picks which items take part (numbering
+counts only those):
 
 ![Rename several files with a pattern](images/rename-pattern.png)
 

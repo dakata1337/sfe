@@ -393,6 +393,24 @@
     opacity: 0.45;
 }
 
+/* Segmented switches (rename "Include"): the chosen one is highlighted. */
+.sfe-dialog .linked > button {
+    border-radius: 0;
+}
+
+.sfe-dialog .linked > button:first-child {
+    border-radius: 6px 0 0 6px;
+}
+
+.sfe-dialog .linked > button:last-child {
+    border-radius: 0 6px 6px 0;
+}
+
+.sfe-dialog .linked > button:checked {
+    background-color: alpha(@sfe_accent, 0.35);
+    color: @sfe_fg;
+}
+
 /* Dialogs that GTK builds with a header bar (e.g. "Other Application…"). */
 .sfe-dialog headerbar,
 .sfe-dialog headerbar:backdrop,
