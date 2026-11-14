@@ -72,8 +72,10 @@ program for an extension, see [Configuration](#configuration).
 - **Folder tree** (bottom third): follows the active view, keeping the
   current folder in the middle. Its root is your home folder, or the drive
   the folder is on. Click a folder to open it.
-- Middle-click, or right-click → *Open in New Window*, opens a place in a new
-  window. The Menu key or Shift+F10 opens the menu from the keyboard.
+- Right-click → *Open in Split* opens a place or a tree folder in a new view
+  (see [Split views](#split-views)); middle-click, or right-click → *Open in
+  New Window*, opens it in a new window. The Menu key or Shift+F10 opens the
+  menu from the keyboard.
 
 ## Split views
 
@@ -96,6 +98,10 @@ The layout always stays one of these:
   right-top, the new view right-bottom, and the other view moves to the left.
 - **Three views** cannot split further; the buttons that do nothing are
   greyed out.
+
+Right-click a place, bookmark, drive or folder in the tree → *Open in
+Split* to open it in a new view: a new right view, or a new right-bottom
+view if there is a right one (with three views, right-bottom goes there).
 
 In a narrow window (about 700 px for the views) side-by-side views would be
 too cramped, so they stack top / bottom instead, and a single view only

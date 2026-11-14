@@ -79,15 +79,16 @@ static void on_set_focus(GtkWindow* window, GtkWidget* widget, gpointer data)
         sfe_split_track_focus(SFE_WINDOW(data)->split, widget);
 }
 
-static void on_sidebar_open(SfeSidebar* sidebar, GFile* dir, gboolean new_window, gpointer data)
+static void on_sidebar_open(SfeSidebar* sidebar, GFile* dir, int where, gpointer data)
 {
     (void)sidebar;
     SfeWindow* win = SFE_WINDOW(data);
 
-    if (new_window)
-        gtk_window_present(GTK_WINDOW(sfe_window_new(sfe_app(), dir)));
-    else
-        sfe_pane_navigate(sfe_window_get_active_pane(win), dir);
+    switch ((SfeOpenWhere)where) {
+    case SFE_OPEN_NEW_WINDOW: gtk_window_present(GTK_WINDOW(sfe_window_new(sfe_app(), dir))); break;
+    case SFE_OPEN_SPLIT: sfe_split_open(win->split, dir); break;
+    case SFE_OPEN_HERE: sfe_pane_navigate(sfe_window_get_active_pane(win), dir); break;
+    }
 }
 
 static void apply_config(SfeWindow* win)

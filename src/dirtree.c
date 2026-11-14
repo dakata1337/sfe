@@ -39,6 +39,7 @@ G_DEFINE_TYPE(SfeDirTree, sfe_dir_tree, GTK_TYPE_TREE_VIEW)
 
 enum {
     SIGNAL_OPEN_LOCATION,
+    SIGNAL_FOLDER_MENU,
     N_SIGNALS,
 };
 static guint signals[N_SIGNALS];
@@ -552,6 +553,19 @@ void sfe_dir_tree_set_show_hidden(SfeDirTree* self, bool show)
     }
 }
 
+bool sfe_dir_tree_get_selected_area(SfeDirTree* self, GdkRectangle* area)
+{
+    GtkTreeIter iter;
+    if (!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(self)), NULL, &iter))
+        return false;
+    g_autoptr(GtkTreePath) path = gtk_tree_model_get_path(model(self), &iter);
+    gtk_tree_view_get_background_area(GTK_TREE_VIEW(self), path, NULL, area);
+    gtk_tree_view_convert_bin_window_to_widget_coords(GTK_TREE_VIEW(self), area->x, area->y, &area->x, &area->y);
+    area->x = 0;
+    area->width = gtk_widget_get_allocated_width(GTK_WIDGET(self));
+    return true;
+}
+
 /* ------------------------------------------------------------------------ */
 /* GObject                                                                   */
 /* ------------------------------------------------------------------------ */
@@ -565,7 +579,7 @@ static void on_selection_changed(GtkTreeSelection* selection, gpointer data)
         return;
     g_autoptr(GFile) file = node_file(self, &iter);
     if (file != NULL && (self->location == NULL || !g_file_equal(file, self->location)))
-        g_signal_emit(self, signals[SIGNAL_OPEN_LOCATION], 0, file);
+        g_signal_emit(self, signals[SIGNAL_OPEN_LOCATION], 0, file, SFE_OPEN_HERE);
 }
 
 static void sfe_dir_tree_dispose(GObject* object)
@@ -587,7 +601,49 @@ static void sfe_dir_tree_class_init(SfeDirTreeClass* klass)
 {
     G_OBJECT_CLASS(klass)->dispose = sfe_dir_tree_dispose;
     signals[SIGNAL_OPEN_LOCATION] = g_signal_new("open-location", G_TYPE_FROM_CLASS(klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_FILE);
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 2, G_TYPE_FILE, G_TYPE_INT);
+    signals[SIGNAL_FOLDER_MENU] = g_signal_new("folder-menu", G_TYPE_FROM_CLASS(klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 2, G_TYPE_FILE, GDK_TYPE_EVENT);
+}
+
+/* Right click: the folder's menu; middle click: a new window. Neither
+ * changes the selection (the highlight stays on the current folder). */
+static gboolean on_button_press(GtkWidget* widget, GdkEventButton* event, gpointer data)
+{
+    (void)data;
+    SfeDirTree* self = SFE_DIR_TREE(widget);
+    g_autoptr(GtkTreePath) path = NULL;
+    GtkTreeIter iter;
+
+    if (event->type != GDK_BUTTON_PRESS || (event->button != GDK_BUTTON_SECONDARY && event->button != GDK_BUTTON_MIDDLE))
+        return FALSE;
+    if (!gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(self), (int)event->x, (int)event->y, &path, NULL, NULL, NULL)
+        || !gtk_tree_model_get_iter(model(self), &iter, path))
+        return FALSE;
+    g_autoptr(GFile) file = node_file(self, &iter);
+    if (file == NULL)
+        return FALSE;
+    if (event->button == GDK_BUTTON_MIDDLE)
+        g_signal_emit(self, signals[SIGNAL_OPEN_LOCATION], 0, file, SFE_OPEN_NEW_WINDOW);
+    else
+        g_signal_emit(self, signals[SIGNAL_FOLDER_MENU], 0, file, (GdkEvent*)event);
+    return TRUE;
+}
+
+/* Menu key / Shift+F10: the menu of the highlighted folder. */
+static gboolean on_popup_menu(GtkWidget* widget, gpointer data)
+{
+    (void)data;
+    SfeDirTree* self = SFE_DIR_TREE(widget);
+    GtkTreeIter iter;
+
+    if (!gtk_tree_selection_get_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(self)), NULL, &iter))
+        return FALSE;
+    g_autoptr(GFile) file = node_file(self, &iter);
+    if (file == NULL)
+        return FALSE;
+    g_signal_emit(self, signals[SIGNAL_FOLDER_MENU], 0, file, NULL);
+    return TRUE;
 }
 
 static void sfe_dir_tree_init(SfeDirTree* self)
@@ -619,6 +675,8 @@ static void sfe_dir_tree_init(SfeDirTree* self)
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(self)), "sfe-dir-tree");
 
     g_signal_connect(view, "test-expand-row", G_CALLBACK(on_test_expand_row), NULL);
+    g_signal_connect(view, "button-press-event", G_CALLBACK(on_button_press), NULL);
+    g_signal_connect(view, "popup-menu", G_CALLBACK(on_popup_menu), NULL);
     g_signal_connect(gtk_tree_view_get_selection(view), "changed", G_CALLBACK(on_selection_changed), self);
 }
 

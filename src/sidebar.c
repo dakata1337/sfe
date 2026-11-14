@@ -67,9 +67,9 @@ static RowData* row_data(GtkListBoxRow* row)
     return row ? g_object_get_data(G_OBJECT(row), "sfe-row") : NULL;
 }
 
-static void open_location(SfeSidebar* self, GFile* file, bool new_window)
+static void open_location(SfeSidebar* self, GFile* file, SfeOpenWhere where)
 {
-    g_signal_emit(self, signals[SIGNAL_OPEN_LOCATION], 0, file, (gboolean)new_window);
+    g_signal_emit(self, signals[SIGNAL_OPEN_LOCATION], 0, file, (int)where);
 }
 
 static GtkWidget* add_row(SfeSidebar* self, Section section, const char* icon, const char* label, GFile* file)
@@ -252,7 +252,7 @@ static void on_mounted(GObject* source, GAsyncResult* res, gpointer data)
         return;
     }
     g_autoptr(GFile) file = g_file_new_for_path(path);
-    open_location(self, file, false);
+    open_location(self, file, SFE_OPEN_HERE);
 }
 
 static void mount_device(SfeSidebar* self, RowData* d)
@@ -305,12 +305,13 @@ static void on_row_activated(GtkListBox* list, GtkListBoxRow* row, gpointer data
     RowData* d = row_data(row);
 
     if (d->file != NULL)
-        open_location(self, d->file, false);
+        open_location(self, d->file, SFE_OPEN_HERE);
     else if (d->device_id != NULL)
         mount_device(self, d);
 }
 
 typedef enum {
+    MENU_OPEN_SPLIT,
     MENU_OPEN_NEW_WINDOW,
     MENU_REMOVE_BOOKMARK,
     MENU_MOUNT,
@@ -330,9 +331,11 @@ static void on_menu_item(GtkMenuItem* item, gpointer data)
     SfeSidebar* self = data;
     MenuCommand command = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(item), "sfe-command"));
     RowData* d = row_data(g_object_get_data(G_OBJECT(item), "sfe-row"));
+    GFile* file = g_object_get_data(G_OBJECT(item), "sfe-file");
 
     switch (command) {
-    case MENU_OPEN_NEW_WINDOW: open_location(self, d->file, true); break;
+    case MENU_OPEN_SPLIT: open_location(self, file, SFE_OPEN_SPLIT); break;
+    case MENU_OPEN_NEW_WINDOW: open_location(self, file, SFE_OPEN_NEW_WINDOW); break;
     case MENU_REMOVE_BOOKMARK: remove_bookmark(d->bookmark_index); break;
     case MENU_MOUNT: mount_device(self, d); break;
     case MENU_UNMOUNT: unmount_device(self, d, false); break;
@@ -340,12 +343,17 @@ static void on_menu_item(GtkMenuItem* item, gpointer data)
     }
 }
 
+/* An item acting on a list row (`row`) or, for the open commands, on a
+ * folder (`file`, from a row or the tree). */
 static void add_menu_item(SfeSidebar* self, GtkWidget* menu, const char* label, MenuCommand command,
-    GtkListBoxRow* row)
+    GtkListBoxRow* row, GFile* file)
 {
     GtkWidget* item = gtk_menu_item_new_with_label(label);
     g_object_set_data(G_OBJECT(item), "sfe-command", GINT_TO_POINTER(command));
-    g_object_set_data_full(G_OBJECT(item), "sfe-row", g_object_ref(row), g_object_unref);
+    if (row != NULL)
+        g_object_set_data_full(G_OBJECT(item), "sfe-row", g_object_ref(row), g_object_unref);
+    if (file != NULL)
+        g_object_set_data_full(G_OBJECT(item), "sfe-file", g_object_ref(file), g_object_unref);
     g_signal_connect(item, "activate", G_CALLBACK(on_menu_item), self);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 }
@@ -364,30 +372,64 @@ static void destroy_menu_later(GtkMenuShell* menu, gpointer data)
     g_idle_add(destroy_menu, menu);
 }
 
-/* Shows the row's menu at the pointer (`event`) or, from the keyboard, below the row. */
+static void add_open_items(SfeSidebar* self, GtkWidget* menu, GtkListBoxRow* row, GFile* file)
+{
+    add_menu_item(self, menu, "Open in Split", MENU_OPEN_SPLIT, row, file);
+    add_menu_item(self, menu, "Open in New Window", MENU_OPEN_NEW_WINDOW, row, file);
+}
+
+/* Pops `menu` up at the pointer (`event`) or, from the keyboard, below
+ * `anchor`, or below `rect` of `anchor`'s window when given. */
+static void popup(GtkWidget* menu, GtkWidget* anchor, const GdkRectangle* rect, GdkEvent* event)
+{
+    gtk_style_context_add_class(gtk_widget_get_style_context(menu), "sfe-menu");
+    gtk_widget_show_all(menu);
+    gtk_menu_attach_to_widget(GTK_MENU(menu), anchor, NULL);
+    g_signal_connect(menu, "deactivate", G_CALLBACK(destroy_menu_later), NULL);
+    if (event != NULL)
+        gtk_menu_popup_at_pointer(GTK_MENU(menu), event);
+    else if (rect != NULL)
+        gtk_menu_popup_at_rect(GTK_MENU(menu), gtk_widget_get_window(anchor), rect,
+            GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, NULL);
+    else
+        gtk_menu_popup_at_widget(GTK_MENU(menu), anchor, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, NULL);
+}
+
+/* The row's menu. */
 static void show_row_menu(SfeSidebar* self, GtkListBoxRow* row, GdkEvent* event)
 {
     RowData* d = row_data(row);
     GtkWidget* menu = gtk_menu_new();
 
     if (d->file != NULL)
-        add_menu_item(self, menu, "Open in New Window", MENU_OPEN_NEW_WINDOW, row);
+        add_open_items(self, menu, row, d->file);
     if (d->bookmark_index >= 0)
-        add_menu_item(self, menu, "Remove Bookmark", MENU_REMOVE_BOOKMARK, row);
+        add_menu_item(self, menu, "Remove Bookmark", MENU_REMOVE_BOOKMARK, row, NULL);
     if (d->device_id != NULL && d->file == NULL)
-        add_menu_item(self, menu, "Mount", MENU_MOUNT, row);
+        add_menu_item(self, menu, "Mount", MENU_MOUNT, row, NULL);
     if (d->device_id != NULL && d->file != NULL)
-        add_menu_item(self, menu, "Unmount", MENU_UNMOUNT, row);
+        add_menu_item(self, menu, "Unmount", MENU_UNMOUNT, row, NULL);
     if (d->device_id != NULL && d->removable)
-        add_menu_item(self, menu, "Eject", MENU_EJECT, row);
+        add_menu_item(self, menu, "Eject", MENU_EJECT, row, NULL);
+    if (event == NULL) { /* below the row: in the list's window coordinates */
+        GtkAllocation a;
+        gtk_widget_get_allocation(GTK_WIDGET(row), &a);
+        GdkRectangle rect = { a.x, a.y, a.width, a.height };
+        popup(menu, self->list, &rect, NULL);
+    } else {
+        popup(menu, self->list, NULL, event);
+    }
+}
 
-    gtk_widget_show_all(menu);
-    gtk_menu_attach_to_widget(GTK_MENU(menu), self->list, NULL);
-    g_signal_connect(menu, "deactivate", G_CALLBACK(destroy_menu_later), NULL);
-    if (event != NULL)
-        gtk_menu_popup_at_pointer(GTK_MENU(menu), event);
-    else
-        gtk_menu_popup_at_widget(GTK_MENU(menu), GTK_WIDGET(row), GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, NULL);
+/* A folder's menu in the tree. */
+static void on_tree_folder_menu(SfeDirTree* tree, GFile* dir, GdkEvent* event, gpointer data)
+{
+    SfeSidebar* self = data;
+    GtkWidget* menu = gtk_menu_new();
+    GdkRectangle row;
+    bool has_row = event == NULL && sfe_dir_tree_get_selected_area(tree, &row);
+    add_open_items(self, menu, NULL, dir);
+    popup(menu, GTK_WIDGET(tree), has_row ? &row : NULL, event);
 }
 
 static gboolean on_list_button_press(GtkWidget* list, GdkEventButton* event, gpointer data)
@@ -404,7 +446,7 @@ static gboolean on_list_button_press(GtkWidget* list, GdkEventButton* event, gpo
     if (d == NULL || event->type != GDK_BUTTON_PRESS)
         return FALSE;
     if (event->button == GDK_BUTTON_MIDDLE && d->file != NULL) {
-        open_location(self, d->file, true);
+        open_location(self, d->file, SFE_OPEN_NEW_WINDOW);
         return TRUE;
     }
     if (event->button != GDK_BUTTON_SECONDARY)
@@ -514,10 +556,10 @@ static void watch_gtk_bookmarks(SfeSidebar* self)
     g_signal_connect(self->gtk_bookmarks, "changed", G_CALLBACK(on_gtk_bookmarks_changed), self);
 }
 
-static void on_tree_open(SfeDirTree* tree, GFile* dir, gpointer data)
+static void on_tree_open(SfeDirTree* tree, GFile* dir, int where, gpointer data)
 {
     (void)tree;
-    open_location(SFE_SIDEBAR(data), dir, false);
+    open_location(SFE_SIDEBAR(data), dir, where);
 }
 
 /* Starts with 2/3 for the list and 1/3 for the tree; then the user decides. */
@@ -561,7 +603,7 @@ static void sfe_sidebar_class_init(SfeSidebarClass* klass)
 {
     G_OBJECT_CLASS(klass)->dispose = sfe_sidebar_dispose;
     signals[SIGNAL_OPEN_LOCATION] = g_signal_new("open-location", G_TYPE_FROM_CLASS(klass),
-        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 2, G_TYPE_FILE, G_TYPE_BOOLEAN);
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 2, G_TYPE_FILE, G_TYPE_INT);
 }
 
 static GtkWidget* scrolled(GtkWidget* child)
@@ -590,6 +632,7 @@ static void sfe_sidebar_init(SfeSidebar* self)
     self->tree = SFE_DIR_TREE(sfe_dir_tree_new());
     sfe_dir_tree_set_show_hidden(self->tree, sfe_config()->show_hidden);
     g_signal_connect(self->tree, "open-location", G_CALLBACK(on_tree_open), self);
+    g_signal_connect(self->tree, "folder-menu", G_CALLBACK(on_tree_folder_menu), self);
 
     GtkWidget* tree_sw = scrolled(GTK_WIDGET(self->tree));
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(tree_sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
