@@ -171,6 +171,10 @@ static const struct {
     { "win.view-list", { "<Control>2", NULL } },
     { "win.toggle-hidden", { "<Control>h", NULL } },
     { "win.bookmark", { "<Control>d", NULL } },
+    { "win.split-vertical", { "<Control>backslash", NULL } },
+    { "win.split-horizontal", { "<Control>minus", NULL } },
+    { "win.close-pane", { "<Control>w", NULL } },
+    { "win.next-pane", { "F6", NULL } },
 };
 
 /* ------------------------------------------------------------------------ */

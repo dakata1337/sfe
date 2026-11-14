@@ -73,6 +73,7 @@ ui_src = files(
   'src/pane.c',
   'src/pathentry.c',
   'src/sidebar.c',
+  'src/split.c',
   'src/theme.c',
   'src/window.c',
 )

@@ -90,6 +90,12 @@
 
 .sfe-topbar {
     padding: 6px 8px;
+    border-bottom: 2px solid transparent;
+}
+
+/* With several panes, an accent line under the active pane's top bar. */
+.sfe-split.sfe-multi .sfe-pane.sfe-active .sfe-topbar {
+    border-bottom-color: alpha(@sfe_accent, 0.7);
 }
 
 .sfe-sidebar,

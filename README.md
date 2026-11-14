@@ -36,12 +36,26 @@ module that needs it.
 | Ctrl+L | edit the path (Tab completes, Esc cancels) |
 | Ctrl+H | show/hide hidden files |
 | Ctrl+D | bookmark the current folder (again to remove) |
+| Ctrl+\\ | split side by side |
+| Ctrl+- | split the right view top / bottom |
+| F6 | move focus to the next view |
+| Ctrl+W | close the active view (the window, if it is the last one) |
 | Ctrl+1 / Ctrl+2 | grid / list view |
 | F5, Ctrl+R | reload |
 | Ctrl+Shift+N | new window |
 | Ctrl+Q | quit |
 
 Click a column header in the list view to sort by it; click again to reverse.
+
+## Split views
+Up to three directory views: `left | right-top / right-bottom`. Each view has
+split and close buttons next to its path:
+- with one view, *split side by side* creates the right view;
+- the right view can then be *split top / bottom*;
+- closing the left view slides the right column over.
+
+The view you last clicked or typed in is the active one (accent line under
+its path bar); shortcuts, the sidebar and the directory tree act on it.
 
 ## Sidebar
 - **Places, Bookmarks, Devices** on top. Click to open, middle-click or

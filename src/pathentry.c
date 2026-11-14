@@ -118,6 +118,9 @@ GtkWidget* sfe_path_entry_new(void)
     g_object_unref(completion);
 
     gtk_entry_set_input_hints(GTK_ENTRY(entry), GTK_INPUT_HINT_NO_SPELLCHECK);
+    /* Small minimum width so three panes fit in a narrow (tiled) window; the
+     * entry expands to fill the top bar anyway. */
+    gtk_entry_set_width_chars(GTK_ENTRY(entry), 4);
     g_signal_connect(entry, "changed", G_CALLBACK(on_changed), NULL);
     g_signal_connect(entry, "key-press-event", G_CALLBACK(on_key_press), NULL);
     return entry;

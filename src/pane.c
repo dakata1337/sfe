@@ -32,6 +32,9 @@ struct _SfePane {
     GtkWidget* up_button;
     GtkWidget* entry;
     GtkWidget* view_button;
+    GtkWidget* split_v_button;
+    GtkWidget* split_h_button;
+    GtkWidget* close_button;
     GtkWidget* stack;
     GtkWidget* grid; /* GtkIconView */
     GtkWidget* list; /* GtkTreeView */
@@ -45,6 +48,8 @@ G_DEFINE_TYPE(SfePane, sfe_pane, GTK_TYPE_BOX)
 
 enum {
     SIGNAL_DIRECTORY_CHANGED,
+    SIGNAL_SPLIT,
+    SIGNAL_CLOSE,
     N_SIGNALS,
 };
 static guint signals[N_SIGNALS];
@@ -526,6 +531,21 @@ static GtkWidget* icon_button(const char* icon, const char* tooltip, GCallback c
     return button;
 }
 
+static void on_split_v_clicked(SfePane* self)
+{
+    g_signal_emit(self, signals[SIGNAL_SPLIT], 0, SFE_SPLIT_VERTICAL);
+}
+
+static void on_split_h_clicked(SfePane* self)
+{
+    g_signal_emit(self, signals[SIGNAL_SPLIT], 0, SFE_SPLIT_HORIZONTAL);
+}
+
+static void on_close_clicked(SfePane* self)
+{
+    g_signal_emit(self, signals[SIGNAL_CLOSE], 0);
+}
+
 static GtkWidget* build_top_bar(SfePane* self)
 {
     GtkWidget* bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
@@ -550,7 +570,19 @@ static GtkWidget* build_top_bar(SfePane* self)
 
     gtk_box_pack_start(GTK_BOX(bar), nav, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(bar), self->entry, TRUE, TRUE, 0);
+    GtkWidget* split = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 2);
+    self->split_v_button = icon_button("sfe-split-vertical-symbolic", "Split side by side (Ctrl+\\)",
+        G_CALLBACK(on_split_v_clicked), self);
+    self->split_h_button = icon_button("sfe-split-horizontal-symbolic", "Split top and bottom (Ctrl+-)",
+        G_CALLBACK(on_split_h_clicked), self);
+    self->close_button = icon_button("window-close-symbolic", "Close this view (Ctrl+W)",
+        G_CALLBACK(on_close_clicked), self);
+    gtk_container_add(GTK_CONTAINER(split), self->split_v_button);
+    gtk_container_add(GTK_CONTAINER(split), self->split_h_button);
+    gtk_container_add(GTK_CONTAINER(split), self->close_button);
+
     gtk_box_pack_start(GTK_BOX(bar), self->view_button, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), split, FALSE, FALSE, 0);
     return bar;
 }
 
@@ -566,6 +598,27 @@ void sfe_pane_focus_location(SfePane* self)
 void sfe_pane_focus_view(SfePane* self)
 {
     gtk_widget_grab_focus(active_view(self));
+}
+
+SfeViewMode sfe_pane_get_view(SfePane* self)
+{
+    return self->view;
+}
+
+void sfe_pane_set_split_buttons(SfePane* self, bool vertical, bool horizontal, bool close)
+{
+    gtk_widget_set_sensitive(self->split_v_button, vertical);
+    gtk_widget_set_sensitive(self->split_h_button, horizontal);
+    gtk_widget_set_sensitive(self->close_button, close);
+}
+
+void sfe_pane_set_active(SfePane* self, bool active)
+{
+    GtkStyleContext* style = gtk_widget_get_style_context(GTK_WIDGET(self));
+    if (active)
+        gtk_style_context_add_class(style, "sfe-active");
+    else
+        gtk_style_context_remove_class(style, "sfe-active");
 }
 
 /* ------------------------------------------------------------------------ */
@@ -596,6 +649,11 @@ static void sfe_pane_class_init(SfePaneClass* klass)
 
     /* Emitted whenever the pane starts showing another directory. */
     signals[SIGNAL_DIRECTORY_CHANGED] = g_signal_new("directory-changed",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    /* The split / close buttons were clicked (argument: SfeSplitKind). */
+    signals[SIGNAL_SPLIT] = g_signal_new("split",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_INT);
+    signals[SIGNAL_CLOSE] = g_signal_new("close",
         G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 

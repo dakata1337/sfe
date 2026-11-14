@@ -216,6 +216,8 @@ void sfe_theme_init(void)
 {
     GtkSettings* settings = gtk_settings_get_default();
 
+    /* sfe's own icons (e.g. the split buttons), looked up like theme icons. */
+    gtk_icon_theme_add_resource_path(gtk_icon_theme_get_default(), "/org/sfe/icons");
     load_app_css();
     watch_user_css();
     g_signal_connect(settings, "notify::gtk-xft-dpi", G_CALLBACK(on_dpi_changed), NULL);
