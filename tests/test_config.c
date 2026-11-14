@@ -87,6 +87,11 @@ static void test_invalid_values_keep_defaults(void)
         g_assert_cmpint(cfg->view, ==, SFE_VIEW_GRID);
         g_assert_cmpint(cfg->sort_by, ==, SFE_SORT_SIZE);
         g_assert_cmpstr(g_hash_table_lookup(cfg->open_with, "pdf"), ==, "zathura %f");
+
+        /* Each skipped entry is kept for the notification, with its line. */
+        g_assert_cmpuint(cfg->problems->len, ==, 5);
+        g_assert_cmpstr(g_ptr_array_index(cfg->problems, 0), ==, "line 2: invalid value for general.show_hidden, using the default");
+        g_assert_cmpstr(g_ptr_array_index(cfg->problems, 4), ==, "line 7: unknown option general.typo_key");
         return;
     }
     g_test_trap_subprocess(NULL, 0, G_TEST_SUBPROCESS_DEFAULT);

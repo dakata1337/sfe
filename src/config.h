@@ -63,6 +63,9 @@ typedef struct {
 
     /* [[actions]] */
     GPtrArray* actions; /* SfeUserAction* */
+
+    /* What parsing skipped, "line 3: unknown option general.foo" (char*). */
+    GPtrArray* problems;
 } SfeConfig;
 
 /* ------------------------------------------------------------------------ */

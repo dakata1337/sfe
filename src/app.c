@@ -72,6 +72,55 @@ void sfe_application_set_config(SfeApplication* app, SfeConfig* cfg)
 /* Config file loading and hot reload                                        */
 /* ------------------------------------------------------------------------ */
 
+/* A desktop notification through notify-send (libnotify), or GNotification
+ * without it. Each one replaces the previous one where the notification
+ * daemon supports it, so saving a broken file twice does not stack them. */
+static void notify(SfeApplication* app, const char* title, const char* body)
+{
+    g_autofree char* notify_send = g_find_program_in_path("notify-send");
+    if (notify_send != NULL) {
+        const char* argv[] = { notify_send, "--app-name=sfe", "--icon=sfe", "--urgency=normal",
+            "--hint=string:x-canonical-private-synchronous:sfe-config",
+            "--hint=string:x-dunst-stack-tag:sfe-config", "--", title, body, NULL };
+        g_autoptr(GError) error = NULL;
+        if (g_spawn_async(NULL, (char**)argv, NULL, G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL,
+                NULL, NULL, NULL, &error))
+            return;
+        g_debug("notify-send: %s", error->message);
+    }
+    g_autoptr(GNotification) n = g_notification_new(title);
+    g_notification_set_body(n, body);
+    g_application_send_notification(G_APPLICATION(app), "config", n);
+}
+
+/* Tells the user about a config file that does not parse, or about the
+ * entries that were skipped; `fallback` says what sfe uses meanwhile. */
+static void report_config(SfeApplication* app, const SfeConfig* cfg, const GError* error, const char* fallback)
+{
+    g_autofree char* name = g_path_get_basename(app->config_path);
+
+    if (error != NULL) {
+        g_autofree char* title = g_strdup_printf("sfe: %s has an error", name);
+        g_autofree char* body = g_strdup_printf("%s\n%s", error->message, fallback);
+        notify(app, title, body);
+        return;
+    }
+    if (cfg == NULL || cfg->problems->len == 0)
+        return;
+
+    g_autoptr(GString) body = g_string_new(NULL);
+    guint shown = MIN(cfg->problems->len, 5);
+    for (guint i = 0; i < shown; i++)
+        g_string_append_printf(body, "%s%s", i ? "\n" : "", (char*)g_ptr_array_index(cfg->problems, i));
+    if (cfg->problems->len > shown)
+        g_string_append_printf(body, "\n… and %u more", cfg->problems->len - shown);
+    g_string_append(body, "\nThese entries are ignored.");
+    g_autofree char* title = cfg->problems->len == 1
+        ? g_strdup_printf("sfe: a problem in %s", name)
+        : g_strdup_printf("sfe: %u problems in %s", cfg->problems->len, name);
+    notify(app, title, body->str);
+}
+
 static void load_initial_config(SfeApplication* app)
 {
     g_autoptr(GError) error = NULL;
@@ -81,9 +130,11 @@ static void load_initial_config(SfeApplication* app)
     if (app->config == NULL) {
         /* Keep the broken file untouched so the user can fix it. */
         g_warning("%s: %s; using defaults", app->config_path, error->message);
+        report_config(app, NULL, error, "Using the default settings until it is fixed.");
         app->config = sfe_config_new();
         return;
     }
+    report_config(app, app->config, NULL, NULL);
     if (!g_file_test(app->config_path, G_FILE_TEST_EXISTS)) {
         /* First run: write a commented default config for discoverability. */
         if (!sfe_config_save(app->config, app->config_path, &error))
@@ -107,8 +158,10 @@ static gboolean reload_config(gpointer data)
     SfeConfig* cfg = sfe_config_parse(text, len, &error);
     if (cfg == NULL) {
         g_warning("%s: %s; keeping the previous config", app->config_path, error->message);
+        report_config(app, NULL, error, "The previous settings stay in use until it is fixed.");
         return G_SOURCE_REMOVE;
     }
+    report_config(app, cfg, NULL, NULL);
     g_debug("reloaded %s", app->config_path);
     replace_config(app, cfg);
     return G_SOURCE_REMOVE;

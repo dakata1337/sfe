@@ -275,6 +275,12 @@ mp4 = "mpv %f"
 pdf = "zathura %f"
 ```
 
+If the file has a syntax error, or an entry sfe cannot use (an unknown
+option, a wrong type), you get a desktop notification with the line
+number. A broken file is never overwritten: sfe keeps the previous settings
+(or the defaults at start) until you fix it, and skips just the bad entries
+otherwise. Notifications use `notify-send` (libnotify) when it is installed.
+
 ## Themes
 
 sfe follows your GTK theme and reloads `~/.config/gtk-3.0/gtk.css` as soon as

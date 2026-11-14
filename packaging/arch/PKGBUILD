@@ -34,6 +34,7 @@ optdepends=(
   'zip: Compress to zip without bsdtar (archive.c)'
   '7zip: Extract Here for 7z and rar, Compress to 7z and zip, without bsdtar (archive.c)'
   'unrar: Extract Here for rar (archive.c)'
+  'libnotify: notify-send for config file errors (app.c; GNotification otherwise)'
   'webp-pixbuf-loader: WebP image thumbnails'
   'libheif: HEIF/AVIF image thumbnails'
   'ntfs-3g: mount NTFS drives'

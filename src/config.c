@@ -6,6 +6,7 @@
 #include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdarg.h>
 #include <string.h>
 #include <tomlc17.h>
 
@@ -97,6 +98,7 @@ SfeConfig* sfe_config_new(void)
 
     cfg->open_with = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     cfg->actions = g_ptr_array_new_with_free_func(user_action_free);
+    cfg->problems = g_ptr_array_new_with_free_func(g_free);
     return cfg;
 }
 
@@ -111,6 +113,7 @@ void sfe_config_free(SfeConfig* cfg)
     g_ptr_array_unref(cfg->bookmarks);
     g_hash_table_unref(cfg->open_with);
     g_ptr_array_unref(cfg->actions);
+    g_ptr_array_unref(cfg->problems);
     g_free(cfg);
 }
 
@@ -150,6 +153,18 @@ static const SfeOption* find_option(const char* section, const char* key, int ke
             return o;
     }
     return NULL;
+}
+
+/* Records something the parser skipped (and logs it). */
+G_GNUC_PRINTF(2, 3)
+static void problem(SfeConfig* cfg, const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    char* text = g_strdup_vprintf(format, args);
+    va_end(args);
+    g_warning("config %s", text);
+    g_ptr_array_add(cfg->problems, text);
 }
 
 static void read_option(SfeConfig* cfg, const SfeOption* opt, toml_datum_t v)
@@ -197,7 +212,7 @@ static void read_option(SfeConfig* cfg, const SfeOption* opt, toml_datum_t v)
         }
         break;
     }
-    g_warning("config line %d: invalid value for %s.%s, using the default",
+    problem(cfg, "line %d: invalid value for %s.%s, using the default",
         v.lineno, opt->section, opt->key);
 }
 
@@ -216,7 +231,7 @@ static void read_open_table(SfeConfig* cfg, toml_datum_t tab)
     for (int i = 0; i < tab.u.tab.size; i++) {
         toml_datum_t v = tab.u.tab.value[i];
         if (v.type != TOML_STRING) {
-            g_warning("config line %d: open.%.*s must be a string", v.lineno,
+            problem(cfg, "line %d: open.%.*s must be a string", v.lineno,
                 tab.u.tab.len[i], tab.u.tab.key[i]);
             continue;
         }
@@ -228,7 +243,7 @@ static void read_open_table(SfeConfig* cfg, toml_datum_t tab)
 static void read_bookmarks(SfeConfig* cfg, toml_datum_t arr)
 {
     if (arr.type != TOML_ARRAY) {
-        g_warning("config line %d: sidebar.bookmarks must be an array", arr.lineno);
+        problem(cfg, "line %d: sidebar.bookmarks must be an array", arr.lineno);
         return;
     }
     for (int i = 0; i < arr.u.arr.size; i++) {
@@ -236,14 +251,14 @@ static void read_bookmarks(SfeConfig* cfg, toml_datum_t arr)
         if (v.type == TOML_STRING)
             g_ptr_array_add(cfg->bookmarks, g_strdup(v.u.s));
         else
-            g_warning("config line %d: bookmarks must be strings", v.lineno);
+            problem(cfg, "line %d: bookmarks must be strings", v.lineno);
     }
 }
 
 static void read_action_list(SfeConfig* cfg, toml_datum_t arr, unsigned applies_to)
 {
     if (arr.type != TOML_ARRAY) {
-        g_warning("config line %d: use [[actions.files]] / [[actions.directories]]", arr.lineno);
+        problem(cfg, "line %d: use [[actions.files]] / [[actions.directories]]", arr.lineno);
         return;
     }
     for (int i = 0; i < arr.u.arr.size; i++) {
@@ -251,7 +266,7 @@ static void read_action_list(SfeConfig* cfg, toml_datum_t arr, unsigned applies_
         toml_datum_t name = toml_get(a, "name");
         toml_datum_t cmd = toml_get(a, "command");
         if (name.type != TOML_STRING || cmd.type != TOML_STRING) {
-            g_warning("config line %d: an action needs a name and a command", a.lineno);
+            problem(cfg, "line %d: an action needs a name and a command", a.lineno);
             continue;
         }
         sfe_config_add_user_action(cfg, name.u.s, cmd.u.s, applies_to);
@@ -267,7 +282,7 @@ static void read_actions(SfeConfig* cfg, toml_datum_t value)
         return;
     }
     if (value.type != TOML_TABLE) {
-        g_warning("config line %d: use [[actions.files]] / [[actions.directories]]", value.lineno);
+        problem(cfg, "line %d: use [[actions.files]] / [[actions.directories]]", value.lineno);
         return;
     }
     for (int i = 0; i < value.u.tab.size; i++) {
@@ -277,7 +292,7 @@ static void read_actions(SfeConfig* cfg, toml_datum_t value)
         else if (strcmp(key, "directories") == 0)
             read_action_list(cfg, value.u.tab.value[i], SFE_ACTION_DIRECTORIES);
         else
-            g_warning("config line %d: unknown action group actions.%s", value.u.tab.value[i].lineno, key);
+            problem(cfg, "line %d: unknown action group actions.%s", value.u.tab.value[i].lineno, key);
     }
 }
 
@@ -295,7 +310,7 @@ static void read_section(SfeConfig* cfg, const char* section, toml_datum_t tab)
         else if (strcmp(section, "sidebar") == 0 && len == 9 && memcmp(key, "bookmarks", 9) == 0)
             read_bookmarks(cfg, v);
         else
-            g_warning("config line %d: unknown option %s.%.*s", v.lineno, section, len, key);
+            problem(cfg, "line %d: unknown option %s.%.*s", v.lineno, section, len, key);
     }
 }
 
@@ -327,7 +342,7 @@ SfeConfig* sfe_config_parse(const char* text, gsize len, GError** error)
         else if (is_scalar_section(name) && v.type == TOML_TABLE)
             read_section(cfg, name, v);
         else
-            g_warning("config line %d: unknown section or key '%s'", v.lineno, name);
+            problem(cfg, "line %d: unknown section or key '%s'", v.lineno, name);
     }
 
     toml_free(res);
