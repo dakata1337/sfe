@@ -20,6 +20,7 @@ Wayland. This guide covers every feature and every shortcut.
 - [Renaming](#renaming)
 - [Properties](#properties)
 - [Drives](#drives)
+- [Debugging](#debugging)
 - [Configuration](#configuration)
 - [Themes](#themes)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -210,7 +211,23 @@ Drives appear in the sidebar under *Devices*:
 - Right-click (or the Menu key) offers *Mount*, *Unmount* and *Eject*.
 
 Internal drives ask for an administrator password through your polkit agent.
-The project README shows a polkit rule to allow them without one.
+To allow members of `wheel` to mount them without one, create
+`/etc/polkit-1/rules.d/50-udisks.rules`:
+
+```js
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.udisks2.filesystem-mount") == 0 &&
+        subject.local && subject.active && subject.isInGroup("wheel"))
+        return polkit.Result.YES;
+});
+```
+
+Encrypted (LUKS) drives are not supported yet.
+
+## Debugging
+
+Run sfe with `G_MESSAGES_DEBUG=sfe sfe` to see debug messages (navigation,
+mounting, configuration reloads).
 
 ## Configuration
 
