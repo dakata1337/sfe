@@ -474,21 +474,60 @@ static void on_open_with(GSimpleAction* simple, GVariant* param, gpointer data)
     sfe_action_target_clear(&t);
 }
 
+unsigned sfe_action_target_kinds(const SfeActionTarget* t)
+{
+    unsigned kinds = 0;
+    if (t->files == NULL)
+        return SFE_ACTION_DIRECTORIES; /* the current folder */
+    for (GList* l = t->files; l != NULL; l = l->next)
+        kinds |= is_dir(l->data) ? SFE_ACTION_DIRECTORIES : SFE_ACTION_FILES;
+    return kinds;
+}
+
+const SfeUserAction* sfe_find_user_action(const char* name, unsigned kind)
+{
+    const SfeConfig* cfg = sfe_config();
+    for (guint i = 0; i < cfg->actions->len; i++) {
+        const SfeUserAction* ua = g_ptr_array_index(cfg->actions, i);
+        if (strcmp(ua->name, name) == 0 && (ua->applies_to & kind))
+            return ua;
+    }
+    return NULL;
+}
+
+static void run_user_command(const SfeUserAction* ua, GList* items, const SfeActionTarget* t)
+{
+    g_autoptr(GError) error = NULL;
+    if (ua == NULL || items == NULL)
+        return;
+    if (!sfe_run_user_command(ua->command, items, t->dir, &error)) {
+        g_autofree char* title = g_strdup_printf("Cannot run “%s”", ua->name);
+        sfe_show_error(GTK_WIDGET(t->window), title, error->message);
+    }
+}
+
+/* Files go to the command defined for files, directories to the one for
+ * directories; with nothing selected the current folder is the directory. */
 static void on_user_action(GSimpleAction* simple, GVariant* param, gpointer data)
 {
     (void)simple;
-    const SfeConfig* cfg = sfe_config();
-    int index = g_variant_get_int32(param);
-    g_autoptr(GError) error = NULL;
-
-    if (index < 0 || (guint)index >= cfg->actions->len)
-        return;
-    const SfeUserAction* ua = g_ptr_array_index(cfg->actions, index);
+    const char* name = g_variant_get_string(param, NULL);
     SfeActionTarget t = sfe_action_target_for(data);
-    if (!sfe_run_user_command(ua->command, t.files, t.dir, &error)) {
-        g_autofree char* title = g_strdup_printf("Cannot run “%s”", ua->name);
-        sfe_show_error(GTK_WIDGET(t.window), title, error->message);
+    GList* files = NULL;
+    GList* dirs = NULL;
+
+    if (t.files == NULL)
+        dirs = g_list_append(NULL, t.dir);
+    for (GList* l = t.files; l != NULL; l = l->next) {
+        if (is_dir(l->data))
+            dirs = g_list_append(dirs, l->data);
+        else
+            files = g_list_append(files, l->data);
     }
+    run_user_command(sfe_find_user_action(name, SFE_ACTION_FILES), files, &t);
+    run_user_command(sfe_find_user_action(name, SFE_ACTION_DIRECTORIES), dirs, &t);
+    g_list_free(files);
+    g_list_free(dirs);
     sfe_action_target_clear(&t);
 }
 
@@ -521,7 +560,7 @@ void sfe_actions_add_to_window(SfeWindow* window)
     g_action_map_add_action(G_ACTION_MAP(window), G_ACTION(open_with));
     g_object_unref(open_with);
 
-    GSimpleAction* user = g_simple_action_new("user-action", G_VARIANT_TYPE_INT32);
+    GSimpleAction* user = g_simple_action_new("user-action", G_VARIANT_TYPE_STRING);
     g_signal_connect(user, "activate", G_CALLBACK(on_user_action), window);
     g_action_map_add_action(G_ACTION_MAP(window), G_ACTION(user));
     g_object_unref(user);

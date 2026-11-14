@@ -111,7 +111,11 @@ bookmarks = [
     "~/Documents/Work",
 ]
 
-[[actions]]
+[[actions.directories]]
+name = "Open terminal here"
+command = "foot -D %f"
+
+[[actions.files]]
 name = "Open terminal here"
 command = "foot -D %d"
 """)

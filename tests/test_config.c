@@ -38,7 +38,8 @@ static void test_values_round_trip(void)
     g_ptr_array_add(cfg->bookmarks, g_strdup("/mnt/data"));
     g_hash_table_replace(cfg->open_with, g_strdup("mp4"), g_strdup("mpv %f"));
     g_hash_table_replace(cfg->open_with, g_strdup("tar.gz"), g_strdup("file-roller %f"));
-    sfe_config_add_user_action(cfg, "Terminal", "foot -D %d");
+    sfe_config_add_user_action(cfg, "Terminal", "foot -D %d", SFE_ACTION_FILES);
+    sfe_config_add_user_action(cfg, "Terminal", "foot -D %f", SFE_ACTION_DIRECTORIES);
 
     g_autofree char* text = sfe_config_to_string(cfg);
     g_autoptr(SfeConfig) back = parse(text);
@@ -52,8 +53,13 @@ static void test_values_round_trip(void)
     g_assert_cmpuint(back->bookmarks->len, ==, 2);
     g_assert_cmpstr(g_ptr_array_index(back->bookmarks, 1), ==, "/mnt/data");
     g_assert_cmpstr(g_hash_table_lookup(back->open_with, "tar.gz"), ==, "file-roller %f");
-    g_assert_cmpuint(back->actions->len, ==, 1);
-    g_assert_cmpstr(((SfeUserAction*)g_ptr_array_index(back->actions, 0))->command, ==, "foot -D %d");
+    g_assert_cmpuint(back->actions->len, ==, 2);
+    SfeUserAction* files = g_ptr_array_index(back->actions, 0);
+    SfeUserAction* dirs = g_ptr_array_index(back->actions, 1);
+    g_assert_cmpstr(files->command, ==, "foot -D %d");
+    g_assert_cmpuint(files->applies_to, ==, SFE_ACTION_FILES);
+    g_assert_cmpstr(dirs->command, ==, "foot -D %f");
+    g_assert_cmpuint(dirs->applies_to, ==, SFE_ACTION_DIRECTORIES);
 
     g_autoptr(SfeConfig) copy = sfe_config_copy(cfg);
     g_autofree char* copy_text = sfe_config_to_string(copy);
@@ -87,6 +93,20 @@ static void test_invalid_values_keep_defaults(void)
     g_test_trap_assert_passed();
     g_test_trap_assert_stderr("*invalid value for general.show_hidden*");
     g_test_trap_assert_stderr("*unknown option general.typo_key*");
+}
+
+/* The older [[actions]] form still works and applies to both kinds. */
+static void test_old_style_actions(void)
+{
+    g_autoptr(SfeConfig) cfg = parse("[[actions]]\nname = \"Edit\"\ncommand = \"vim %f\"\n");
+    g_assert_cmpuint(cfg->actions->len, ==, 1);
+    SfeUserAction* a = g_ptr_array_index(cfg->actions, 0);
+    g_assert_cmpuint(a->applies_to, ==, SFE_ACTION_ANY);
+
+    /* Saved as one entry per group. */
+    g_autofree char* text = sfe_config_to_string(cfg);
+    g_assert_nonnull(strstr(text, "[[actions.files]]"));
+    g_assert_nonnull(strstr(text, "[[actions.directories]]"));
 }
 
 static void test_syntax_error(void)
@@ -150,6 +170,7 @@ int main(int argc, char** argv)
     g_test_add_func("/config/defaults-round-trip", test_defaults_round_trip);
     g_test_add_func("/config/values-round-trip", test_values_round_trip);
     g_test_add_func("/config/invalid-values", test_invalid_values_keep_defaults);
+    g_test_add_func("/config/old-style-actions", test_old_style_actions);
     g_test_add_func("/config/syntax-error", test_syntax_error);
     g_test_add_func("/config/missing-file", test_missing_file_gives_defaults);
     g_test_add_func("/config/save-and-load", test_save_and_load);

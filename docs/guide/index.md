@@ -143,16 +143,31 @@ Case is ignored unless you type an uppercase letter.
 
 ### Custom commands
 
-Add your own entries to the context menu in the config file:
+Add your own entries to the context menu in the config file. Each command
+is defined for files, for directories, or both (same name, two commands):
 
 ```toml
-[[actions]]
+[[actions.directories]]
+name = "Open terminal here"
+command = "foot -D %f"
+
+[[actions.files]]
 name = "Open terminal here"
 command = "foot -D %d"
+
+[[actions.files]]
+name = "Compress"
+command = "tar -czf archive.tar.gz %f"
 ```
 
-`%d` is the current folder. An argument that is exactly `%f` becomes one
-argument per selected file; `%f` inside a longer argument is the first file.
+- `%f` is the selected items; with nothing selected it is the current folder
+  (which counts as a directory). An argument that is exactly `%f` becomes one
+  argument per item; `%f` inside a longer argument is the first item.
+- `%d` is the current folder.
+- An entry appears when it is defined for everything selected: files,
+  directories, or both for a mixed selection. Then files go to the files
+  command and directories to the directories command.
+- The older `[[actions]]` form still works and applies to both.
 
 ## Renaming
 

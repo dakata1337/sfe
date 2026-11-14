@@ -130,11 +130,12 @@ SfeConfig* sfe_config_copy(const SfeConfig* cfg)
     return copy;
 }
 
-void sfe_config_add_user_action(SfeConfig* cfg, const char* name, const char* command)
+void sfe_config_add_user_action(SfeConfig* cfg, const char* name, const char* command, unsigned applies_to)
 {
     SfeUserAction* a = g_new0(SfeUserAction, 1);
     a->name = g_strdup(name);
     a->command = g_strdup(command);
+    a->applies_to = applies_to;
     g_ptr_array_add(cfg->actions, a);
 }
 
@@ -246,10 +247,10 @@ static void read_bookmarks(SfeConfig* cfg, toml_datum_t arr)
     }
 }
 
-static void read_actions(SfeConfig* cfg, toml_datum_t arr)
+static void read_action_list(SfeConfig* cfg, toml_datum_t arr, unsigned applies_to)
 {
     if (arr.type != TOML_ARRAY) {
-        g_warning("config line %d: use [[actions]] for custom actions", arr.lineno);
+        g_warning("config line %d: use [[actions.files]] / [[actions.directories]]", arr.lineno);
         return;
     }
     for (int i = 0; i < arr.u.arr.size; i++) {
@@ -260,7 +261,30 @@ static void read_actions(SfeConfig* cfg, toml_datum_t arr)
             g_warning("config line %d: an action needs a name and a command", a.lineno);
             continue;
         }
-        sfe_config_add_user_action(cfg, name.u.s, cmd.u.s);
+        sfe_config_add_user_action(cfg, name.u.s, cmd.u.s, applies_to);
+    }
+}
+
+/* [[actions.files]] and [[actions.directories]]; the older [[actions]]
+ * (a plain array) applies to both. */
+static void read_actions(SfeConfig* cfg, toml_datum_t value)
+{
+    if (value.type == TOML_ARRAY) {
+        read_action_list(cfg, value, SFE_ACTION_ANY);
+        return;
+    }
+    if (value.type != TOML_TABLE) {
+        g_warning("config line %d: use [[actions.files]] / [[actions.directories]]", value.lineno);
+        return;
+    }
+    for (int i = 0; i < value.u.tab.size; i++) {
+        g_autofree char* key = g_strndup(value.u.tab.key[i], value.u.tab.len[i]);
+        if (strcmp(key, "files") == 0)
+            read_action_list(cfg, value.u.tab.value[i], SFE_ACTION_FILES);
+        else if (strcmp(key, "directories") == 0)
+            read_action_list(cfg, value.u.tab.value[i], SFE_ACTION_DIRECTORIES);
+        else
+            g_warning("config line %d: unknown action group actions.%s", value.u.tab.value[i].lineno, key);
     }
 }
 
@@ -430,22 +454,32 @@ static void append_open_table(GString* out, const SfeConfig* cfg)
     g_string_append_c(out, '\n');
 }
 
-static void append_actions(GString* out, const SfeConfig* cfg)
+static void append_action_group(GString* out, const SfeConfig* cfg, unsigned kind, const char* table)
 {
-    g_string_append(out,
-        "# Custom context menu commands; %f = selected files, %d = current directory.\n"
-        "# [[actions]]\n"
-        "# name = \"Open terminal here\"\n"
-        "# command = \"foot -D %d\"\n");
-
     for (guint i = 0; i < cfg->actions->len; i++) {
         const SfeUserAction* a = g_ptr_array_index(cfg->actions, i);
-        g_string_append(out, "\n[[actions]]\nname = ");
+        if (!(a->applies_to & kind))
+            continue;
+        g_string_append_printf(out, "\n[[actions.%s]]\nname = ", table);
         append_string(out, a->name);
         g_string_append(out, "\ncommand = ");
         append_string(out, a->command);
         g_string_append_c(out, '\n');
     }
+}
+
+static void append_actions(GString* out, const SfeConfig* cfg)
+{
+    g_string_append(out,
+        "# Custom context menu commands. %f = the selected items (the current\n"
+        "# folder when nothing is selected), %d = the current folder. The same\n"
+        "# name can have one command for files and another for directories.\n"
+        "# [[actions.directories]]\n"
+        "# name = \"Open terminal here\"\n"
+        "# command = \"foot -D %f\"\n");
+    /* Old-style entries (both kinds) are written to both groups. */
+    append_action_group(out, cfg, SFE_ACTION_FILES, "files");
+    append_action_group(out, cfg, SFE_ACTION_DIRECTORIES, "directories");
 }
 
 char* sfe_config_to_string(const SfeConfig* cfg)

@@ -61,9 +61,9 @@ data/             sfe.desktop, default config.toml
 Extensibility hooks: adding a command means one row in the action table plus a callback. Users can also define their own actions in the config without recompiling:
 
 ```toml
-[[actions]]
+[[actions.directories]]     # also [[actions.files]]; same name, different command
 name = "Open terminal here"
-command = "foot -D %d"     # %f selected files, %d current dir
+command = "foot -D %f"     # %f selection (current dir if none), %d current dir
 ```
 
 ## 4. Config: `~/.config/sfe/config.toml`

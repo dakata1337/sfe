@@ -40,8 +40,8 @@ typedef struct {
 /* The table (n receives its length). */
 const SfeAction* sfe_actions_get(size_t* n);
 
-/* Registers every action, plus the parameterized "open-with" (s) and
- * "user-action" (i) ones, on `window`. */
+/* Registers every action, plus the parameterized "open-with" (s: app id)
+ * and "user-action" (s: custom command name) ones, on `window`. */
 void sfe_actions_add_to_window(SfeWindow* window);
 
 /* Updates check-mark actions (e.g. "Show Hidden Files") after a config change. */
@@ -49,6 +49,13 @@ void sfe_actions_sync_state(SfeWindow* window);
 
 /* Installs the default shortcuts of every action. */
 void sfe_actions_set_accels(GtkApplication* app);
+
+/* Which kinds (SFE_ACTION_FILES / SFE_ACTION_DIRECTORIES) the target holds.
+ * With nothing selected the current folder counts: SFE_ACTION_DIRECTORIES. */
+unsigned sfe_action_target_kinds(const SfeActionTarget* target);
+
+/* The custom command `name` for `kind`, or NULL. */
+const SfeUserAction* sfe_find_user_action(const char* name, unsigned kind);
 
 /* Builds the target for `window`'s active pane (free with the function below). */
 SfeActionTarget sfe_action_target_for(SfeWindow* window);

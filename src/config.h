@@ -23,10 +23,19 @@ typedef enum {
     SFE_SORT_TYPE,
 } SfeSortKey;
 
-/* A user-defined command shown in the context menu ([[actions]] in TOML). */
+/* What a custom command applies to. */
+typedef enum {
+    SFE_ACTION_FILES = 1 << 0, /* [[actions.files]] */
+    SFE_ACTION_DIRECTORIES = 1 << 1, /* [[actions.directories]]; also "nothing selected" */
+    SFE_ACTION_ANY = SFE_ACTION_FILES | SFE_ACTION_DIRECTORIES, /* old-style [[actions]] */
+} SfeActionKind;
+
+/* A user-defined command shown in the context menu. The same name may be
+ * defined once for files and once for directories with different commands. */
 typedef struct {
     char* name;
     char* command; /* %f = selected files, %d = current directory */
+    unsigned applies_to; /* SFE_ACTION_* */
 } SfeUserAction;
 
 typedef struct {
@@ -81,4 +90,4 @@ char* sfe_config_to_string(const SfeConfig* cfg);
 /* Writes atomically, creating parent directories as needed. */
 bool sfe_config_save(const SfeConfig* cfg, const char* path, GError** error);
 
-void sfe_config_add_user_action(SfeConfig* cfg, const char* name, const char* command);
+void sfe_config_add_user_action(SfeConfig* cfg, const char* name, const char* command, unsigned applies_to);

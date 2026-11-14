@@ -2,6 +2,7 @@
 
 #include "actions.h"
 #include "app.h"
+#include <stdbool.h>
 #include <string.h>
 
 #define N_SECTIONS 10
@@ -63,13 +64,22 @@ static GMenuModel* build_menu(const SfeActionTarget* t)
         }
     }
 
+    /* Custom commands defined for every kind in the selection (files,
+     * directories, or both for a mixed selection), each name once. */
     const SfeConfig* cfg = sfe_config();
+    unsigned kinds = sfe_action_target_kinds(t);
+    g_autoptr(GHashTable) listed = g_hash_table_new(g_str_hash, g_str_equal);
     for (guint i = 0; i < cfg->actions->len; i++) {
         const SfeUserAction* ua = g_ptr_array_index(cfg->actions, i);
+        bool fits = (!(kinds & SFE_ACTION_FILES) || sfe_find_user_action(ua->name, SFE_ACTION_FILES))
+            && (!(kinds & SFE_ACTION_DIRECTORIES) || sfe_find_user_action(ua->name, SFE_ACTION_DIRECTORIES));
+        if (!fits || g_hash_table_contains(listed, ua->name))
+            continue;
+        g_hash_table_add(listed, ua->name);
         if (sections[USER_SECTION] == NULL)
             sections[USER_SECTION] = g_menu_new();
         g_autoptr(GMenuItem) item = g_menu_item_new(ua->name, NULL);
-        g_menu_item_set_action_and_target_value(item, "win.user-action", g_variant_new_int32((gint32)i));
+        g_menu_item_set_action_and_target_value(item, "win.user-action", g_variant_new_string(ua->name));
         g_menu_append_item(sections[USER_SECTION], item);
     }
 
