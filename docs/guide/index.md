@@ -105,11 +105,15 @@ anywhere › letters in order (`dm` finds `dirmodel.c`)
 
 Case is ignored unless you type an uppercase letter.
 
+Type a folder name followed by `/` to search inside that folder: `src/pa`
+looks for "pa" in `src`, and `docs/guide/` walks down two levels. The search
+only goes down: `..` and `.` are not allowed.
+
 | Key | Action |
 |---|---|
 | Up / Down | highlight the previous / next match |
-| Enter | open the highlighted match |
-| Esc | show all files again, keeping the match selected |
+| Enter | open the highlighted match (Back returns to where the search started) |
+| Esc | show all files again, keeping the match selected; after walking into folders, return to where the search started |
 
 ## Working with files
 

@@ -41,6 +41,7 @@ struct _SfePane {
     GtkWidget* stack;
     GtkWidget* overlay; /* stack + floating search bar */
     SfeSearchBar* search;
+    GFile* search_base; /* where the search started (it may walk into folders) */
     GtkWidget* grid; /* GtkIconView */
     GtkWidget* list; /* GtkTreeView */
     GtkWidget* message; /* GtkLabel for errors */
@@ -128,18 +129,27 @@ static void attach_model(SfePane* self)
 /* ------------------------------------------------------------------------ */
 
 /* Shows `dir` without touching the history. */
-static void go_to(SfePane* self, GFile* dir)
+/* Shows `dir` without touching the history or the search. */
+static void show_dir(SfePane* self, GFile* dir)
 {
-    g_debug("pane: go to %s", g_file_peek_path(dir));
-    if (gtk_widget_get_visible(GTK_WIDGET(self->search))) { /* a new folder starts unfiltered */
-        gtk_widget_hide(GTK_WIDGET(self->search));
-        sfe_search_bar_reset(self->search);
-    }
+    g_debug("pane: show %s", g_file_peek_path(dir));
     g_set_object(&self->dir, dir);
     sfe_path_entry_set_dir(self->entry, dir);
     update_buttons(self);
     sfe_dir_model_load(self->model, dir);
     g_signal_emit(self, signals[SIGNAL_DIRECTORY_CHANGED], 0);
+}
+
+/* Shows `dir` without touching the history; a new folder starts unfiltered. */
+static void go_to(SfePane* self, GFile* dir)
+{
+    if (gtk_widget_get_visible(GTK_WIDGET(self->search))) {
+        gtk_widget_hide(GTK_WIDGET(self->search));
+        sfe_search_bar_reset(self->search);
+        g_clear_object(&self->search_base);
+    }
+    sfe_dir_model_set_query(self->model, NULL);
+    show_dir(self, dir);
 }
 
 void sfe_pane_navigate(SfePane* self, GFile* dir)
@@ -261,15 +271,25 @@ static void update_search_count(SfePane* self)
 
 void sfe_pane_start_search(SfePane* self)
 {
+    if (!searching(self))
+        g_set_object(&self->search_base, self->dir);
     sfe_search_bar_focus(self->search);
 }
 
 /* Hides the search bar and shows every file again. With `keep`, the
- * highlighted match stays selected in the full listing. */
-static void end_search(SfePane* self, bool keep)
+ * highlighted match stays selected in the full listing. With `go_back`, a
+ * search that walked into a folder returns to where it started. */
+static void end_search_full(SfePane* self, bool keep, bool go_back)
 {
     if (!searching(self))
         return;
+
+    g_autoptr(GFile) base = g_steal_pointer(&self->search_base);
+    if (go_back && base != NULL && !g_file_equal(base, self->dir)) {
+        go_to(self, base);
+        sfe_pane_focus_view(self);
+        return;
+    }
 
     g_autofree char* name = NULL;
     if (keep) {
@@ -287,10 +307,55 @@ static void end_search(SfePane* self, bool keep)
     sfe_pane_focus_view(self);
 }
 
+static void end_search(SfePane* self, bool keep)
+{
+    end_search_full(self, keep, true);
+}
+
+/* "src/pa" searches for "pa" inside the folder src (relative to where the
+ * search started); "a/b/x" walks two levels. Only existing subfolders, and
+ * never "." or ".." (the search only goes down). Returns the folder and
+ * sets *query to the text after the last "/"; an invalid folder makes the
+ * whole text the query, which matches nothing. */
+static GFile* resolve_search_dir(GFile* base, const char* text, const char** query)
+{
+    const char* slash = strrchr(text, '/');
+    GFile* dir = g_object_ref(base);
+
+    *query = text;
+    if (slash == NULL)
+        return dir;
+
+    g_autofree char* path = g_strndup(text, slash - text);
+    g_auto(GStrv) parts = g_strsplit(path, "/", -1);
+    for (char** part = parts; *part != NULL; part++) {
+        if (**part == '\0')
+            continue; /* "a//b" */
+        GFile* child = strcmp(*part, ".") == 0 || strcmp(*part, "..") == 0 ? NULL : g_file_get_child(dir, *part);
+        bool is_dir = child != NULL
+            && g_file_query_file_type(child, G_FILE_QUERY_INFO_NONE, NULL) == G_FILE_TYPE_DIRECTORY;
+        if (!is_dir) {
+            g_clear_object(&child);
+            g_object_unref(dir);
+            return g_object_ref(base);
+        }
+        g_object_unref(dir);
+        dir = child;
+    }
+    *query = slash + 1;
+    return dir;
+}
+
 static void on_search_changed(SfeSearchBar* bar, const char* text, gpointer data)
 {
     (void)bar;
-    sfe_dir_model_set_query(SFE_PANE(data)->model, text);
+    SfePane* self = data;
+    const char* query = text;
+    g_autoptr(GFile) dir = self->search_base ? resolve_search_dir(self->search_base, text, &query) : NULL;
+
+    sfe_dir_model_set_query(self->model, query);
+    if (dir != NULL && !g_file_equal(dir, self->dir))
+        show_dir(self, dir); /* keeps the query while loading */
 }
 
 static void on_search_move(SfeSearchBar* bar, int delta, gpointer data)
@@ -326,8 +391,11 @@ static void search_activate(SfePane* self)
     if (file == NULL || info == NULL)
         return;
 
+    /* After walking into folders, Back returns to where the search started. */
+    if (self->search_base != NULL && !g_file_equal(self->search_base, self->dir))
+        sfe_history_push(self->history, self->search_base);
     if (g_file_info_get_file_type(info) != G_FILE_TYPE_DIRECTORY)
-        end_search(self, true);
+        end_search_full(self, true, false);
     activate_file(self, file, info);
 }
 
@@ -914,6 +982,7 @@ static void sfe_pane_dispose(GObject* object)
     g_clear_pointer(&self->history, sfe_history_free);
     g_clear_pointer(&self->select_after_load, g_free);
     g_clear_pointer(&self->reveal_name, g_free);
+    g_clear_object(&self->search_base);
     g_clear_object(&self->dir);
     G_OBJECT_CLASS(sfe_pane_parent_class)->dispose(object);
 }

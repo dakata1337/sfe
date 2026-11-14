@@ -392,8 +392,6 @@ static void finish_load(LoadJob* job)
         return;
 
     clear_contents(self);
-    if (self->dir == NULL || !g_file_equal(self->dir, job->dir))
-        g_clear_pointer(&self->query, g_free); /* a new folder starts unfiltered */
     g_set_object(&self->dir, job->dir);
     g_set_object(&self->cancel, job->cancel);
 

@@ -57,7 +57,8 @@ void sfe_dir_model_set_show_hidden(SfeDirModel* self, bool show);
 
 /* Shows only files whose name matches `query` (fuzzy, see fuzzy.h), best
  * match first; NULL or "" shows everything again. Emits "loaded" with the
- * refilled store. Loading another folder clears the query. */
+ * refilled store. The query stays when another folder is loaded (the
+ * search walks into folders); the pane clears it when navigating. */
 void sfe_dir_model_set_query(SfeDirModel* self, const char* query);
 const char* sfe_dir_model_get_query(SfeDirModel* self);
 
