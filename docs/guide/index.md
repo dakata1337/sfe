@@ -63,8 +63,9 @@ program for an extension, see [Configuration](#configuration).
 ![Sidebar with places, bookmarks, drives and the folder tree](images/sidebar.png)
 
 - **Places**: Home, your standard folders, and File System.
-- **Bookmarks**: **Ctrl+D** bookmarks the current folder (press again to
-  remove it). Drag bookmarks to reorder them; right-click → *Remove Bookmark*.
+- **Bookmarks**: **Ctrl+D**, or *Add to Bookmarks* in the menu of empty
+  space, bookmarks the current folder (again to remove it); a selected
+  folder can be bookmarked from its menu too. Drag bookmarks to reorder them; right-click → *Remove Bookmark*.
   Bookmarks from `~/.config/gtk-3.0/bookmarks` are shown too.
 - **Drives**: see [Drives](#drives).
 - **Folder tree** (bottom third): follows the active view. Its root is your

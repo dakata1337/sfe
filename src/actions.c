@@ -87,6 +87,21 @@ static bool can_bookmark_selection(const SfeActionTarget* t)
     return single_dir(t) && sfe_bookmarks_find(sfe_config(), t->files->data) < 0;
 }
 
+static bool can_unbookmark_selection(const SfeActionTarget* t)
+{
+    return single_dir(t) && sfe_bookmarks_find(sfe_config(), t->files->data) >= 0;
+}
+
+static bool can_bookmark_folder(const SfeActionTarget* t)
+{
+    return sfe_bookmarks_find(sfe_config(), t->dir) < 0;
+}
+
+static bool can_unbookmark_folder(const SfeActionTarget* t)
+{
+    return sfe_bookmarks_find(sfe_config(), t->dir) >= 0;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Navigation and layout                                                     */
 /* ------------------------------------------------------------------------ */
@@ -422,6 +437,9 @@ static const SfeAction actions[] = {
     { "select-all",         "Select All",                 { "<Control>a", NULL },           FOLDER,       2, NULL,                    run_select_all },
     { "toggle-hidden",      "Show Hidden Files",          { "<Control>h", NULL },           FOLDER,       2, NULL,                    run_toggle_hidden },
     { "bookmark-selection", "Add to Bookmarks",           { NULL },                         ITEMS,        4, can_bookmark_selection,  run_bookmark_selection },
+    { "unbookmark-selection", "Remove from Bookmarks",    { NULL },                         ITEMS,        4, can_unbookmark_selection, run_bookmark_selection },
+    { "bookmark-folder",    "Add to Bookmarks",           { NULL },                         FOLDER,       4, can_bookmark_folder,     run_bookmark },
+    { "unbookmark-folder",  "Remove from Bookmarks",      { NULL },                         FOLDER,       4, can_unbookmark_folder,   run_bookmark },
     { "properties",         "Properties",                 { "<Alt>Return", NULL },          ITEMS|FOLDER, 9, NULL,                    run_properties },
 
     { "mass-rename",        "Rename with Pattern…",       { "<Shift>F2", NULL },            NONE,         0, NULL,                    run_mass_rename },
