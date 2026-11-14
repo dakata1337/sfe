@@ -8,6 +8,7 @@
 #define IFACE_BLOCK UDISKS_NAME ".Block"
 #define IFACE_FS UDISKS_NAME ".Filesystem"
 #define IFACE_DRIVE UDISKS_NAME ".Drive"
+#define IFACE_PARTITION UDISKS_NAME ".Partition"
 
 /* Unmounted internal partitions smaller than this (EFI, recovery, ...) are
  * not worth listing. */
@@ -48,6 +49,7 @@ static void device_free(gpointer p)
     SfeDevice* d = p;
     g_free(d->id);
     g_free(d->name);
+    g_free(d->tooltip);
     g_free(d->icon_name);
     g_free(d->mount_path);
     g_free(d);
@@ -136,6 +138,59 @@ static bool drive_is_removable(GDBusObject* drive)
 /* Building the list                                                         */
 /* ------------------------------------------------------------------------ */
 
+/* How many mounted-or-mountable filesystems live on `drive`. */
+static int filesystems_on_drive(SfeDevices* self, GDBusObject* drive)
+{
+    const char* drive_path = g_dbus_object_get_object_path(drive);
+    GList* objects = g_dbus_object_manager_get_objects(self->udisks);
+    int n = 0;
+
+    for (GList* l = objects; l != NULL; l = l->next) {
+        g_autoptr(GDBusProxy) fs = get_proxy(l->data, IFACE_FS);
+        g_autoptr(GVariant) v = get_prop(l->data, IFACE_BLOCK, "Drive");
+        if (fs != NULL && v != NULL && !prop_bool(l->data, IFACE_BLOCK, "HintIgnore")
+            && strcmp(g_variant_get_string(v, NULL), drive_path) == 0)
+            n++;
+    }
+    g_list_free_full(objects, g_object_unref);
+    return n;
+}
+
+/* A name people recognise: the partition's label, else the drive's vendor
+ * and model ("Kingston DataTraveler 3.0", plus the partition number when
+ * the drive holds several filesystems), else the size. */
+static char* device_name(SfeDevices* self, GDBusObject* object, GDBusObject* drive, guint64 size)
+{
+    char* name = prop_string(object, IFACE_BLOCK, "HintName");
+    if (name == NULL)
+        name = prop_string(object, IFACE_BLOCK, "IdLabel");
+    if (name != NULL)
+        return name;
+
+    g_autofree char* vendor = drive ? prop_string(drive, IFACE_DRIVE, "Vendor") : NULL;
+    g_autofree char* model = drive ? prop_string(drive, IFACE_DRIVE, "Model") : NULL;
+    if (model != NULL) {
+        g_autofree char* base = vendor ? g_strdup_printf("%s %s", vendor, model) : g_strdup(model);
+        g_strstrip(base);
+        g_autoptr(GVariant) number = get_prop(object, IFACE_PARTITION, "Number");
+        if (number != NULL && filesystems_on_drive(self, drive) > 1)
+            return g_strdup_printf("%s (%u)", base, g_variant_get_uint32(number));
+        return g_steal_pointer(&base);
+    }
+    g_autofree char* sz = g_format_size(size);
+    return g_strdup_printf("%s Volume", sz);
+}
+
+static char* device_tooltip(GDBusObject* object, guint64 size, const char* mount)
+{
+    g_autofree char* sz = g_format_size(size);
+    g_autofree char* type = prop_string(object, IFACE_BLOCK, "IdType");
+    g_autoptr(GVariant) dev = get_prop(object, IFACE_BLOCK, "PreferredDevice");
+    const char* node = dev ? g_variant_get_bytestring(dev) : "";
+    return g_strdup_printf("%s %s · %s%s%s", sz, type ? type : "", node,
+        mount ? " · " : "", mount ? mount : "");
+}
+
 /* Returns NULL for block devices that should not be shown. */
 static SfeDevice* device_from_udisks(SfeDevices* self, GDBusObject* object)
 {
@@ -156,13 +211,9 @@ static SfeDevice* device_from_udisks(SfeDevices* self, GDBusObject* object)
 
     SfeDevice* d = g_new0(SfeDevice, 1);
     d->id = g_strdup(g_dbus_object_get_object_path(object));
-    d->name = prop_string(object, IFACE_BLOCK, "HintName");
-    if (d->name == NULL)
-        d->name = prop_string(object, IFACE_BLOCK, "IdLabel");
-    if (d->name == NULL) {
-        g_autofree char* sz = g_format_size(size);
-        d->name = g_strdup_printf("%s Volume", sz);
-    }
+    d->name = device_name(self, object, drive, size);
+    g_autofree char* details = device_tooltip(object, size, mount);
+    d->tooltip = g_strdup_printf("%s\n%s", d->name, details); /* full name: the row may cut it off */
     d->icon_name = prop_string(object, IFACE_BLOCK, "HintSymbolicIconName");
     if (d->icon_name == NULL)
         d->icon_name = g_strdup(removable ? "drive-removable-media-symbolic" : "drive-harddisk-symbolic");

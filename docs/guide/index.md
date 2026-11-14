@@ -207,7 +207,8 @@ boxes can be changed directly.
 
 ## Drives
 
-Drives appear in the sidebar under *Devices*:
+Drives appear in the sidebar under *Devices*, named by their label or else
+by the drive's vendor and model (hover for size, filesystem and device):
 
 - **Click** an unmounted drive to mount and open it (USB drives need no password).
 - **⏏** unmounts; for USB drives it also powers them off so they can be unplugged.

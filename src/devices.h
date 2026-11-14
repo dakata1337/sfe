@@ -16,6 +16,7 @@
 typedef struct {
     char* id; /* UDisks2 object path, or the mount path without UDisks2 */
     char* name;
+    char* tooltip; /* size, filesystem, device node, mount point */
     char* icon_name; /* symbolic icon */
     char* mount_path; /* NULL when not mounted */
     bool removable; /* "eject" unmounts it and powers the drive off */

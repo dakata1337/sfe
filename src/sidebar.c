@@ -277,6 +277,8 @@ static void add_devices(SfeSidebar* self)
 
         d->device_id = g_strdup(dev->id);
         d->removable = dev->removable;
+        if (dev->tooltip != NULL)
+            gtk_widget_set_tooltip_text(row, dev->tooltip);
         if (!dev->mount_path)
             gtk_style_context_add_class(gtk_widget_get_style_context(row), "sfe-unmounted");
         if (dev->can_unmount) {
