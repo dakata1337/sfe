@@ -45,6 +45,8 @@ module that needs it.
 | Ctrl+C / Ctrl+X / Ctrl+V | copy / cut / paste files |
 | Delete / Shift+Delete | move to trash / delete permanently (asks first) |
 | Ctrl+A | select all |
+| F2 | rename (one file) / rename with pattern (several) |
+| Shift+F2 | rename with pattern |
 | Ctrl+Shift+N | new folder |
 | Alt+Enter | properties |
 | Menu key, Shift+F10 | context menu |
@@ -103,6 +105,24 @@ Files* and the folder's *Properties*.
   `.Trash-UID` on other drives), so other tools can restore the files.
 - The properties dialog counts folder sizes in the background and lets you
   edit permissions.
+
+### Renaming
+*F2* on one file asks for the new name (the part before the extension is
+pre-selected). On several files, or with *Shift+F2*, the pattern dialog
+opens:
+
+- **New name** template: `{name}` (old name without extension), `{ext}`
+  (extension, e.g. `.jpg` or `.tar.gz`), `{n}` (counter), `{n:03}` (counter
+  padded to 3 digits). Example: `IMG_{n:03}{ext}`.
+- **Find / Replace with** works on the name without extension; plain text
+  or a regular expression (`\1` refers to groups), case-insensitive unless
+  *Match case* is on.
+- **Case**: keep, lowercase, UPPERCASE or Title Case. **Counter**: start and
+  step. Files are numbered in the order they are shown.
+
+The preview marks names that would collide (with each other or with other
+files) and *Rename* stays disabled until there are none. Swapping names
+(`a` ↔ `b`) works; if anything fails, all files keep their old names.
 
 ### Custom commands
 Add your own entries to the right-click menu in `config.toml`:

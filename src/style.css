@@ -183,6 +183,10 @@
     color: alpha(@sfe_fg, 0.45);
 }
 
+.sfe-small {
+    font-size: 0.85em;
+}
+
 /* ---- File views ------------------------------------------------------- */
 
 .sfe-window iconview,
@@ -309,6 +313,30 @@
 .sfe-dialog button.destructive-action {
     background-color: @sfe_error;
     color: #ffffff;
+}
+
+.sfe-dialog button:disabled {
+    opacity: 0.45;
+}
+
+/* Number fields (mass rename counter) look like the other entries. */
+.sfe-window spinbutton {
+    background-color: alpha(@sfe_fg, 0.06);
+    color: @sfe_fg;
+    border: 1px solid transparent;
+    border-radius: 6px;
+}
+
+.sfe-window spinbutton:focus-within,
+.sfe-window spinbutton:focus {
+    border-color: @sfe_accent;
+}
+
+.sfe-window spinbutton entry,
+.sfe-window spinbutton button {
+    background-color: transparent;
+    border: none;
+    color: @sfe_fg;
 }
 
 /* ---- Context menus (separate popup windows, so not inside .sfe-window) - */

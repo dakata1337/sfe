@@ -20,3 +20,18 @@ char* sfe_contract_home(const char* path)
         return g_strconcat("~", path + n, NULL);
     return g_strdup(path);
 }
+
+void sfe_split_extension(const char* name, bool is_dir, char** stem, char** ext)
+{
+    const char* dot = is_dir ? NULL : strrchr(name, '.');
+
+    if (dot == NULL || dot == name || dot[1] == '\0') {
+        *stem = g_strdup(name);
+        *ext = g_strdup("");
+        return;
+    }
+    if (dot - name > 4 && strncmp(dot - 4, ".tar", 4) == 0)
+        dot -= 4;
+    *stem = g_strndup(name, dot - name);
+    *ext = g_strdup(dot);
+}

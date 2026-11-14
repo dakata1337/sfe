@@ -1,5 +1,7 @@
 #include "fileops.h"
 
+#include "util.h"
+
 #include <string.h>
 
 #define REPORT_INTERVAL_US (100 * 1000)
@@ -56,19 +58,9 @@ static guint signals[N_SIGNALS];
 
 char* sfe_numbered_name(const char* name, bool is_dir, int n)
 {
-    g_autofree char* stem = g_strdup(name);
-    const char* ext = "";
-
-    /* Split off the extension (not for directories or ".hidden" files);
-     * "a.tar.gz" keeps ".tar.gz" together. */
-    char* dot = is_dir ? NULL : strrchr(stem, '.');
-    if (dot != NULL && dot != stem && dot[1] != '\0') {
-        char* tar = dot - 4 > stem ? dot - 4 : NULL;
-        if (tar != NULL && strncmp(tar, ".tar", 4) == 0)
-            dot = tar;
-        ext = name + (dot - stem);
-        *dot = '\0';
-    }
+    g_autofree char* stem = NULL;
+    g_autofree char* ext = NULL;
+    sfe_split_extension(name, is_dir, &stem, &ext);
 
     /* "a (2)" becomes "a (3)", not "a (2) (2)". */
     size_t len = strlen(stem);

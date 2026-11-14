@@ -339,6 +339,8 @@ GList* sfe_pane_get_selected_files(SfePane* self)
     else
         paths = gtk_tree_selection_get_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)), NULL);
 
+    /* In the order shown, so numbering (mass rename) follows the view. */
+    paths = g_list_sort(paths, (GCompareFunc)gtk_tree_path_compare);
     for (GList* l = paths; l != NULL; l = l->next) {
         GFile* file = sfe_dir_model_file_at(self->model, l->data);
         if (file != NULL)

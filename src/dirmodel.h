@@ -1,9 +1,12 @@
 #pragma once
 
-/* The contents of one directory as a GtkTreeModel, shared by the grid and
- * list views of a pane.
+/* The contents of one directory as a sorted GtkListStore, shared by the
+ * grid and list views of a pane.
  *
- * Model stack:  GtkListStore (sorted)  ->  GtkTreeModelFilter (hidden files)
+ * The store holds only the files that are shown; every file (hidden ones
+ * too) is remembered separately, so toggling hidden files adds or removes
+ * rows in place. (A GtkTreeModelFilter is deliberately avoided: its
+ * reference counting breaks when shown rows are deleted.)
  *
  * Every load builds a fresh store off-screen and then swaps it in, which
  * keeps big directories fast. Connect to "loaded" and call
@@ -47,7 +50,7 @@ void sfe_dir_model_reload(SfeDirModel* self);
 
 GFile* sfe_dir_model_get_dir(SfeDirModel* self);
 
-/* The filtered model the views display (owned by the dir model). */
+/* The model the views display (owned by the dir model). */
 GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self);
 
 void sfe_dir_model_set_show_hidden(SfeDirModel* self, bool show);
@@ -57,7 +60,7 @@ void sfe_dir_model_get_sort(SfeDirModel* self, SfeSortKey* key, GtkSortType* ord
 /* Icon sizes in logical pixels, and the widget scale factor. */
 void sfe_dir_model_set_icon_sizes(SfeDirModel* self, int grid, int list, int scale);
 
-/* Finds the row of the file named `name` in the displayed (filtered) model.
+/* Finds the row of the file named `name` in the displayed model.
  * Returns NULL if it is absent or hidden. Free with gtk_tree_path_free(). */
 GtkTreePath* sfe_dir_model_find(SfeDirModel* self, const char* name);
 

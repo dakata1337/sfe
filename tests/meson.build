@@ -17,3 +17,8 @@ test_fileops = executable('test-fileops', 'test_fileops.c',
   dependencies: core_dep,
 )
 test('fileops', test_fileops)
+
+test_rename = executable('test-rename', 'test_rename.c',
+  dependencies: core_dep,
+)
+test('rename', test_rename)

@@ -53,6 +53,7 @@ core_src = files(
   'src/fileops.c',
   'src/history.c',
   'src/opener.c',
+  'src/rename.c',
   'src/util.c',
 )
 core_lib = static_library('sfe-core', core_src,
@@ -78,6 +79,7 @@ ui_src = files(
   'src/pane.c',
   'src/pathentry.c',
   'src/props.c',
+  'src/renamedlg.c',
   'src/sidebar.c',
   'src/split.c',
   'src/theme.c',

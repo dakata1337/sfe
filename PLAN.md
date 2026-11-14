@@ -47,6 +47,9 @@ src/
   rename.{c,h}    single rename + mass rename dialog (live preview)
   props.{c,h}     properties dialog (size, perms, owner, times, mime)
   search.{c,h}    Ctrl+F overlay UI
+  keymap.{c,h}    normal-mode key sequences -> commands, chords, [keys] overrides
+  cmdline.{c,h}   ":" command bar: parsing, history, execution
+  complete.{c,h}  context-aware completion (active view first, grouped, fuzzy-ranked)
   fuzzy.{c,h}     pure scoring function (unit-tested)
   thumbs.{c,h}    thumbnail worker pool + freedesktop cache
   opener.{c,h}    xdg-open + extension overrides
@@ -121,7 +124,88 @@ The style lives in `src/style.css` and contains no hard-coded colors. At runtime
 
 The palette is rebuilt whenever the GTK theme or `gtk.css` changes, so the flat style always uses the current color scheme. The style is scoped to the `.sfe-window` class.
 
-## 7. Decisions confirmed with you
+## 7. Modal workflow (vim-like)
+
+Every important feature is reachable from the keyboard. Mouse users lose nothing: the buttons and menus stay.
+
+### Modes
+- **Normal mode:** the file views. Single keys are commands.
+- **Command mode:** the `:` command line at the bottom.
+- **Text input:** the path entry, the search field and dialogs. Keys type text there; Esc returns to normal mode.
+
+### Normal-mode keys
+
+| Keys | Command | Meaning |
+|---|---|---|
+| `j` / `k` | | cursor down / up |
+| `h` / Backspace | `:cd ..` | parent folder |
+| `l` / Enter | `:open` | open the folder or file |
+| `gg` / `G` | | first / last item |
+| `gh` | `:cd ~` | home |
+| Ctrl+O / Ctrl+I | `:back` / `:forward` | history |
+| Space | | toggle the selection of the current item and move down |
+| `yy` | `:copy_clipboard` | copy the selection (or the current item) to the clipboard |
+| `dd` | `:cut` | cut |
+| `p` | `:paste` | paste into this view |
+| `x` / `X` | `:trash` / `:delete` | move to trash / delete permanently (asks) |
+| `r` / `R` | `:rename` / `:mass_rename` | rename (milestone 6) |
+| `zh` | `:hidden toggle` | hidden files |
+| `/` | `:search` | fuzzy search overlay (milestone 7) |
+| `:` | | command line |
+| Esc | | clear the selection, close overlays |
+
+### Split keys (as you specified)
+
+| Keys | Command | Meaning |
+|---|---|---|
+| Ctrl+W `v` | `:split vertical` | only with a single view: creates the right view |
+| Ctrl+W `s` | `:split horizontal` | only when the right view is active and alone in its column: it becomes right-top, a new right-bottom is created |
+| Shift+`h`/`j`/`k`/`l` | `:split left/down/up/right` | move focus to the view in that direction |
+| Shift+`W` | `:split next` | cycle focus clockwise: left → right-top → right-bottom |
+| Ctrl+Shift+`h`/`j`/`k`/`l` | `:split move left/down/up/right` | swap the active view with the one in that direction |
+| Ctrl+W `q` | `:split close` / `:q` | close the active view (the window if it is the last) |
+
+- In every other case the Ctrl+W chords do nothing.
+- `:split absolute left|right|right-top|right-bottom` focuses a position. Only positions that exist are offered: `right` while the right column has one view, `right-top` / `right-bottom` once it has two.
+- Ctrl+W becomes a chord prefix, so the old Ctrl+W (close view) moves to Ctrl+W `q`.
+
+### Key bindings are data
+- A keymap table (`keymap.c`) maps key sequences to command strings.
+- Users can override it in `config.toml`:
+  ```toml
+  [keys]
+  "<C-w>v" = "split vertical"
+  "yy" = "copy_clipboard"
+  ```
+- While a chord is pending (`g`, `y`, `d`, `z`, Ctrl+W), the keys typed so far show at the right of the command bar, like vim's `showcmd`. A chord that isn't finished within 1 s is dropped.
+
+### Command line (`:`)
+- **Layout:** a full-width bar at the bottom of the panes, like vim, with a completion list above it.
+- **Keys:** Enter runs the command and Esc cancels. Tab / Shift+Tab cycle through the completions. Up / Down walk the command history of the session.
+- **Errors** show in the bar in the error colour until the next key.
+- **Arguments** are parsed like a shell (quotes, backslashes). Completion inserts names already quoted.
+- **Paths:** names from the active view are inserted relative to its folder. Names from other views are inserted as full paths (with `~`).
+
+**Context-aware completion.** Candidates come in groups, always in this order: the **active view** first, then the other views clockwise (right-top, right-bottom, then left). Within a group, candidates are ranked by the fuzzy matcher from milestone 7 (exact > prefix > word start > substring > fuzzy). Each candidate shows a small tag saying where it comes from (`left`, `right-top`, `bookmark`, `device`, …).
+
+**Commands.** Every row of the action table is also a command; the arguments are what's new.
+
+| Command | Arguments (what completion offers) |
+|---|---|
+| `:copy` / `:move` | `<file>… <destination>`. The destination is always required. For the second and later arguments, the other views' folders are offered first, then the files of the views. |
+| `:symlink` | `<target>… <destination folder or link name>` |
+| `:rename` | `<file> <new name>`. Once the file is chosen, Tab offers its current name for editing. |
+| `:mass_rename` | `[<file>…]` (default: the selection); opens the milestone 6 dialog |
+| `:new_file` / `:new_directory` | `<name>` (aliases `:touch`, `:mkdir`) |
+| `:trash` / `:delete` | `<file>…` |
+| `:mount` / `:unmount` / `:eject` | `<device>`: unmounted drives for `mount`, mounted ones for the others |
+| `:split` | sub-commands, with **`move` and `next` listed first**, then `vertical`, `horizontal`, `left`, `right`, `up`, `down`, `absolute`, `close` |
+| `:bookmark` / `:unbookmark` | `[<folder>]` (default: the active view) / `<bookmark>` (existing ones) |
+| `:cd` / `:open` | `<path>` / `<file>` |
+| `:hidden` / `:view` | `on/off/toggle` / `grid/list` |
+| `:q` | close the active view |
+
+## 8. Decisions confirmed with you
 
 - Search: an in-window floating overlay (GtkOverlay), centered, in the bottom third.
 - Splits: at most 3 panes (1 left, 2 stacked on the right), as described above.
@@ -129,15 +213,17 @@ The palette is rebuilt whenever the GTK theme or `gtk.css` changes, so the flat 
 - Mass rename: a built-in dialog with live preview.
 - Look: flat and modern, not GNOME-like, with colors taken from the system theme.
 - Sidebar: places, bookmarks and devices on top; a directory tree in the bottom half.
+- Modal workflow: full vim-like normal mode, Ctrl+W chords, and a `:` command line with context-aware completion (active view first). The split keys follow your exact rules (section 7). `:copy` / `:move` / `:symlink` always need an explicit destination.
 
-## 8. Milestones (each one builds and runs)
+## 9. Milestones (each one builds and runs)
 
 1. ✅ **Skeleton:** meson deps, GtkApplication, config load/save with defaults, theme hot reload, empty window.
 2. ✅ **Single pane:** async listing, grid + list view, icon theme icons, navigation + history, opener with overrides, hidden toggle, sorting.
 3. ✅ **Sidebar:** places, bookmarks (add/remove/reorder) and devices via UDisks2 (mount/unmount/eject, auto-navigate after mount) in the top half. The directory tree, which follows the active pane, goes in the bottom half (`dirtree.c`).
 4. ✅ **Splits:** 3-pane layout, v/h split rules, close + slide-left, active-pane tracking.
 5. ✅ **File ops:** action table, context menu, clipboard, copy/move/trash/delete jobs, new file/folder, properties.
-6. **Rename and mass rename.**
+6. ✅ **Rename and mass rename:** name prompt (F2), pattern dialog with template / find-replace / case / counter and live conflict preview (F2 on several, Shift+F2), two-pass rename with rollback. The directory model dropped GtkTreeModelFilter (it emitted criticals when shown rows were removed).
 7. **Fuzzy search overlay** (with unit tests for `fuzzy.c`).
-8. **Thumbnails:** images, videos, freedesktop cache, worker pool, lazy loading of visible items only.
-9. **Settings dialog**, UI scaling, `.desktop` file, `meson install`, README.
+8. **Modal workflow:** normal-mode keymap (data-driven, overridable in `[keys]`) with chord handling and showcmd. Split focus / swap commands. The `:` command line with history, argument parsing, and grouped context-aware completion using `fuzzy.c`. All commands from section 7. Unit tests for the keymap parser, the command parser and completion ordering.
+9. **Thumbnails:** images, videos, freedesktop cache, worker pool, lazy loading of visible items only.
+10. **Settings dialog**, UI scaling, `.desktop` file, `meson install`, README.

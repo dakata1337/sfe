@@ -7,6 +7,7 @@
 #include "fileops.h"
 #include "opener.h"
 #include "props.h"
+#include "renamedlg.h"
 #include "split.h"
 #include <gio/gdesktopappinfo.h>
 #include <string.h>
@@ -350,6 +351,29 @@ static void ask_new(const SfeActionTarget* t, bool folder)
 static void run_new_folder(const SfeActionTarget* t) { ask_new(t, true); }
 static void run_new_file(const SfeActionTarget* t) { ask_new(t, false); }
 
+/* After renaming, the first renamed file is selected again. */
+static void on_renamed(GPtrArray* names, gpointer data)
+{
+    if (names->len > 0)
+        sfe_pane_reveal(SFE_PANE(data), g_ptr_array_index(names, 0));
+}
+
+static void run_rename(const SfeActionTarget* t)
+{
+    if (t->files == NULL)
+        return;
+    if (t->files->next == NULL)
+        sfe_rename_one(widget_of(t), t->files->data, on_renamed, g_object_ref(t->pane), g_object_unref);
+    else
+        sfe_rename_many(widget_of(t), t->files, on_renamed, g_object_ref(t->pane), g_object_unref);
+}
+
+static void run_mass_rename(const SfeActionTarget* t)
+{
+    if (t->files != NULL)
+        sfe_rename_many(widget_of(t), t->files, on_renamed, g_object_ref(t->pane), g_object_unref);
+}
+
 static void run_properties(const SfeActionTarget* t)
 {
     GList folder = { .data = t->dir };
@@ -383,13 +407,15 @@ static const SfeAction actions[] = {
     { "copy",               "Copy",                       { "<Control>c", NULL },           ITEMS,        1, has_files,               run_copy },
     { "paste",              "Paste",                      { "<Control>v", NULL },           FOLDER,       1, can_paste,               run_paste },
     { "paste-into",         "Paste Into Folder",          { NULL },                         ITEMS,        1, can_paste_into,          run_paste_into },
-    { "trash",              "Move to Trash",              { "Delete", NULL },               ITEMS,        2, has_files,               run_trash },
-    { "delete",             "Delete Permanently…",        { "<Shift>Delete", NULL },        ITEMS,        2, has_files,               run_delete },
+    { "rename",             "Rename…",                    { "F2", NULL },                   ITEMS,        2, has_files,               run_rename },
+    { "trash",              "Move to Trash",              { "Delete", NULL },               ITEMS,        3, has_files,               run_trash },
+    { "delete",             "Delete Permanently…",        { "<Shift>Delete", NULL },        ITEMS,        3, has_files,               run_delete },
     { "select-all",         "Select All",                 { "<Control>a", NULL },           FOLDER,       2, NULL,                    run_select_all },
     { "toggle-hidden",      "Show Hidden Files",          { "<Control>h", NULL },           FOLDER,       2, NULL,                    run_toggle_hidden },
-    { "bookmark-selection", "Add to Bookmarks",           { NULL },                         ITEMS,        3, can_bookmark_selection,  run_bookmark_selection },
+    { "bookmark-selection", "Add to Bookmarks",           { NULL },                         ITEMS,        4, can_bookmark_selection,  run_bookmark_selection },
     { "properties",         "Properties",                 { "<Alt>Return", NULL },          ITEMS|FOLDER, 9, NULL,                    run_properties },
 
+    { "mass-rename",        "Rename with Pattern…",       { "<Shift>F2", NULL },            NONE,         0, NULL,                    run_mass_rename },
     { "open-with-other",    "Other Application…",         { NULL },                         NONE,         0, NULL,                    run_open_with_other },
     { "back",               "Back",                       { "<Alt>Left", NULL },            NONE,         0, NULL,                    run_back },
     { "forward",            "Forward",                    { "<Alt>Right", NULL },           NONE,         0, NULL,                    run_forward },
