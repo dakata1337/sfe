@@ -244,3 +244,114 @@
 .sfe-window scrollbar slider:hover {
     background-color: alpha(@sfe_fg, 0.45);
 }
+
+/* ---- Check boxes (dialogs, properties) ------------------------------- */
+
+.sfe-window check {
+    background-color: alpha(@sfe_fg, 0.06);
+    border: 1px solid alpha(@sfe_fg, 0.3);
+    border-radius: 4px;
+    min-width: 14px;
+    min-height: 14px;
+    color: transparent;
+}
+
+.sfe-window check:checked {
+    background-color: @sfe_accent;
+    border-color: @sfe_accent;
+    color: @sfe_accent_fg;
+}
+
+/* ---- Progress of file operations -------------------------------------- */
+
+.sfe-opsbar {
+    padding: 8px 12px;
+    background-color: @sfe_bg;
+    border-top: 1px solid alpha(@sfe_fg, 0.08);
+}
+
+.sfe-window progressbar trough {
+    background-color: alpha(@sfe_fg, 0.1);
+    border: none;
+    border-radius: 3px;
+    min-height: 6px;
+}
+
+.sfe-window progressbar progress {
+    background-color: @sfe_accent;
+    border: none;
+    border-radius: 3px;
+    min-height: 6px;
+}
+
+/* ---- Dialogs ----------------------------------------------------------- */
+
+.sfe-dialog {
+    background-color: @sfe_bg;
+    color: @sfe_fg;
+}
+
+.sfe-dialog button {
+    background-color: alpha(@sfe_fg, 0.08);
+    color: @sfe_fg;
+    padding: 4px 14px;
+}
+
+.sfe-dialog button:hover {
+    background-color: alpha(@sfe_fg, 0.14);
+}
+
+.sfe-dialog button.suggested-action {
+    background-color: @sfe_accent;
+    color: @sfe_accent_fg;
+}
+
+.sfe-dialog button.destructive-action {
+    background-color: @sfe_error;
+    color: #ffffff;
+}
+
+/* ---- Context menus (separate popup windows, so not inside .sfe-window) - */
+
+menu.sfe-menu {
+    background-color: @sfe_bg;
+    color: @sfe_fg;
+    padding: 4px;
+    border: 1px solid alpha(@sfe_fg, 0.1);
+    box-shadow: none;
+    background-image: none;
+}
+
+.sfe-menu menuitem {
+    padding: 5px 12px;
+    border-radius: 5px;
+    color: @sfe_fg;
+    text-shadow: none;
+    box-shadow: none;
+    background-image: none;
+}
+
+.sfe-menu menuitem:hover {
+    background-color: alpha(@sfe_accent, 0.22);
+    color: @sfe_fg;
+}
+
+.sfe-menu menuitem:disabled {
+    color: alpha(@sfe_fg, 0.35);
+}
+
+.sfe-menu menuitem accelerator {
+    color: alpha(@sfe_fg, 0.45);
+}
+
+.sfe-menu separator {
+    margin: 4px 6px;
+    min-height: 1px;
+    background-color: alpha(@sfe_fg, 0.1);
+}
+
+.sfe-menu check {
+    color: @sfe_accent;
+    background-color: transparent;
+    border: none;
+}

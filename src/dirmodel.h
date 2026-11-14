@@ -40,7 +40,8 @@ SfeDirModel* sfe_dir_model_new(void);
 
 /* Starts loading `dir`; cancels a load that is still running.
  * Emits "loaded" on success or "error" (GError*) on failure. When the
- * directory itself is deleted or unmounted, "gone" is emitted. */
+ * directory itself is deleted or unmounted, "gone" is emitted. Files that
+ * appear later are announced with "file-added" (name). */
 void sfe_dir_model_load(SfeDirModel* self, GFile* dir);
 void sfe_dir_model_reload(SfeDirModel* self);
 

@@ -1,6 +1,7 @@
 #include "pane.h"
 
 #include "app.h"
+#include "ctxmenu.h"
 #include "dialogs.h"
 #include "dirmodel.h"
 #include "history.h"
@@ -21,6 +22,7 @@ struct _SfePane {
     GFile* dir;
     SfeViewMode view;
     char* select_after_load; /* name of the entry to select once listed */
+    char* reveal_name; /* a just-created file to select when it appears */
 
     /* Sort settings last taken from the config: a config change only
      * overrides the pane's own sort (column clicks) if these changed. */
@@ -346,6 +348,115 @@ GList* sfe_pane_get_selected_files(SfePane* self)
     return g_list_reverse(files);
 }
 
+void sfe_pane_select_all(SfePane* self)
+{
+    if (self->view == SFE_VIEW_GRID)
+        gtk_icon_view_select_all(GTK_ICON_VIEW(self->grid));
+    else
+        gtk_tree_selection_select_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)));
+}
+
+/* Opens files in their applications; the first directory is opened here. */
+void sfe_pane_open_files(SfePane* self, GList* files)
+{
+    for (GList* l = files; l != NULL; l = l->next) {
+        g_autoptr(GFileInfo) info = g_file_query_info(l->data, G_FILE_ATTRIBUTE_STANDARD_TYPE,
+            G_FILE_QUERY_INFO_NONE, NULL, NULL);
+        if (info == NULL)
+            continue;
+        bool dir = g_file_info_get_file_type(info) == G_FILE_TYPE_DIRECTORY;
+        activate_file(self, l->data, info);
+        if (dir)
+            return; /* the pane moved away; the rest no longer applies */
+    }
+}
+
+void sfe_pane_reveal(SfePane* self, const char* name)
+{
+    if (self->model == NULL) /* pane already closed */
+        return;
+    GtkTreePath* path = sfe_dir_model_find(self->model, name);
+    if (path != NULL) {
+        select_path(self, path);
+        gtk_tree_path_free(path);
+        return;
+    }
+    g_free(self->reveal_name);
+    self->reveal_name = g_strdup(name); /* selected once the monitor sees it */
+}
+
+static void on_file_added(SfeDirModel* model, const char* name, gpointer data)
+{
+    (void)model;
+    SfePane* self = data;
+    if (g_strcmp0(name, self->reveal_name) != 0)
+        return;
+    g_clear_pointer(&self->reveal_name, g_free);
+    sfe_pane_reveal(self, name);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Context menu                                                              */
+/* ------------------------------------------------------------------------ */
+
+/* Right-click selects like file managers do: an unselected item becomes the
+ * only selection, empty space clears the selection. */
+static void select_for_menu(SfePane* self, GtkWidget* view, GdkEventButton* event)
+{
+    GtkTreePath* path = NULL;
+
+    if (view == self->grid) {
+        GtkIconView* grid = GTK_ICON_VIEW(view);
+        path = gtk_icon_view_get_path_at_pos(grid, (int)event->x, (int)event->y);
+        if (path == NULL) {
+            gtk_icon_view_unselect_all(grid);
+        } else if (!gtk_icon_view_path_is_selected(grid, path)) {
+            gtk_icon_view_unselect_all(grid);
+            gtk_icon_view_select_path(grid, path);
+            gtk_icon_view_set_cursor(grid, path, NULL, FALSE);
+        }
+    } else {
+        GtkTreeView* list = GTK_TREE_VIEW(view);
+        GtkTreeSelection* sel = gtk_tree_view_get_selection(list);
+        if (!gtk_tree_view_get_path_at_pos(list, (int)event->x, (int)event->y, &path, NULL, NULL, NULL)) {
+            gtk_tree_selection_unselect_all(sel);
+        } else if (!gtk_tree_selection_path_is_selected(sel, path)) {
+            gtk_tree_selection_unselect_all(sel);
+            gtk_tree_selection_select_path(sel, path);
+        }
+    }
+    if (path != NULL)
+        gtk_tree_path_free(path);
+}
+
+static void show_menu(SfePane* self, GtkWidget* view, const GdkEvent* event)
+{
+    GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(self));
+    gtk_widget_grab_focus(view); /* makes this pane the active one */
+    if (SFE_IS_WINDOW(window))
+        sfe_context_menu_popup(SFE_WINDOW(window), view, event);
+}
+
+static gboolean on_view_button_press(GtkWidget* view, GdkEventButton* event, gpointer data)
+{
+    SfePane* self = data;
+
+    if (event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY)
+        return FALSE;
+    if (GTK_IS_TREE_VIEW(view) && event->window != gtk_tree_view_get_bin_window(GTK_TREE_VIEW(view)))
+        return FALSE; /* column headers */
+    select_for_menu(self, view, event);
+    show_menu(self, view, (GdkEvent*)event);
+    return TRUE;
+}
+
+/* Menu key / Shift+F10. */
+static gboolean on_view_popup_menu(GtkWidget* view, gpointer data)
+{
+    show_menu(SFE_PANE(data), view, NULL);
+    return TRUE;
+}
+
 static void on_grid_activated(GtkIconView* view, GtkTreePath* path, gpointer data)
 {
     (void)view;
@@ -434,6 +545,8 @@ static GtkWidget* build_grid(SfePane* self)
 
     g_signal_connect(grid, "item-activated", G_CALLBACK(on_grid_activated), self);
     g_signal_connect(grid, "key-press-event", G_CALLBACK(on_view_key_press), self);
+    g_signal_connect(grid, "button-press-event", G_CALLBACK(on_view_button_press), self);
+    g_signal_connect(grid, "popup-menu", G_CALLBACK(on_view_popup_menu), self);
     return grid;
 }
 
@@ -480,6 +593,8 @@ static GtkWidget* build_list(SfePane* self)
 
     g_signal_connect(list, "row-activated", G_CALLBACK(on_list_activated), self);
     g_signal_connect(list, "key-press-event", G_CALLBACK(on_view_key_press), self);
+    g_signal_connect(list, "button-press-event", G_CALLBACK(on_view_button_press), self);
+    g_signal_connect(list, "popup-menu", G_CALLBACK(on_view_popup_menu), self);
     return list;
 }
 
@@ -639,6 +754,7 @@ static void sfe_pane_dispose(GObject* object)
     }
     g_clear_pointer(&self->history, sfe_history_free);
     g_clear_pointer(&self->select_after_load, g_free);
+    g_clear_pointer(&self->reveal_name, g_free);
     g_clear_object(&self->dir);
     G_OBJECT_CLASS(sfe_pane_parent_class)->dispose(object);
 }
@@ -668,6 +784,7 @@ static void sfe_pane_init(SfePane* self)
     g_signal_connect(self->model, "loaded", G_CALLBACK(on_loaded), self);
     g_signal_connect(self->model, "error", G_CALLBACK(on_load_error), self);
     g_signal_connect(self->model, "gone", G_CALLBACK(on_gone), self);
+    g_signal_connect(self->model, "file-added", G_CALLBACK(on_file_added), self);
 
     self->grid = build_grid(self);
     self->list = build_list(self);

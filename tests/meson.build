@@ -12,3 +12,8 @@ test_bookmarks = executable('test-bookmarks', 'test_bookmarks.c',
   dependencies: core_dep,
 )
 test('bookmarks', test_bookmarks)
+
+test_fileops = executable('test-fileops', 'test_fileops.c',
+  dependencies: core_dep,
+)
+test('fileops', test_fileops)

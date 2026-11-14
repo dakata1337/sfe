@@ -42,7 +42,13 @@ module that needs it.
 | Ctrl+W | close the active view (the window, if it is the last one) |
 | Ctrl+1 / Ctrl+2 | grid / list view |
 | F5, Ctrl+R | reload |
-| Ctrl+Shift+N | new window |
+| Ctrl+C / Ctrl+X / Ctrl+V | copy / cut / paste files |
+| Delete / Shift+Delete | move to trash / delete permanently (asks first) |
+| Ctrl+A | select all |
+| Ctrl+Shift+N | new folder |
+| Alt+Enter | properties |
+| Menu key, Shift+F10 | context menu |
+| Ctrl+N | new window |
 | Ctrl+Q | quit |
 
 Click a column header in the list view to sort by it; click again to reverse.
@@ -79,6 +85,39 @@ polkit.addRule(function(action, subject) {
 });
 ```
 Encrypted (LUKS) drives are not supported yet.
+
+## Working with files
+Right-click a selection for *Open*, *Open With*, *Cut*, *Copy*, *Move to
+Trash*, *Delete Permanently*, *Add to Bookmarks* and *Properties*; right-click
+empty space for *New Folder*, *New File*, *Paste*, *Select All*, *Show Hidden
+Files* and the folder's *Properties*.
+
+- Copy, cut and paste use the system clipboard in the same format as other
+  file managers, so they work between split views, between windows and with
+  other applications.
+- Copies and moves run in the background; longer ones show a progress bar
+  with a cancel button at the bottom of the window. When a file already
+  exists you can *Replace*, *Skip* or *Keep Both* (`name (2).ext`), once or
+  for all conflicts. Folders are merged.
+- Trash follows the freedesktop spec (`~/.local/share/Trash`, or
+  `.Trash-UID` on other drives), so other tools can restore the files.
+- The properties dialog counts folder sizes in the background and lets you
+  edit permissions.
+
+### Custom commands
+Add your own entries to the right-click menu in `config.toml`:
+```toml
+[[actions]]
+name = "Open terminal here"
+command = "foot -D %d"
+
+[[actions]]
+name = "Compress to archive.tar.gz"
+command = "tar -czf archive.tar.gz %f"
+```
+`%d` is the current folder. An argument that is exactly `%f` becomes one
+argument per selected file; `%f` inside a longer argument is the first file.
+Commands run without a shell, in the current folder.
 
 ## Opening files
 Files open with `xdg-open`. To use a specific program for an extension, add it

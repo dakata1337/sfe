@@ -41,3 +41,10 @@ void sfe_pane_set_active(SfePane* self, bool active);
 
 /* Selected files as a list of GFile* (free with g_list_free_full(l, g_object_unref)). */
 GList* sfe_pane_get_selected_files(SfePane* self);
+void sfe_pane_select_all(SfePane* self);
+
+/* Opens files like double-clicking them (directories open in this pane). */
+void sfe_pane_open_files(SfePane* self, GList* files);
+
+/* Selects the entry `name`, now or as soon as it appears (after creating it). */
+void sfe_pane_reveal(SfePane* self, const char* name);

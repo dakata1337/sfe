@@ -109,7 +109,7 @@ Written atomically (temp file + rename). The settings dialog edits it, and a fil
 - **Context menu:** right-clicking empty space acts on the folder (Paste, New folder, New file, Select all, Open terminal/custom actions, Properties). Right-clicking an item acts on the selection (Open, Open with…, Cut, Copy, Rename, Mass rename (when more than one item is selected), Move to trash, Delete, Bookmark (directories), Properties).
 - **Search (Ctrl+F):** a floating entry centered horizontally, sitting at the start of the bottom third of the active pane. Every keystroke refilters through `GtkTreeModelFilter` and resorts by score. Ranking: exact match > prefix > word-boundary > substring > fuzzy subsequence (fzf-style bonuses for consecutive and boundary matches). Matching is case-insensitive unless the query has an uppercase letter. Esc closes the overlay and restores the view; Enter opens the top match.
 - **Mass rename:** find/replace (plain or regex), prefix/suffix, numbering `{n:03}`, case change, extension kept or changed. A live old→new preview marks collisions in red. Renames run as a two-phase temp-name pass so swaps like a↔b work.
-- **Shortcuts:** Ctrl+C/X/V, F2 rename, Delete → trash, Shift+Delete → delete, Ctrl+H hidden toggle, Ctrl+L path entry, Alt+←/→/↑, Backspace, Ctrl+F, Ctrl+N new folder, Ctrl+D bookmark, Ctrl+, settings.
+- **Shortcuts:** Ctrl+C/X/V, F2 rename, Delete → trash, Shift+Delete → delete, Ctrl+H hidden toggle, Ctrl+L path entry, Alt+←/→/↑, Backspace, Ctrl+F, Ctrl+Shift+N new folder (Ctrl+N new window, as in most file managers), Ctrl+D bookmark, Ctrl+, settings.
 
 ## 6. UI style
 
@@ -136,7 +136,7 @@ The palette is rebuilt whenever the GTK theme or `gtk.css` changes, so the flat 
 2. ✅ **Single pane:** async listing, grid + list view, icon theme icons, navigation + history, opener with overrides, hidden toggle, sorting.
 3. ✅ **Sidebar:** places, bookmarks (add/remove/reorder) and devices via UDisks2 (mount/unmount/eject, auto-navigate after mount) in the top half. The directory tree, which follows the active pane, goes in the bottom half (`dirtree.c`).
 4. ✅ **Splits:** 3-pane layout, v/h split rules, close + slide-left, active-pane tracking.
-5. **File ops:** action table, context menu, clipboard, copy/move/trash/delete jobs, new file/folder, properties.
+5. ✅ **File ops:** action table, context menu, clipboard, copy/move/trash/delete jobs, new file/folder, properties.
 6. **Rename and mass rename.**
 7. **Fuzzy search overlay** (with unit tests for `fuzzy.c`).
 8. **Thumbnails:** images, videos, freedesktop cache, worker pool, lazy loading of visible items only.

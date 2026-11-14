@@ -30,6 +30,7 @@ enum {
     SIGNAL_LOADED,
     SIGNAL_ERROR,
     SIGNAL_GONE,
+    SIGNAL_FILE_ADDED,
     N_SIGNALS,
 };
 static guint signals[N_SIGNALS];
@@ -133,6 +134,8 @@ static void add_or_update(SfeDirModel* self, GtkListStore* store, GHashTable* ro
         g_hash_table_insert(rows, g_strdup(name), iter);
     }
     store_row(self, store, iter, insert, file, info);
+    if (insert && store == self->store) /* a live addition, not the initial load */
+        g_signal_emit(self, signals[SIGNAL_FILE_ADDED], 0, name);
 }
 
 static void remove_row(SfeDirModel* self, const char* name)
@@ -561,6 +564,8 @@ static void sfe_dir_model_class_init(SfeDirModelClass* klass)
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_ERROR);
     signals[SIGNAL_GONE] = g_signal_new("gone", G_TYPE_FROM_CLASS(klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    signals[SIGNAL_FILE_ADDED] = g_signal_new("file-added", G_TYPE_FROM_CLASS(klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_STRING);
 }
 
 static void sfe_dir_model_init(SfeDirModel* self)

@@ -1,5 +1,7 @@
 #include "app.h"
 
+#include "actions.h"
+
 #include "sfe-build.h"
 #include "theme.h"
 #include "window.h"
@@ -156,25 +158,13 @@ static const GActionEntry app_actions[] = {
     { .name = "quit", .activate = action_quit },
 };
 
+/* Application-wide shortcuts; window actions get theirs from actions.c. */
 static const struct {
     const char* action;
     const char* accels[3]; /* NULL-terminated */
 } app_accels[] = {
-    { "app.new-window", { "<Control><Shift>n", NULL } },
+    { "app.new-window", { "<Control>n", NULL } },
     { "app.quit", { "<Control>q", NULL } },
-    { "win.back", { "<Alt>Left", NULL } },
-    { "win.forward", { "<Alt>Right", NULL } },
-    { "win.up", { "<Alt>Up", NULL } },
-    { "win.reload", { "F5", "<Control>r" } },
-    { "win.location", { "<Control>l", NULL } },
-    { "win.view-grid", { "<Control>1", NULL } },
-    { "win.view-list", { "<Control>2", NULL } },
-    { "win.toggle-hidden", { "<Control>h", NULL } },
-    { "win.bookmark", { "<Control>d", NULL } },
-    { "win.split-vertical", { "<Control>backslash", NULL } },
-    { "win.split-horizontal", { "<Control>minus", NULL } },
-    { "win.close-pane", { "<Control>w", NULL } },
-    { "win.next-pane", { "F6", NULL } },
 };
 
 /* ------------------------------------------------------------------------ */
@@ -197,6 +187,7 @@ static void sfe_application_startup(GApplication* gapp)
     for (size_t i = 0; i < G_N_ELEMENTS(app_accels); i++)
         gtk_application_set_accels_for_action(GTK_APPLICATION(app),
             app_accels[i].action, app_accels[i].accels);
+    sfe_actions_set_accels(GTK_APPLICATION(app));
 }
 
 static void sfe_application_activate(GApplication* gapp)

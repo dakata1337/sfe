@@ -84,11 +84,38 @@ static void test_build_argv(void)
     g_assert_nonnull(error);
 }
 
+static void test_user_command(void)
+{
+    g_autoptr(GError) error = NULL;
+    g_autoptr(GFile) dir = g_file_new_for_path("/home/me/My Dir");
+    g_autoptr(GFile) a = g_file_new_for_path("/x/a b.txt");
+    g_autoptr(GFile) b = g_file_new_for_path("/x/c.txt");
+    GList* files = g_list_append(g_list_append(NULL, a), b);
+
+    g_auto(GStrv) all = sfe_build_user_command("tar -czf out.tgz %f", files, dir, &error);
+    g_assert_no_error(error);
+    g_assert_cmpuint(g_strv_length(all), ==, 5);
+    g_assert_cmpstr(all[3], ==, "/x/a b.txt");
+    g_assert_cmpstr(all[4], ==, "/x/c.txt");
+
+    g_auto(GStrv) term = sfe_build_user_command("foot -D %d", files, dir, &error);
+    g_assert_cmpstr(term[2], ==, "/home/me/My Dir");
+
+    g_auto(GStrv) inner = sfe_build_user_command("app --in=%f --cwd=%d", files, dir, &error);
+    g_assert_cmpstr(inner[1], ==, "--in=/x/a b.txt");
+    g_assert_cmpstr(inner[2], ==, "--cwd=/home/me/My Dir");
+
+    g_auto(GStrv) none = sfe_build_user_command("echo %f", NULL, dir, &error);
+    g_assert_cmpuint(g_strv_length(none), ==, 1);
+    g_list_free(files);
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/history/back-forward", test_history);
     g_test_add_func("/opener/lookup", test_lookup);
     g_test_add_func("/opener/build-argv", test_build_argv);
+    g_test_add_func("/opener/user-command", test_user_command);
     return g_test_run();
 }
