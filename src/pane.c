@@ -130,6 +130,7 @@ static void attach_model(SfePane* self)
 /* Shows `dir` without touching the history. */
 static void go_to(SfePane* self, GFile* dir)
 {
+    g_debug("pane: go to %s", g_file_peek_path(dir));
     if (gtk_widget_get_visible(GTK_WIDGET(self->search))) { /* a new folder starts unfiltered */
         gtk_widget_hide(GTK_WIDGET(self->search));
         sfe_search_bar_reset(self->search);

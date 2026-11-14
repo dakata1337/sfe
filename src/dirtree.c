@@ -9,7 +9,6 @@ enum {
     COL_FILE, /* GFile*, NULL for placeholders */
     COL_STATE, /* NodeState */
     COL_COLLATE, /* sort key */
-    COL_MONITOR, /* GFileMonitor* of a loaded directory */
     N_COLS,
 };
 
@@ -30,6 +29,7 @@ struct _SfeDirTree {
     GFile* root;
     GFile* location; /* what the tree should highlight */
     GCancellable* cancel; /* cancelled when the tree is rebuilt */
+    GHashTable* monitors; /* path of a loaded directory -> GFileMonitor* */
     bool show_hidden;
     bool selecting; /* selection changes made by us, not the user */
 };
@@ -123,22 +123,43 @@ static int compare_rows(GtkTreeModel* m, GtkTreeIter* a, GtkTreeIter* b, gpointe
 /* Live updates of loaded directories                                        */
 /* ------------------------------------------------------------------------ */
 
-static bool row_iter(SfeDirTree* self, GtkTreeRowReference* ref, GtkTreeIter* iter)
+/* Finds the row of directory `dir` by walking down from the root. Rows are
+ * found by path instead of GtkTreeRowReference: a reference freed while the
+ * store is being cleared crashes GTK. */
+static bool iter_for(SfeDirTree* self, GFile* dir, GtkTreeIter* out)
 {
-    g_autoptr(GtkTreePath) path = gtk_tree_row_reference_get_path(ref);
-    return path != NULL && gtk_tree_model_get_iter(model(self), iter, path);
+    GtkTreeIter iter, child;
+    if (!gtk_tree_model_get_iter_first(model(self), &iter))
+        return false;
+
+    g_autoptr(GFile) root = node_file(self, &iter);
+    if (root == NULL)
+        return false;
+    if (!g_file_equal(root, dir)) {
+        g_autofree char* rel = g_file_get_relative_path(root, dir);
+        if (rel == NULL)
+            return false;
+        g_auto(GStrv) parts = g_strsplit(rel, "/", -1);
+        for (char** part = parts; *part != NULL; part++) {
+            if (!find_child(self, &iter, *part, &child))
+                return false;
+            iter = child;
+        }
+    }
+    *out = iter;
+    return true;
 }
 
 static void on_node_changed(GFileMonitor* monitor, GFile* file, GFile* other,
     GFileMonitorEvent event, gpointer data)
 {
     SfeDirTree* self = data;
-    GtkTreeRowReference* ref = g_object_get_data(G_OBJECT(monitor), "sfe-row");
+    GFile* dir = g_object_get_data(G_OBJECT(monitor), "sfe-dir");
     GtkTreeIter parent, child;
     GFile* added = NULL;
     GFile* removed = NULL;
 
-    if (!row_iter(self, ref, &parent))
+    if (!iter_for(self, dir, &parent))
         return;
 
     switch (event) {
@@ -160,8 +181,14 @@ static void on_node_changed(GFileMonitor* monitor, GFile* file, GFile* other,
 
     if (removed != NULL) {
         g_autofree char* name = g_file_get_basename(removed);
-        if (find_child(self, &parent, name, &child))
+        g_autofree char* path = g_file_get_path(removed);
+        if (find_child(self, &parent, name, &child)) {
+            self->selecting = true; /* removing the selected row is not a click */
             gtk_tree_store_remove(self->store, &child);
+            self->selecting = false;
+        }
+        if (path != NULL)
+            g_hash_table_remove(self->monitors, path);
     }
     if (added != NULL && g_file_query_file_type(added, G_FILE_QUERY_INFO_NONE, NULL) == G_FILE_TYPE_DIRECTORY) {
         g_autofree char* name = g_file_get_basename(added);
@@ -170,17 +197,26 @@ static void on_node_changed(GFileMonitor* monitor, GFile* file, GFile* other,
     }
 }
 
-static void watch_node(SfeDirTree* self, GtkTreeIter* iter, GFile* dir)
+static void watch_dir(SfeDirTree* self, GFile* dir)
 {
+    g_autofree char* path = g_file_get_path(dir);
+    if (path == NULL || g_hash_table_contains(self->monitors, path))
+        return;
     GFileMonitor* monitor = g_file_monitor_directory(dir, G_FILE_MONITOR_WATCH_MOVES, self->cancel, NULL);
     if (monitor == NULL)
         return;
 
-    g_autoptr(GtkTreePath) path = gtk_tree_model_get_path(model(self), iter);
-    g_object_set_data_full(G_OBJECT(monitor), "sfe-row",
-        gtk_tree_row_reference_new(model(self), path), (GDestroyNotify)gtk_tree_row_reference_free);
+    g_object_set_data_full(G_OBJECT(monitor), "sfe-dir", g_object_ref(dir), g_object_unref);
     g_signal_connect(monitor, "changed", G_CALLBACK(on_node_changed), self);
-    gtk_tree_store_set(self->store, iter, COL_MONITOR, monitor, -1); /* the row owns it */
+    g_hash_table_insert(self->monitors, g_steal_pointer(&path), monitor);
+}
+
+/* Value destructor of the monitors table. */
+static void drop_monitor(gpointer p)
+{
+    GFileMonitor* monitor = p;
+    g_signal_handlers_disconnect_matched(monitor, G_SIGNAL_MATCH_ID, g_signal_lookup("changed", G_TYPE_FILE_MONITOR), 0, NULL, NULL, NULL);
+    g_file_monitor_cancel(monitor);
     g_object_unref(monitor);
 }
 
@@ -190,7 +226,6 @@ static void watch_node(SfeDirTree* self, GtkTreeIter* iter, GFile* dir)
 
 typedef struct {
     SfeDirTree* self;
-    GtkTreeRowReference* row;
     GFile* dir;
     GCancellable* cancel;
     GPtrArray* infos;
@@ -200,7 +235,6 @@ typedef struct {
 static void load_job_free(LoadJob* job)
 {
     g_object_unref(job->self);
-    gtk_tree_row_reference_free(job->row);
     g_object_unref(job->dir);
     g_object_unref(job->cancel);
     g_ptr_array_unref(job->infos);
@@ -212,7 +246,7 @@ static void finish_load(LoadJob* job)
     SfeDirTree* self = job->self;
     GtkTreeIter iter;
 
-    if (g_cancellable_is_cancelled(job->cancel) || !row_iter(self, job->row, &iter))
+    if (g_cancellable_is_cancelled(job->cancel) || !iter_for(self, job->dir, &iter))
         return;
 
     remove_placeholders(self, &iter);
@@ -222,7 +256,7 @@ static void finish_load(LoadJob* job)
         add_dir_row(self, &iter, child, g_file_info_get_display_name(info), "folder-symbolic");
     }
     gtk_tree_store_set(self->store, &iter, COL_STATE, NODE_LOADED, -1);
-    watch_node(self, &iter, job->dir);
+    watch_dir(self, job->dir);
 
     if (job->expand) {
         g_autoptr(GtkTreePath) path = gtk_tree_model_get_path(model(self), &iter);
@@ -275,9 +309,7 @@ static void load_node(SfeDirTree* self, GtkTreeIter* iter, bool expand)
         return;
 
     LoadJob* job = g_new0(LoadJob, 1);
-    g_autoptr(GtkTreePath) path = gtk_tree_model_get_path(model(self), iter);
     job->self = g_object_ref(self);
-    job->row = gtk_tree_row_reference_new(model(self), path);
     job->dir = node_file(self, iter);
     job->cancel = g_object_ref(self->cancel);
     job->infos = g_ptr_array_new_with_free_func(g_object_unref);
@@ -344,10 +376,16 @@ static void rebuild(SfeDirTree* self, GFile* root)
     self->cancel = g_cancellable_new();
     g_set_object(&self->root, root);
 
+    g_hash_table_remove_all(self->monitors); /* before the rows they watch go */
+    /* Clearing deselects the current row; that is not the user choosing a
+     * folder. Reacting to it re-entered rebuild() inside gtk_tree_store_clear
+     * and corrupted the store (crash when entering /sys/fs/bpf from /sys). */
+    self->selecting = true;
     gtk_tree_store_clear(self->store);
     add_dir_row(self, NULL, root,
         is_home ? "Home" : is_fs_root ? "File System" : base,
         is_home ? "user-home-symbolic" : "drive-harddisk-symbolic");
+    self->selecting = false;
     gtk_tree_model_get_iter_first(model(self), &iter);
     load_node(self, &iter, true);
 }
@@ -401,6 +439,7 @@ static void reveal(SfeDirTree* self)
 void sfe_dir_tree_set_location(SfeDirTree* self, GFile* dir)
 {
     g_autoptr(GFile) root = root_for(dir);
+    g_debug("tree: location %s (root %s)", g_file_peek_path(dir), g_file_peek_path(root));
 
     g_set_object(&self->location, dir);
     if (self->root == NULL || !g_file_equal(root, self->root))
@@ -443,6 +482,7 @@ static void sfe_dir_tree_dispose(GObject* object)
     if (self->cancel != NULL)
         g_cancellable_cancel(self->cancel);
     g_clear_object(&self->cancel);
+    g_clear_pointer(&self->monitors, g_hash_table_unref);
     g_clear_object(&self->store);
     g_clear_object(&self->root);
     g_clear_object(&self->location);
@@ -464,8 +504,9 @@ static void sfe_dir_tree_init(SfeDirTree* self)
     GtkCellRenderer* text = gtk_cell_renderer_text_new();
 
     self->cancel = g_cancellable_new();
+    self->monitors = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, drop_monitor);
     self->store = gtk_tree_store_new(N_COLS, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_FILE,
-        G_TYPE_INT, G_TYPE_STRING, G_TYPE_FILE_MONITOR);
+        G_TYPE_INT, G_TYPE_STRING);
     gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(self->store), COL_COLLATE, compare_rows, NULL, NULL);
     gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(self->store), COL_COLLATE, GTK_SORT_ASCENDING);
     gtk_tree_view_set_model(view, GTK_TREE_MODEL(self->store));
