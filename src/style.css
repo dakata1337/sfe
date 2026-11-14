@@ -1,0 +1,10 @@
+/* sfe's own styles. Only layout tweaks: all colors come from the GTK theme,
+ * so the app follows the system color scheme. */
+
+.sfe-sidebar {
+    border-right: 1px solid alpha(currentColor, 0.15);
+}
+
+.sfe-placeholder {
+    opacity: 0.6;
+}

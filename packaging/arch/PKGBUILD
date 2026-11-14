@@ -1,0 +1,62 @@
+# Local-checkout PKGBUILD for sfe (Simple File Explorer).
+#
+# Build & install from this directory:
+#   makepkg -si
+#
+# Dependencies are annotated with the source module that needs them.
+# Keep this list in sync whenever a module starts using a new library or tool.
+
+pkgname=sfe
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Simple File Explorer - a minimal, Wayland-native GTK3 file manager'
+arch=('x86_64' 'aarch64' 'i686' 'armv7h')
+url='' # TODO: set to the project's homepage / repository
+license=('LicenseRef-sfe' 'MIT') # MIT: vendored tomlc17
+
+depends=(
+  'glib2'             # everything (GIO: files, monitors, D-Bus)
+  'gtk3'              # UI toolkit (window.c, theme.c, ...)
+  'gdk-pixbuf2'       # image loading / image thumbnails (thumbs.c)
+  'hicolor-icon-theme' # fallback icon theme
+  'shared-mime-info'  # file type detection
+  'udisks2'           # unprivileged mounting over D-Bus (devices.c)
+  'polkit'            # authorizes udisks2 mount requests (devices.c)
+  'xdg-utils'         # xdg-open, the default opener (opener.c)
+  'ffmpeg'            # video thumbnail fallback (thumbs.c)
+)
+optdepends=(
+  'ffmpegthumbnailer: faster, higher-quality video thumbnails'
+  'webp-pixbuf-loader: WebP image thumbnails'
+  'libheif: HEIF/AVIF image thumbnails'
+  'ntfs-3g: mount NTFS drives'
+  'exfatprogs: exFAT drive support'
+  'dosfstools: FAT drive support'
+)
+makedepends=('meson' 'ninja')
+checkdepends=()
+
+source=()
+sha256sums=()
+
+# The project root, two levels above this PKGBUILD.
+_root="$(realpath "${startdir}/../..")"
+
+pkgver() {
+  sed -nE "s/^\s*version:\s*'([^']+)'.*/\1/p" "${_root}/meson.build" | head -n1
+}
+
+build() {
+  arch-meson "${_root}" build
+  meson compile -C build
+}
+
+check() {
+  meson test -C build --print-errorlogs
+}
+
+package() {
+  meson install -C build --destdir "${pkgdir}"
+  install -Dm644 "${_root}/thirdparty/tomlc17/LICENSE" \
+    "${pkgdir}/usr/share/licenses/${pkgname}/tomlc17-LICENSE"
+}

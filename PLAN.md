@@ -112,7 +112,7 @@ Written atomically (temp file + rename). The settings dialog edits it, and a fil
 
 ## 7. Milestones (each one builds and runs)
 
-1. **Skeleton:** meson deps, GtkApplication, config load/save with defaults, theme hot reload, empty window.
+1. ✅ **Skeleton:** meson deps, GtkApplication, config load/save with defaults, theme hot reload, empty window.
 2. **Single pane:** async listing, grid + list view, icon theme icons, navigation + history, opener with overrides, hidden toggle, sorting.
 3. **Sidebar:** places, bookmarks (add/remove/reorder), devices via UDisks2 (mount/unmount/eject, auto-navigate after mount).
 4. **Splits:** 3-pane layout, v/h split rules, close + slide-left, active-pane tracking.

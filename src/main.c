@@ -1,13 +1,10 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include "app.h"
 
-#include <string.h>
-#include <tomlc17.h>
-
-int main(void)
+int main(int argc, char** argv)
 {
-    toml_result_t result = toml_parse_file_ex("config.toml");
-    TOML_ASSERT(result, "config read");
+    /* Wayland first; X11 only as a fallback (e.g. when run under XWayland). */
+    gdk_set_allowed_backends("wayland,x11");
 
-    return 0;
+    g_autoptr(SfeApplication) app = sfe_application_new();
+    return g_application_run(G_APPLICATION(app), argc, argv);
 }
