@@ -32,6 +32,10 @@ SfePane* sfe_window_get_active_pane(SfeWindow* win)
 
 void sfe_window_run_op(SfeWindow* win, SfeFileOp* op)
 {
+    /* Pastes arrive asynchronously (clipboard), possibly after the window
+     * was closed: its progress bar is gone, so the job is dropped. */
+    if (win->ops_bar == NULL || gtk_widget_in_destruction(GTK_WIDGET(win)))
+        return;
     sfe_ops_bar_run(win->ops_bar, op);
 }
 
@@ -126,6 +130,7 @@ static void sfe_window_dispose(GObject* object)
         g_signal_handler_disconnect(sfe_app(), win->config_handler);
         win->config_handler = 0;
     }
+    win->ops_bar = NULL; /* destroyed with the window's children */
     G_OBJECT_CLASS(sfe_window_parent_class)->dispose(object);
 }
 
