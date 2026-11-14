@@ -8,8 +8,8 @@
 #define N_SECTIONS 10
 #define USER_SECTION 8 /* custom commands, just above "Properties" */
 
-/* "Open With ▸": applications registered for the first file's type, the
- * default one first, then "Other Application…". */
+/* "Open With ▸": applications registered for the first file's type, with
+ * their icons, the default one first, then "Other Application…". */
 static GMenu* open_with_menu(GFile* file)
 {
     GMenu* menu = g_menu_new();
@@ -31,12 +31,18 @@ static GMenu* open_with_menu(GFile* file)
             g_hash_table_add(seen, (gpointer)id);
             g_autoptr(GMenuItem) item = g_menu_item_new(g_app_info_get_name(l->data), NULL);
             g_menu_item_set_action_and_target_value(item, "win.open-with", g_variant_new_string(id));
+            GIcon* icon = g_app_info_get_icon(l->data);
+            g_autoptr(GIcon) fallback = icon ? NULL : g_themed_icon_new("application-x-executable");
+            g_menu_item_set_icon(item, icon ? icon : fallback); /* every row has one: labels line up */
             g_menu_append_item(menu, item);
         }
         g_hash_table_unref(seen);
         g_list_free_full(apps, g_object_unref);
     }
-    g_menu_append(menu, "Other Application…", "win.open-with-other");
+    g_autoptr(GMenuItem) other = g_menu_item_new("Other Application…", "win.open-with-other");
+    g_autoptr(GIcon) other_icon = g_themed_icon_new("view-more-symbolic");
+    g_menu_item_set_icon(other, other_icon);
+    g_menu_append_item(menu, other);
     return menu;
 }
 
