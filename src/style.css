@@ -21,7 +21,14 @@
     box-shadow: none;
     text-shadow: none;
     -gtk-icon-shadow: none;
-    outline-color: transparent;
+}
+
+/* Keyboard focus (GTK only draws it while navigating with the keyboard). */
+.sfe-window *:focus {
+    outline-color: alpha(@sfe_accent, 0.7);
+    outline-style: solid;
+    outline-width: 1px;
+    outline-offset: -2px;
 }
 
 /* ---- Buttons: flat icons with a soft hover tint ------------------------- */
@@ -85,8 +92,61 @@
     padding: 6px 8px;
 }
 
-.sfe-sidebar {
+.sfe-sidebar,
+.sfe-sidebar list,
+.sfe-sidebar treeview.view {
     background-color: @sfe_sidebar_bg;
+    color: @sfe_fg;
+}
+
+.sfe-sidebar list {
+    padding: 4px 0;
+}
+
+.sfe-sidebar row {
+    margin: 1px 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    transition: background-color 120ms ease-out;
+}
+
+.sfe-sidebar row:hover {
+    background-color: alpha(@sfe_fg, 0.06);
+}
+
+.sfe-sidebar row:selected {
+    background-color: alpha(@sfe_accent, 0.22);
+    color: @sfe_fg;
+}
+
+.sfe-sidebar row.sfe-unmounted {
+    color: alpha(@sfe_fg, 0.6);
+}
+
+.sfe-sidebar-title {
+    margin: 12px 16px 4px;
+    font-size: 0.8em;
+    font-weight: 700;
+    color: alpha(@sfe_fg, 0.45);
+}
+
+/* The eject button only needs to be a small icon. */
+.sfe-sidebar button.sfe-eject {
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+}
+
+/* Directory tree: dim connector lines, same selection as the list. */
+.sfe-sidebar treeview.view {
+    border-color: alpha(@sfe_fg, 0.18);
+    -GtkTreeView-tree-line-width: 1;
+    -GtkTreeView-expander-size: 12;
+}
+
+.sfe-sidebar treeview.view:selected {
+    background-color: alpha(@sfe_accent, 0.22);
+    color: @sfe_fg;
 }
 
 /* Hairline dividers: a 1px line drawn at the edge of a wider, invisible

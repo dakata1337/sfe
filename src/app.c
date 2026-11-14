@@ -170,6 +170,7 @@ static const struct {
     { "win.view-grid", { "<Control>1", NULL } },
     { "win.view-list", { "<Control>2", NULL } },
     { "win.toggle-hidden", { "<Control>h", NULL } },
+    { "win.bookmark", { "<Control>d", NULL } },
 };
 
 /* ------------------------------------------------------------------------ */

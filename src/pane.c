@@ -1,6 +1,7 @@
 #include "pane.h"
 
 #include "app.h"
+#include "dialogs.h"
 #include "dirmodel.h"
 #include "history.h"
 #include "opener.h"
@@ -183,12 +184,9 @@ static void activate_file(SfePane* self, GFile* file, GFileInfo* info)
         return;
     }
     if (!sfe_open_file(sfe_config(), file, &error)) {
-        GtkWidget* dialog = gtk_message_dialog_new(GTK_WINDOW(gtk_widget_get_toplevel(GTK_WIDGET(self))),
-            GTK_DIALOG_MODAL | GTK_DIALOG_DESTROY_WITH_PARENT, GTK_MESSAGE_ERROR, GTK_BUTTONS_CLOSE,
-            "Cannot open “%s”", g_file_peek_path(file));
-        gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", error->message);
-        g_signal_connect(dialog, "response", G_CALLBACK(gtk_widget_destroy), NULL);
-        gtk_widget_show(dialog);
+        g_autofree char* name = g_file_get_basename(file);
+        g_autofree char* title = g_strdup_printf("Cannot open “%s”", name);
+        sfe_show_error(GTK_WIDGET(self), title, error->message);
     }
 }
 

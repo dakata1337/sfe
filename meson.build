@@ -47,7 +47,9 @@ resources = gnome.compile_resources('sfe-resources', 'src/sfe.gresource.xml',
 
 # Modules that only need GLib (unit-testable without a display).
 core_src = files(
+  'src/bookmarks.c',
   'src/config.c',
+  'src/devices.c',
   'src/history.c',
   'src/opener.c',
   'src/util.c',
@@ -64,10 +66,13 @@ core_dep = declare_dependency(
 ui_src = files(
   'src/main.c',
   'src/app.c',
+  'src/dialogs.c',
   'src/dirmodel.c',
+  'src/dirtree.c',
   'src/icons.c',
   'src/pane.c',
   'src/pathentry.c',
+  'src/sidebar.c',
   'src/theme.c',
   'src/window.c',
 )

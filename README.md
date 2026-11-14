@@ -35,12 +35,36 @@ module that needs it.
 | Alt+Left / Alt+Right, mouse back/forward | history back / forward |
 | Ctrl+L | edit the path (Tab completes, Esc cancels) |
 | Ctrl+H | show/hide hidden files |
+| Ctrl+D | bookmark the current folder (again to remove) |
 | Ctrl+1 / Ctrl+2 | grid / list view |
 | F5, Ctrl+R | reload |
 | Ctrl+Shift+N | new window |
 | Ctrl+Q | quit |
 
 Click a column header in the list view to sort by it; click again to reverse.
+
+## Sidebar
+- **Places, Bookmarks, Devices** on top. Click to open, middle-click or
+  right-click → *Open in New Window*. Drag bookmarks to reorder them;
+  right-click → *Remove Bookmark*. Bookmarks from `~/.config/gtk-3.0/bookmarks`
+  are listed too (read-only).
+- **Devices** come from UDisks2. Clicking an unmounted drive mounts it and
+  opens it; the ⏏ button unmounts (and for USB drives powers them off so they
+  can be unplugged).
+- **Directory tree** in the bottom half follows the current folder. Its root is
+  your home folder, or the drive / file system the folder is on.
+
+Removable drives mount without a password. Internal partitions ask for an
+admin password through your polkit agent; to allow them without one for
+members of `wheel`, create `/etc/polkit-1/rules.d/50-udisks.rules`:
+```js
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.udisks2.filesystem-mount") == 0 &&
+        subject.local && subject.active && subject.isInGroup("wheel"))
+        return polkit.Result.YES;
+});
+```
+Encrypted (LUKS) drives are not supported yet.
 
 ## Opening files
 Files open with `xdg-open`. To use a specific program for an extension, add it

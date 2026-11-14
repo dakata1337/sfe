@@ -134,7 +134,7 @@ The palette is rebuilt whenever the GTK theme or `gtk.css` changes, so the flat 
 
 1. ✅ **Skeleton:** meson deps, GtkApplication, config load/save with defaults, theme hot reload, empty window.
 2. ✅ **Single pane:** async listing, grid + list view, icon theme icons, navigation + history, opener with overrides, hidden toggle, sorting.
-3. **Sidebar:** places, bookmarks (add/remove/reorder) and devices via UDisks2 (mount/unmount/eject, auto-navigate after mount) in the top half. The directory tree, which follows the active pane, goes in the bottom half (`dirtree.c`).
+3. ✅ **Sidebar:** places, bookmarks (add/remove/reorder) and devices via UDisks2 (mount/unmount/eject, auto-navigate after mount) in the top half. The directory tree, which follows the active pane, goes in the bottom half (`dirtree.c`).
 4. **Splits:** 3-pane layout, v/h split rules, close + slide-left, active-pane tracking.
 5. **File ops:** action table, context menu, clipboard, copy/move/trash/delete jobs, new file/folder, properties.
 6. **Rename and mass rename.**

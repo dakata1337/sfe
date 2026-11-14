@@ -27,6 +27,7 @@ depends=(
   'ffmpeg'            # video thumbnail fallback (thumbs.c)
 )
 optdepends=(
+  'polkit-agent: password prompt for mounting internal drives (e.g. hyprpolkitagent, polkit-gnome)'
   'ffmpegthumbnailer: faster, higher-quality video thumbnails'
   'webp-pixbuf-loader: WebP image thumbnails'
   'libheif: HEIF/AVIF image thumbnails'

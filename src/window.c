@@ -1,14 +1,16 @@
 #include "window.h"
 
+#include "bookmarks.h"
 #include "pane.h"
+#include "sidebar.h"
 #include "util.h"
 
-#define SIDEBAR_WIDTH 200
+#define SIDEBAR_WIDTH 220
 
 struct _SfeWindow {
     GtkApplicationWindow parent;
 
-    GtkWidget* sidebar; /* placeholder until milestone 3 */
+    SfeSidebar* sidebar;
     SfePane* pane; /* the active pane; splits arrive in milestone 4 */
     gulong config_handler;
 };
@@ -25,8 +27,20 @@ static void update_title(SfeWindow* win)
 
 static void on_directory_changed(SfePane* pane, gpointer data)
 {
-    (void)pane;
-    update_title(SFE_WINDOW(data));
+    SfeWindow* win = SFE_WINDOW(data);
+    update_title(win);
+    sfe_sidebar_set_location(win->sidebar, sfe_pane_get_dir(pane));
+}
+
+static void on_sidebar_open(SfeSidebar* sidebar, GFile* dir, gboolean new_window, gpointer data)
+{
+    (void)sidebar;
+    SfeWindow* win = SFE_WINDOW(data);
+
+    if (new_window)
+        gtk_window_present(GTK_WINDOW(sfe_window_new(sfe_app(), dir)));
+    else
+        sfe_pane_navigate(win->pane, dir);
 }
 
 static void apply_config(SfeWindow* win)
@@ -78,7 +92,23 @@ static void action_toggle_hidden(GSimpleAction* a, GVariant* p, gpointer data)
     sfe_application_set_config(sfe_app(), cfg);
 }
 
+/* Ctrl+D: bookmark the active directory, or remove its bookmark. */
+static void action_bookmark(GSimpleAction* a, GVariant* p, gpointer data)
+{
+    (void)a, (void)p;
+    GFile* dir = sfe_pane_get_dir(SFE_WINDOW(data)->pane);
+    SfeConfig* cfg = sfe_application_dup_config(sfe_app());
+    int index = sfe_bookmarks_find(cfg, dir);
+
+    if (index >= 0)
+        sfe_bookmarks_remove(cfg, index);
+    else
+        sfe_bookmarks_add(cfg, dir);
+    sfe_application_set_config(sfe_app(), cfg);
+}
+
 static const GActionEntry win_actions[] = {
+    { .name = "bookmark", .activate = action_bookmark },
     { .name = "back", .activate = action_back },
     { .name = "forward", .activate = action_forward },
     { .name = "up", .activate = action_up },
@@ -92,18 +122,6 @@ static const GActionEntry win_actions[] = {
 /* ------------------------------------------------------------------------ */
 /* Construction                                                              */
 /* ------------------------------------------------------------------------ */
-
-static GtkWidget* build_sidebar(void)
-{
-    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
-    GtkWidget* label = gtk_label_new("Sidebar");
-
-    gtk_style_context_add_class(gtk_widget_get_style_context(box), "sfe-sidebar");
-    gtk_style_context_add_class(gtk_widget_get_style_context(label), "sfe-placeholder");
-    gtk_widget_set_size_request(box, SIDEBAR_WIDTH, -1);
-    gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
-    return box;
-}
 
 static void sfe_window_dispose(GObject* object)
 {
@@ -139,11 +157,14 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     }
 
     GtkWidget* paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    win->sidebar = build_sidebar();
+    win->sidebar = SFE_SIDEBAR(sfe_sidebar_new());
+    gtk_widget_set_size_request(GTK_WIDGET(win->sidebar), SIDEBAR_WIDTH, -1);
+    g_signal_connect(win->sidebar, "open-location", G_CALLBACK(on_sidebar_open), win);
     win->pane = sfe_pane_new(dir);
     g_signal_connect(win->pane, "directory-changed", G_CALLBACK(on_directory_changed), win);
+    sfe_sidebar_set_location(win->sidebar, dir);
 
-    gtk_paned_pack1(GTK_PANED(paned), win->sidebar, FALSE, FALSE);
+    gtk_paned_pack1(GTK_PANED(paned), GTK_WIDGET(win->sidebar), FALSE, FALSE);
     gtk_paned_pack2(GTK_PANED(paned), GTK_WIDGET(win->pane), TRUE, FALSE);
     gtk_container_add(GTK_CONTAINER(win), paned);
     gtk_widget_show_all(paned);
