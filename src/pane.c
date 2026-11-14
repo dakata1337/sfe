@@ -635,8 +635,13 @@ static gboolean on_view_key_press(GtkWidget* view, GdkEventKey* event, gpointer 
     (void)view;
     guint mods = event->state & gtk_accelerator_get_default_mod_mask();
 
-    if (event->keyval == GDK_KEY_Escape && mods == 0 && searching(SFE_PANE(data))) {
-        end_search(SFE_PANE(data), true);
+    if (event->keyval == GDK_KEY_Escape && mods == 0) {
+        if (searching(SFE_PANE(data)))
+            end_search(SFE_PANE(data), true);
+        else if (GTK_IS_ICON_VIEW(view))
+            gtk_icon_view_unselect_all(GTK_ICON_VIEW(view));
+        else
+            gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)));
         return TRUE;
     }
     if (event->keyval == GDK_KEY_BackSpace && mods == 0) {
@@ -686,8 +691,12 @@ static GtkWidget* build_grid(SfePane* self)
     gtk_cell_layout_pack_start(layout, icon, FALSE);
     gtk_cell_layout_add_attribute(layout, icon, "surface", SFE_COL_ICON);
 
+    /* Long names wrap, but without Pango's hyphens ("wallpaper.pn-g"). */
+    PangoAttrList* attrs = pango_attr_list_new();
+    pango_attr_list_insert(attrs, pango_attr_insert_hyphens_new(FALSE));
     g_object_set(text, "xalign", 0.5, "alignment", PANGO_ALIGN_CENTER,
-        "wrap-mode", PANGO_WRAP_WORD_CHAR, NULL);
+        "wrap-mode", PANGO_WRAP_WORD_CHAR, "attributes", attrs, NULL);
+    pango_attr_list_unref(attrs);
     gtk_cell_layout_pack_start(layout, text, FALSE);
     gtk_cell_layout_add_attribute(layout, text, "text", SFE_COL_NAME);
     self->grid_text = text;

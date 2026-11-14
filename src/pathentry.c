@@ -132,10 +132,17 @@ void sfe_path_entry_set_dir(GtkWidget* entry, GFile* dir)
     g_autofree char* path = g_file_get_path(dir);
     g_autofree char* uri = path ? NULL : g_file_get_uri(dir);
 
+    /* Detach the completion while setting the text: it would otherwise
+     * complete the new path inline ("…/website" -> "…/website/assets/"). */
+    GtkEntryCompletion* completion = g_object_ref(gtk_entry_get_completion(GTK_ENTRY(entry)));
+    gtk_entry_set_completion(GTK_ENTRY(entry), NULL);
     pe->programmatic = TRUE;
     gtk_entry_set_text(GTK_ENTRY(entry), path ? path : uri);
     pe->programmatic = FALSE;
+    gtk_list_store_clear(pe->candidates);
     g_clear_pointer(&pe->dir, g_free); /* refresh candidates on next edit */
+    gtk_entry_set_completion(GTK_ENTRY(entry), completion);
+    g_object_unref(completion);
 }
 
 char* sfe_path_entry_get_path(GtkWidget* entry)

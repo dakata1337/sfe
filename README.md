@@ -2,6 +2,8 @@
 
 A minimal, Wayland-native GTK3 file manager written in C.
 
+**[User guide with screenshots and all shortcuts](docs/guide/index.md)**
+
 ## Building & running
 ```sh
 meson setup build

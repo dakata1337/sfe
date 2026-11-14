@@ -27,3 +27,7 @@ test_fuzzy = executable('test-fuzzy', 'test_fuzzy.c',
   dependencies: core_dep,
 )
 test('fuzzy', test_fuzzy)
+
+# The user guide must list every default shortcut.
+python = find_program('python3')
+test('guide', python, args: [files('check_guide.py'), meson.project_source_root()])

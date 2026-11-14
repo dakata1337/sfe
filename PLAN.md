@@ -217,6 +217,8 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 
 ## 9. Milestones (each one builds and runs)
 
+Every milestone also updates the user guide (`docs/guide/index.md`) and retakes its screenshots (`docs/guide/tools/screenshots.sh`). `meson test` fails if a shortcut is missing from the guide.
+
 1. ✅ **Skeleton:** meson deps, GtkApplication, config load/save with defaults, theme hot reload, empty window.
 2. ✅ **Single pane:** async listing, grid + list view, icon theme icons, navigation + history, opener with overrides, hidden toggle, sorting.
 3. ✅ **Sidebar:** places, bookmarks (add/remove/reorder) and devices via UDisks2 (mount/unmount/eject, auto-navigate after mount) in the top half. The directory tree, which follows the active pane, goes in the bottom half (`dirtree.c`).
