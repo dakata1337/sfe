@@ -511,7 +511,7 @@ static void sfe_dir_tree_init(SfeDirTree* self)
     gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(self->store), COL_COLLATE, GTK_SORT_ASCENDING);
     gtk_tree_view_set_model(view, GTK_TREE_MODEL(self->store));
 
-    g_object_set(icon, "xpad", 2, "ypad", 3, NULL);
+    g_object_set(icon, "xpad", 2, "ypad", 5, NULL); /* rows as tall as the list's */
     g_object_set(text, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
     gtk_tree_view_column_pack_start(column, icon, FALSE);
     gtk_tree_view_column_add_attribute(column, icon, "icon-name", COL_ICON);

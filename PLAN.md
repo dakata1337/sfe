@@ -94,7 +94,7 @@ Written atomically (temp file + rename). The settings dialog edits it, and a fil
 
 ## 5. Key behaviours
 
-- **Sidebar layout:** a vertical `GtkPaned` with a draggable divider, split 50/50 by default.
+- **Sidebar layout:** a vertical `GtkPaned` with a draggable divider; the list gets 2/3 and the tree 1/3 by default, each scrolling (with a visible scrollbar) when its content does not fit.
   - **Top half:** flat rows with symbolic icons under dim section headers: *Places* (Home, Desktop, Documents, Downloads, …, Trash, File System), *Bookmarks* and *Devices*. Devices show a mount/eject button.
   - **Bottom half: directory tree.** A `GtkTreeView` with connector lines (`enable-tree-lines`) that lists directories only.
     - It follows the active pane: the tree expands down to the active pane's directory and highlights it.

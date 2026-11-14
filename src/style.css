@@ -143,16 +143,39 @@
     padding: 0;
 }
 
-/* Directory tree: dim connector lines, same selection as the list. */
-.sfe-sidebar treeview.view {
+/* Directory tree: the same background, hover and selection as the list
+ * above it. (".sfe-window" makes these win over the file-view rules.) */
+.sfe-window .sfe-sidebar treeview.view,
+.sfe-window .sfe-sidebar scrolledwindow,
+.sfe-window .sfe-sidebar viewport {
+    background-color: @sfe_sidebar_bg;
+    color: @sfe_fg;
+}
+
+.sfe-window .sfe-sidebar treeview.view {
     border-color: alpha(@sfe_fg, 0.18);
     -GtkTreeView-tree-line-width: 1;
     -GtkTreeView-expander-size: 12;
 }
 
-.sfe-sidebar treeview.view:selected {
+.sfe-window .sfe-sidebar treeview.view:hover {
+    background-color: alpha(@sfe_fg, 0.06);
+}
+
+.sfe-window .sfe-sidebar treeview.view:selected {
     background-color: alpha(@sfe_accent, 0.22);
     color: @sfe_fg;
+}
+
+/* Sidebar scrollbars sit beside the content (no overlay). */
+.sfe-window .sfe-sidebar scrollbar {
+    background-color: transparent;
+    border-left: 1px solid alpha(@sfe_fg, 0.06);
+}
+
+.sfe-window .sfe-sidebar scrollbar slider {
+    min-width: 6px;
+    margin: 2px;
 }
 
 /* Hairline dividers: a 1px line drawn at the edge of a wider, invisible

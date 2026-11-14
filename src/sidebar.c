@@ -482,14 +482,14 @@ static void on_tree_open(SfeDirTree* tree, GFile* dir, gpointer data)
     open_location(SFE_SIDEBAR(data), dir, false);
 }
 
-/* Starts with the divider in the middle; after that the user decides. */
+/* Starts with 2/3 for the list and 1/3 for the tree; then the user decides. */
 static void on_size_allocate(GtkWidget* widget, GdkRectangle* alloc, gpointer data)
 {
     (void)data;
     SfeSidebar* self = SFE_SIDEBAR(widget);
     if (!self->positioned && alloc->height > 1) {
         self->positioned = true;
-        gtk_paned_set_position(GTK_PANED(self), alloc->height / 2);
+        gtk_paned_set_position(GTK_PANED(self), alloc->height * 2 / 3);
     }
 }
 
@@ -524,6 +524,9 @@ static GtkWidget* scrolled(GtkWidget* child)
 {
     GtkWidget* sw = gtk_scrolled_window_new(NULL, NULL);
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(sw), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+    /* A real scrollbar whenever the content does not fit, not an overlay
+     * indicator that only shows while scrolling. */
+    gtk_scrolled_window_set_overlay_scrolling(GTK_SCROLLED_WINDOW(sw), FALSE);
     gtk_container_add(GTK_CONTAINER(sw), child);
     return sw;
 }

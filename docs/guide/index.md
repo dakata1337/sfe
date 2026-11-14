@@ -26,7 +26,7 @@ Wayland. This guide covers every feature and every shortcut.
 
 ## The window
 
-- **Sidebar** (left): places, bookmarks and drives on top, a folder tree below.
+- **Sidebar** (left): places, bookmarks and drives in the top two thirds, a folder tree below. Drag the divider to resize them.
 - **Path bar** (top of each view): back, forward and parent buttons, the full
   path, the grid/list toggle, and the split and close buttons.
 - **Files**: the contents of the current folder.
@@ -66,7 +66,7 @@ program for an extension, see [Configuration](#configuration).
   remove it). Drag bookmarks to reorder them; right-click → *Remove Bookmark*.
   Bookmarks from `~/.config/gtk-3.0/bookmarks` are shown too.
 - **Drives**: see [Drives](#drives).
-- **Folder tree** (bottom half): follows the active view. Its root is your
+- **Folder tree** (bottom third): follows the active view. Its root is your
   home folder, or the drive the folder is on. Click a folder to open it.
 - Middle-click, or right-click → *Open in New Window*, opens a place in a new
   window. The Menu key or Shift+F10 opens the menu from the keyboard.
