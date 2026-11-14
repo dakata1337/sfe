@@ -1,6 +1,7 @@
 #include "prefs.h"
 
 #include "app.h"
+#include "defaultfm.h"
 #include "dialogs.h"
 #include "opener.h"
 #include <string.h>
@@ -155,6 +156,24 @@ static void on_open_config(GtkButton* button, gpointer data)
         sfe_show_error(GTK_WIDGET(button), "Cannot open the config file", error->message);
 }
 
+static void show_default_state(GtkWidget* button)
+{
+    bool set = sfe_default_fm_is_set();
+    gtk_button_set_label(GTK_BUTTON(button), set ? "sfe is the default" : "Make Default");
+    gtk_widget_set_sensitive(button, !set && sfe_default_fm_available());
+    if (!sfe_default_fm_available())
+        gtk_widget_set_tooltip_text(button, "Install sfe (meson install or the package) to use this.");
+}
+
+static void on_make_default(GtkButton* button, gpointer data)
+{
+    (void)data;
+    g_autoptr(GError) error = NULL;
+    if (!sfe_default_fm_set(&error))
+        sfe_show_error(GTK_WIDGET(button), "Cannot make sfe the default file manager", error->message);
+    show_default_state(GTK_WIDGET(button));
+}
+
 static GtkWidget* build_form(void)
 {
     GtkWidget* grid = gtk_grid_new();
@@ -182,6 +201,17 @@ static GtkWidget* build_form(void)
             gtk_grid_attach(GTK_GRID(grid), widget, 1, row++, 1, 1);
         }
     }
+
+    add_title(GTK_GRID(grid), &row, "System");
+    GtkWidget* fm_label = gtk_label_new("Default file manager");
+    GtkWidget* fm_button = gtk_button_new();
+    gtk_label_set_xalign(GTK_LABEL(fm_label), 0);
+    gtk_widget_set_tooltip_text(fm_label, "Open folders from other applications (and xdg-open) in sfe");
+    gtk_widget_set_valign(fm_button, GTK_ALIGN_CENTER);
+    show_default_state(fm_button);
+    g_signal_connect(fm_button, "clicked", G_CALLBACK(on_make_default), NULL);
+    gtk_grid_attach(GTK_GRID(grid), fm_label, 0, row, 1, 1);
+    gtk_grid_attach(GTK_GRID(grid), fm_button, 1, row++, 1, 1);
 
     add_title(GTK_GRID(grid), &row, "More");
     GtkWidget* note = gtk_label_new("Bookmarks, programs per file type ([open]) and custom "

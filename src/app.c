@@ -1,6 +1,7 @@
 #include "app.h"
 
 #include "actions.h"
+#include "defaultfm.h"
 
 #include "sfe-build.h"
 #include "theme.h"
@@ -192,15 +193,21 @@ static void sfe_application_startup(GApplication* gapp)
 
 static void sfe_application_activate(GApplication* gapp)
 {
-    gtk_window_present(GTK_WINDOW(sfe_window_new(SFE_APPLICATION(gapp), NULL)));
+    GtkWindow* window = GTK_WINDOW(sfe_window_new(SFE_APPLICATION(gapp), NULL));
+    gtk_window_present(window);
+    sfe_default_fm_maybe_ask(window); /* first start only */
 }
 
 /* `sfe DIR...` opens one window per directory. */
 static void sfe_application_open(GApplication* gapp, GFile** files, int n_files, const char* hint)
 {
     (void)hint;
-    for (int i = 0; i < n_files; i++)
-        gtk_window_present(GTK_WINDOW(sfe_window_new(SFE_APPLICATION(gapp), files[i])));
+    for (int i = 0; i < n_files; i++) {
+        GtkWindow* window = GTK_WINDOW(sfe_window_new(SFE_APPLICATION(gapp), files[i]));
+        gtk_window_present(window);
+        if (i == 0)
+            sfe_default_fm_maybe_ask(window); /* first start only */
+    }
 }
 
 static void sfe_application_shutdown(GApplication* gapp)

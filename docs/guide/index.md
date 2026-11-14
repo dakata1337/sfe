@@ -245,6 +245,11 @@ bookmarks. Changes apply immediately.
 
 ![Preferences](images/preferences.png)
 
+*Preferences → Default file manager* makes sfe open folders for other
+applications and `xdg-open` (it sets `inode/directory` in `mimeapps.list`).
+On first start sfe asks once whether to do this. This needs the installed
+`sfe.desktop`, so it is unavailable when running sfe from the build folder.
+
 All settings live in `~/.config/sfe/config.toml`, which is created with
 comments on first start. Changes apply while sfe is running.
 

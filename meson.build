@@ -73,6 +73,7 @@ ui_src = files(
   'src/app.c',
   'src/clipboard.c',
   'src/ctxmenu.c',
+  'src/defaultfm.c',
   'src/dialogs.c',
   'src/dirmodel.c',
   'src/dirtree.c',

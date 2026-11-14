@@ -395,7 +395,9 @@
 
 /* Dialogs that GTK builds with a header bar (e.g. "Other Application…"). */
 .sfe-dialog headerbar,
-.sfe-dialog headerbar:backdrop {
+.sfe-dialog headerbar:backdrop,
+.sfe-dialog .titlebar,
+.sfe-dialog .titlebar:backdrop {
     background-color: @sfe_bg;
     color: @sfe_fg;
     border: none;
