@@ -119,14 +119,15 @@ static void test_keys(void)
 {
     if (g_test_subprocess()) {
         g_log_set_always_fatal(G_LOG_FATAL_MASK);
-        g_autoptr(SfeConfig) bad = parse("[keys]\nq = 3\n");
+        g_autoptr(SfeConfig) bad = parse("[keys]\nq = 3\n\"<C-bogus>\" = \"x\"\n");
         g_assert_cmpuint(bad->keys->len, ==, 0);
-        g_assert_cmpuint(bad->problems->len, ==, 1);
+        g_assert_cmpuint(bad->problems->len, ==, 2);
         return;
     }
     g_test_trap_subprocess(NULL, 0, G_TEST_SUBPROCESS_DEFAULT);
     g_test_trap_assert_passed();
     g_test_trap_assert_stderr("*keys.\"q\" must be a command*");
+    g_test_trap_assert_stderr("*unknown key <C-bogus>*");
 
     g_autoptr(SfeConfig) cfg = parse(
         "[keys]\n"

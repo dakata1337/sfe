@@ -18,6 +18,7 @@
 
 #include "pane.h"
 #include <gtk/gtk.h>
+#include <stdbool.h>
 
 #define SFE_TYPE_SPLIT (sfe_split_get_type())
 G_DECLARE_FINAL_TYPE(SfeSplit, sfe_split, SFE, SPLIT, GtkBox)
@@ -49,3 +50,29 @@ void sfe_split_track_focus(SfeSplit* self, GtkWidget* widget);
 
 /* Moves the focus to the next pane (left → right-top → right-bottom). */
 void sfe_split_focus_next(SfeSplit* self);
+
+typedef enum {
+    SFE_DIRECTION_LEFT,
+    SFE_DIRECTION_RIGHT,
+    SFE_DIRECTION_UP,
+    SFE_DIRECTION_DOWN,
+} SfeDirection;
+
+/* The pane next to `pane` in that direction on screen (so narrow, stacked
+ * windows work too), or NULL. */
+SfePane* sfe_split_neighbor(SfeSplit* self, SfePane* pane, SfeDirection direction);
+
+/* Makes `pane` active and focuses its view. */
+void sfe_split_focus(SfeSplit* self, SfePane* pane);
+
+/* Swaps the active pane with its neighbor in that direction; it stays
+ * active. False if there is none. */
+bool sfe_split_swap(SfeSplit* self, SfeDirection direction);
+
+/* The name of the pane at `index`: "left" with one pane; "left" / "right"
+ * side by side or "top" / "bottom" stacked with two; "left", "right-top",
+ * "right-bottom" with three. NULL past the last pane. */
+const char* sfe_split_position_name(SfeSplit* self, int index);
+
+/* The pane with that position name, or NULL. */
+SfePane* sfe_split_find_position(SfeSplit* self, const char* name);

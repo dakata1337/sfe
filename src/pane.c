@@ -587,6 +587,79 @@ void sfe_pane_select_all(SfePane* self)
         gtk_tree_selection_select_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)));
 }
 
+static void entry_free(gpointer p)
+{
+    SfePaneEntry* e = p;
+    g_free(e->name);
+    g_clear_object(&e->file);
+    g_free(e);
+}
+
+GPtrArray* sfe_pane_get_entries(SfePane* self)
+{
+    GPtrArray* entries = g_ptr_array_new_with_free_func(entry_free);
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    GtkTreeIter iter;
+
+    if (model == NULL || !gtk_tree_model_get_iter_first(model, &iter))
+        return entries;
+    do {
+        SfePaneEntry* e = g_new0(SfePaneEntry, 1);
+        gboolean is_dir = FALSE;
+        gtk_tree_model_get(model, &iter, SFE_COL_FILE, &e->file, SFE_COL_NAME, &e->name, SFE_COL_IS_DIR, &is_dir, -1);
+        e->is_dir = is_dir;
+        if (e->file != NULL && e->name != NULL)
+            g_ptr_array_add(entries, e);
+        else
+            entry_free(e);
+    } while (gtk_tree_model_iter_next(model, &iter));
+    return entries;
+}
+
+/* The views' own keyboard movement ("move-cursor"; it needs the focus).
+ * `modify` moves the cursor without selecting, like Ctrl+arrow. */
+static void move_cursor(SfePane* self, GtkMovementStep step, int count, bool modify)
+{
+    GtkWidget* view = active_view(self);
+    gboolean handled = FALSE;
+    gtk_widget_grab_focus(view);
+    g_signal_emit_by_name(view, "move-cursor", step, count, FALSE, modify, &handled);
+}
+
+void sfe_pane_move_cursor(SfePane* self, SfeCursorMove move)
+{
+    switch (move) {
+    case SFE_CURSOR_DOWN: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, 1, false); break;
+    case SFE_CURSOR_UP: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, -1, false); break;
+    case SFE_CURSOR_FIRST: move_cursor(self, GTK_MOVEMENT_BUFFER_ENDS, -1, false); break;
+    case SFE_CURSOR_LAST: move_cursor(self, GTK_MOVEMENT_BUFFER_ENDS, 1, false); break;
+    }
+}
+
+void sfe_pane_toggle_cursor_item(SfePane* self)
+{
+    GtkTreePath* path = highlighted(self);
+    if (path == NULL)
+        return;
+    if (self->view == SFE_VIEW_GRID) {
+        GtkIconView* grid = GTK_ICON_VIEW(self->grid);
+        if (gtk_icon_view_path_is_selected(grid, path))
+            gtk_icon_view_unselect_path(grid, path);
+        else
+            gtk_icon_view_select_path(grid, path);
+        gtk_icon_view_set_cursor(grid, path, NULL, FALSE);
+        move_cursor(self, GTK_MOVEMENT_VISUAL_POSITIONS, 1, true); /* the next item, not the next row */
+    } else {
+        GtkTreeSelection* selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list));
+        if (gtk_tree_selection_path_is_selected(selection, path))
+            gtk_tree_selection_unselect_path(selection, path);
+        else
+            gtk_tree_selection_select_path(selection, path);
+        move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, 1, true);
+    }
+    gtk_tree_path_free(path);
+}
+
 /* Opens files in their applications; the first directory is opened here. */
 void sfe_pane_open_files(SfePane* self, GList* files)
 {

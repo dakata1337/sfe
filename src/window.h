@@ -22,3 +22,6 @@ SfePane* sfe_window_get_active_pane(SfeWindow* win);
 
 /* Shows progress for `op` in the window and starts it. */
 void sfe_window_run_op(SfeWindow* win, SfeFileOp* op);
+
+/* Opens the ":" command line, with `text` typed in (or empty). */
+void sfe_window_show_command_line(SfeWindow* win, const char* text);

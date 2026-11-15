@@ -75,6 +75,8 @@ ui_src = files(
   'src/actions.c',
   'src/app.c',
   'src/clipboard.c',
+  'src/cmdbar.c',
+  'src/commands.c',
   'src/compressdlg.c',
   'src/ctxmenu.c',
   'src/defaultfm.c',

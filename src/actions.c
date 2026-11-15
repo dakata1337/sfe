@@ -600,7 +600,7 @@ static const SfeAction actions[] = {
     { "bookmark",           "Bookmark This Folder",       { "<Control>d", NULL },           NONE,         0, NULL,                    run_bookmark },
     { "split-vertical",     "Split Side by Side",         { "<Control>backslash", NULL },   NONE,         0, NULL,                    run_split_vertical },
     { "split-horizontal",   "Split Top and Bottom",       { "<Control>minus", NULL },       NONE,         0, NULL,                    run_split_horizontal },
-    { "close-pane",         "Close View",                 { "<Control>w", NULL },           NONE,         0, NULL,                    run_close_pane },
+    { "close-pane",         "Close View",                 { NULL },                         NONE,         0, NULL,                    run_close_pane },
     { "next-pane",          "Next View",                  { "F6", NULL },                   NONE,         0, NULL,                    run_next_pane },
 };
 

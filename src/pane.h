@@ -48,6 +48,31 @@ GList* sfe_pane_get_selected_files(SfePane* self);
 GList* sfe_pane_get_all_files(SfePane* self);
 void sfe_pane_select_all(SfePane* self);
 
+/* A row of the view, for command line completion. */
+typedef struct {
+    char* name; /* display name */
+    GFile* file;
+    bool is_dir;
+} SfePaneEntry;
+
+/* The rows shown now (SfePaneEntry*, freed with the array); no disk access. */
+GPtrArray* sfe_pane_get_entries(SfePane* self);
+
+typedef enum {
+    SFE_CURSOR_DOWN,
+    SFE_CURSOR_UP,
+    SFE_CURSOR_FIRST,
+    SFE_CURSOR_LAST,
+} SfeCursorMove;
+
+/* Moves the cursor like the arrow keys / Home / End (selecting the item it
+ * lands on, as they do), focusing the view. */
+void sfe_pane_move_cursor(SfePane* self, SfeCursorMove move);
+
+/* Toggles the selection of the item under the cursor and moves the cursor
+ * to the next item without touching the selection. */
+void sfe_pane_toggle_cursor_item(SfePane* self);
+
 /* Opens files like double-clicking them (directories open in this pane). */
 void sfe_pane_open_files(SfePane* self, GList* files);
 

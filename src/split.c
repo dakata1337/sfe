@@ -197,6 +197,113 @@ void sfe_split_focus_next(SfeSplit* self)
     sfe_pane_focus_view(self->panes[next]);
 }
 
+void sfe_split_focus(SfeSplit* self, SfePane* pane)
+{
+    if (index_of(self, pane) < 0)
+        return;
+    set_active(self, pane);
+    sfe_pane_focus_view(pane);
+}
+
+/* The pane's rectangle in the split's coordinates. */
+static GdkRectangle pane_rect(SfeSplit* self, SfePane* pane)
+{
+    GtkAllocation a;
+    GdkRectangle r = { 0, 0, 0, 0 };
+    gtk_widget_get_allocation(GTK_WIDGET(pane), &a);
+    gtk_widget_translate_coordinates(GTK_WIDGET(pane), GTK_WIDGET(self), 0, 0, &r.x, &r.y);
+    r.width = a.width;
+    r.height = a.height;
+    return r;
+}
+
+static int overlap(int a0, int a1, int b0, int b1)
+{
+    return MIN(a1, b1) - MAX(a0, b0);
+}
+
+SfePane* sfe_split_neighbor(SfeSplit* self, SfePane* pane, SfeDirection direction)
+{
+    if (index_of(self, pane) < 0)
+        return NULL;
+    GdkRectangle from = pane_rect(self, pane);
+    SfePane* best = NULL;
+    int best_distance = G_MAXINT;
+
+    /* Beside it in that direction (paned handles leave a small gap) and
+     * overlapping it across; the nearest wins, the first pane on a tie. */
+    for (int i = 0; i < self->n_panes; i++) {
+        SfePane* other = self->panes[i];
+        if (other == pane)
+            continue;
+        GdkRectangle to = pane_rect(self, other);
+        int distance;
+        bool across;
+        switch (direction) {
+        case SFE_DIRECTION_LEFT:
+            distance = from.x - (to.x + to.width);
+            across = overlap(from.y, from.y + from.height, to.y, to.y + to.height) > 0;
+            break;
+        case SFE_DIRECTION_RIGHT:
+            distance = to.x - (from.x + from.width);
+            across = overlap(from.y, from.y + from.height, to.y, to.y + to.height) > 0;
+            break;
+        case SFE_DIRECTION_UP:
+            distance = from.y - (to.y + to.height);
+            across = overlap(from.x, from.x + from.width, to.x, to.x + to.width) > 0;
+            break;
+        default:
+            distance = to.y - (from.y + from.height);
+            across = overlap(from.x, from.x + from.width, to.x, to.x + to.width) > 0;
+            break;
+        }
+        if (across && distance > -8 && distance < best_distance) {
+            best = other;
+            best_distance = distance;
+        }
+    }
+    return best;
+}
+
+bool sfe_split_swap(SfeSplit* self, SfeDirection direction)
+{
+    SfePane* other = sfe_split_neighbor(self, self->active, direction);
+    if (other == NULL)
+        return false;
+    int a = index_of(self, self->active);
+    int b = index_of(self, other);
+    self->panes[a] = other;
+    self->panes[b] = self->active;
+    relayout(self);
+    sfe_pane_focus_view(self->active);
+    return true;
+}
+
+const char* sfe_split_position_name(SfeSplit* self, int index)
+{
+    static const char* const one[] = { "left" };
+    static const char* const side[] = { "left", "right" };
+    static const char* const stacked[] = { "top", "bottom" };
+    static const char* const three[] = { "left", "right-top", "right-bottom" };
+
+    if (index < 0 || index >= self->n_panes)
+        return NULL;
+    switch (self->n_panes) {
+    case 1: return one[index];
+    case 2: return self->stacked ? stacked[index] : side[index];
+    default: return three[index];
+    }
+}
+
+SfePane* sfe_split_find_position(SfeSplit* self, const char* name)
+{
+    for (int i = 0; i < self->n_panes; i++) {
+        if (g_strcmp0(sfe_split_position_name(self, i), name) == 0)
+            return self->panes[i];
+    }
+    return NULL;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Adding and removing panes                                                 */
 /* ------------------------------------------------------------------------ */

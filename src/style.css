@@ -530,3 +530,74 @@ menu.sfe-menu {
 .sfe-search-count {
     color: alpha(@sfe_fg, 0.5);
 }
+
+/* The ":" command line, across the bottom of the views. */
+.sfe-window .sfe-cmdbar {
+    background-color: @sfe_bg;
+    border-top: 1px solid alpha(@sfe_fg, 0.12);
+}
+
+.sfe-window .sfe-cmdbar-line {
+    padding: 2px 10px;
+    min-height: 30px;
+}
+
+.sfe-window .sfe-cmdbar entry,
+.sfe-window .sfe-cmdbar entry:focus {
+    background-color: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    font-family: monospace;
+    padding: 0;
+    min-height: 26px;
+}
+
+.sfe-window .sfe-cmdbar-prompt {
+    font-family: monospace;
+    font-weight: bold;
+    color: @sfe_accent;
+}
+
+.sfe-window .sfe-cmdbar-message {
+    font-family: monospace;
+}
+
+.sfe-window .sfe-cmdbar-failed .sfe-cmdbar-message {
+    color: @sfe_error;
+}
+
+.sfe-window .sfe-cmdbar-list {
+    border-bottom: 1px solid alpha(@sfe_fg, 0.08);
+}
+
+.sfe-window .sfe-cmdbar-list list,
+.sfe-window .sfe-cmdbar-list row {
+    background-color: transparent;
+}
+
+.sfe-window .sfe-cmdbar-list row {
+    padding: 3px 12px;
+    font-family: monospace;
+    color: @sfe_fg;
+}
+
+.sfe-window .sfe-cmdbar-list row:selected {
+    background-color: @sfe_accent;
+    color: @sfe_accent_fg;
+}
+
+.sfe-window .sfe-cmdbar-tag {
+    color: alpha(currentColor, 0.55);
+    font-size: 0.9em;
+}
+
+/* Keys of a pending chord ("g", "<C-w>"), like vim's showcmd. */
+.sfe-window .sfe-showcmd {
+    background-color: @sfe_bg;
+    color: @sfe_fg;
+    border: 1px solid alpha(@sfe_fg, 0.12);
+    border-radius: 6px;
+    padding: 2px 10px;
+    margin: 10px;
+    font-family: monospace;
+}

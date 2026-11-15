@@ -1,5 +1,6 @@
 #include "config.h"
 
+#include "keymap.h"
 #include <errno.h>
 #include <glib/gstdio.h>
 #include <limits.h>
@@ -272,6 +273,12 @@ static void read_keys(SfeConfig* cfg, toml_datum_t tab)
         g_autofree char* sequence = g_strndup(tab.u.tab.key[i], tab.u.tab.len[i]);
         if (v.type != TOML_STRING) {
             problem(cfg, "line %d: keys.\"%s\" must be a command (a string)", v.lineno, sequence);
+            continue;
+        }
+        g_autoptr(GError) error = NULL;
+        g_auto(GStrv) tokens = sfe_keymap_parse(sequence, &error);
+        if (tokens == NULL) {
+            problem(cfg, "line %d: keys: %s", v.lineno, error->message);
             continue;
         }
         sfe_config_add_key(cfg, sequence, v.u.s);
