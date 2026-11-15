@@ -247,19 +247,32 @@ static void on_method_call(GDBusConnection* connection, const char* sender, cons
         g_ptr_array_add(argv, g_strdup("--parent"));
         g_ptr_array_add(argv, g_strdup(parent));
     }
-    /* File type filters, and the one to start with (it must be one of them). */
-    d->filters = g_variant_lookup_value(options, "filters", G_VARIANT_TYPE("a(sa(us))"));
-    if (d->filters != NULL && g_variant_n_children(d->filters) > 0) {
+    /* File type filters, and the one to start with. current_filter should
+     * be one of the filters; alone (no list) the program wants only those
+     * files, and one missing from the list is added to it. */
+    g_autoptr(GVariant) asked = g_variant_lookup_value(options, "filters", G_VARIANT_TYPE("a(sa(us))"));
+    g_autoptr(GVariant) current = g_variant_lookup_value(options, "current_filter", G_VARIANT_TYPE("(sa(us))"));
+    GVariantBuilder list;
+    g_variant_builder_init(&list, G_VARIANT_TYPE("a(sa(us))"));
+    gsize n = 0;
+    int start = -1;
+    for (gsize i = 0; asked != NULL && i < g_variant_n_children(asked); i++, n++) {
+        g_autoptr(GVariant) f = g_variant_get_child_value(asked, i);
+        if (start < 0 && current != NULL && g_variant_equal(f, current))
+            start = (int)i;
+        g_variant_builder_add_value(&list, f);
+    }
+    if (current != NULL && start < 0) {
+        g_variant_builder_add_value(&list, current);
+        start = (int)n++;
+    }
+    d->filters = g_variant_ref_sink(g_variant_builder_end(&list));
+    if (n > 0) {
         g_ptr_array_add(argv, g_strdup("--filters"));
         g_ptr_array_add(argv, g_variant_print(d->filters, TRUE));
-        g_autoptr(GVariant) current = g_variant_lookup_value(options, "current_filter", G_VARIANT_TYPE("(sa(us))"));
-        for (gsize i = 0; current != NULL && i < g_variant_n_children(d->filters); i++) {
-            g_autoptr(GVariant) f = g_variant_get_child_value(d->filters, i);
-            if (g_variant_equal(f, current)) {
-                g_ptr_array_add(argv, g_strdup("--current-filter"));
-                g_ptr_array_add(argv, g_strdup_printf("%" G_GSIZE_FORMAT, i));
-                break;
-            }
+        if (start >= 0) {
+            g_ptr_array_add(argv, g_strdup("--current-filter"));
+            g_ptr_array_add(argv, g_strdup_printf("%d", start));
         }
     } else {
         g_clear_pointer(&d->filters, g_variant_unref);

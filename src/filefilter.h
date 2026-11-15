@@ -4,14 +4,15 @@
  * desktop portal sends them: a(sa(us)), each a name and rules, a rule
  * being (0, glob) such as "*.png" or (1, MIME type) such as "image/png"
  * (a type ending in a slash and a star matches the whole family). Globs
- * ignore case. GTK-free and unit-tested. */
+ * are shell patterns ("*.[pP][nN][gG]" works too) and ignore case.
+ * GTK-free and unit-tested. */
 
 #include <glib.h>
 #include <stdbool.h>
 
 typedef struct {
     char* name;
-    GPtrArray* globs; /* GPatternSpec*, lower case */
+    GPtrArray* globs; /* char*, fnmatch patterns */
     GPtrArray* mime_types; /* char* */
 } SfeFileFilter;
 

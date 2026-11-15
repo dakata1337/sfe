@@ -79,9 +79,11 @@ sfe adds two pieces:
 - The request's title and button label; closing the request (the program
   gave up) closes sfe.
 - **File type filters** (`filters`, `current_filter`): a drop-down in the
-  bar; files that don't match are hidden (folders stay). Globs match
-  regardless of case; `image/*` matches every image type. The filter in
-  use is returned.
+  bar; files that don't match are hidden (folders stay). Globs are shell
+  patterns (`*.[pP][nN][gG]` works) and match regardless of case;
+  `image/*` matches every image type. A `current_filter` sent without a
+  list is the only filter (the program wants just those files), and one
+  missing from the list is added to it. The filter in use is returned.
 - **Choices**: the extra options some dialogs show (an encoding, "open
   read-only") as drop-downs and check boxes; their values are returned.
 - **The parent window** (`parent_window`): the dialog is attached to the

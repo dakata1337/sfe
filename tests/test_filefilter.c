@@ -21,6 +21,22 @@ static void test_parse_and_match(void)
     g_assert_true(sfe_file_filter_matches(text, "page", "text/html"));
     g_assert_false(sfe_file_filter_matches(text, "a.png", "image/png"));
     g_assert_true(sfe_file_filter_matches(all, "anything", NULL));
+    g_assert_true(sfe_file_filter_matches(all, ".hidden", NULL));
+}
+
+/* Character classes, as Chromium and the portal spec write any-case globs. */
+static void test_classes(void)
+{
+    g_autoptr(GPtrArray) filters = sfe_file_filters_parse(
+        "[('PNG', [(0, '*.[pP][nN][gG]')]), ('Logs', [(0, 'log-[0-9]*.txt')])]", NULL);
+    const SfeFileFilter* png = g_ptr_array_index(filters, 0);
+    const SfeFileFilter* logs = g_ptr_array_index(filters, 1);
+    g_assert_true(sfe_file_filter_matches(png, "a.png", NULL));
+    g_assert_true(sfe_file_filter_matches(png, "a.PnG", NULL));
+    g_assert_false(sfe_file_filter_matches(png, "a.pngx", NULL));
+    g_assert_false(sfe_file_filter_matches(png, "a.jpg", NULL));
+    g_assert_true(sfe_file_filter_matches(logs, "log-3.txt", NULL));
+    g_assert_false(sfe_file_filter_matches(logs, "log-x.txt", NULL));
 }
 
 static void test_errors(void)
@@ -36,6 +52,7 @@ int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/filefilter/parse-match", test_parse_and_match);
+    g_test_add_func("/filefilter/classes", test_classes);
     g_test_add_func("/filefilter/errors", test_errors);
     return g_test_run();
 }

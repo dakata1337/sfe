@@ -1,5 +1,7 @@
+#define _GNU_SOURCE /* FNM_CASEFOLD */
 #include "filefilter.h"
 
+#include <fnmatch.h>
 #include <gio/gio.h>
 #include <string.h>
 
@@ -27,14 +29,13 @@ GPtrArray* sfe_file_filters_parse(const char* text, GError** error)
     while (g_variant_iter_next(&iter, "(&sa(us))", &name, &rules)) {
         SfeFileFilter* f = g_new0(SfeFileFilter, 1);
         f->name = g_strdup(name);
-        f->globs = g_ptr_array_new_with_free_func((GDestroyNotify)g_pattern_spec_free);
+        f->globs = g_ptr_array_new_with_free_func(g_free);
         f->mime_types = g_ptr_array_new_with_free_func(g_free);
         guint32 kind;
         const char* rule;
         while (g_variant_iter_next(rules, "(u&s)", &kind, &rule)) {
             if (kind == 0) {
-                g_autofree char* lower = g_utf8_strdown(rule, -1);
-                g_ptr_array_add(f->globs, g_pattern_spec_new(lower));
+                g_ptr_array_add(f->globs, g_strdup(rule));
             } else {
                 g_ptr_array_add(f->mime_types, g_strdup(rule));
             }
@@ -57,12 +58,11 @@ static bool mime_matches(const char* pattern, const char* content_type)
 
 bool sfe_file_filter_matches(const SfeFileFilter* filter, const char* name, const char* content_type)
 {
-    if (filter->globs->len > 0 && name != NULL) {
-        g_autofree char* lower = g_utf8_strdown(name, -1);
-        for (guint i = 0; i < filter->globs->len; i++) {
-            if (g_pattern_spec_match_string(g_ptr_array_index(filter->globs, i), lower))
-                return true;
-        }
+    /* fnmatch, not GPatternSpec: programs send character classes
+     * ("*.[pP][nN][gG]", as the portal spec suggests for any case). */
+    for (guint i = 0; name != NULL && i < filter->globs->len; i++) {
+        if (fnmatch(g_ptr_array_index(filter->globs, i), name, FNM_CASEFOLD) == 0)
+            return true;
     }
     for (guint i = 0; content_type != NULL && i < filter->mime_types->len; i++) {
         if (mime_matches(g_ptr_array_index(filter->mime_types, i), content_type))
