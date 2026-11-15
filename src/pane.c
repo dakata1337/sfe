@@ -48,12 +48,19 @@ struct _SfePane {
     GtkCellRenderer* grid_text;
     GtkTreeViewColumn* columns[4]; /* indexed by SfeSortKey */
     gulong config_handler;
+
+    /* Visual mode: the selection is `visual_base` (chunks already drawn,
+     * as GFile*) plus the rows from `visual_anchor` to the cursor. */
+    bool visual;
+    GtkTreeRowReference* visual_anchor; /* NULL between chunks */
+    GHashTable* visual_base; /* GFile* set */
 };
 
 G_DEFINE_TYPE(SfePane, sfe_pane, GTK_TYPE_BOX)
 
 enum {
     SIGNAL_DIRECTORY_CHANGED,
+    SIGNAL_VISUAL_CHANGED,
     SIGNAL_SPLIT,
     SIGNAL_CLOSE,
     N_SIGNALS,
@@ -133,6 +140,7 @@ static void attach_model(SfePane* self)
 static void show_dir(SfePane* self, GFile* dir)
 {
     g_debug("pane: show %s", g_file_peek_path(dir));
+    sfe_pane_visual_end(self);
     g_set_object(&self->dir, dir);
     sfe_path_entry_set_dir(self->entry, dir);
     update_buttons(self);
@@ -271,6 +279,7 @@ static void update_search_count(SfePane* self)
 
 void sfe_pane_start_search(SfePane* self)
 {
+    sfe_pane_visual_end(self);
     if (!searching(self))
         g_set_object(&self->search_base, self->dir);
     sfe_search_bar_focus(self->search);
@@ -521,6 +530,7 @@ void sfe_pane_set_view(SfePane* self, SfeViewMode mode)
     GtkWidget* old = active_view(self);
     bool had_focus = gtk_widget_has_focus(old);
 
+    sfe_pane_visual_end(self);
     self->view = mode;
     attach_model(self);
     if (gtk_stack_get_visible_child(GTK_STACK(self->stack)) != self->message)
@@ -626,14 +636,25 @@ static void move_cursor(SfePane* self, GtkMovementStep step, int count, bool mod
     g_signal_emit_by_name(view, "move-cursor", step, count, FALSE, modify, &handled);
 }
 
+static void apply_visual(SfePane* self);
+
 void sfe_pane_move_cursor(SfePane* self, SfeCursorMove move)
 {
+    /* In visual mode the cursor moves alone; the selection follows it. */
+    bool visual = self->visual;
     switch (move) {
-    case SFE_CURSOR_DOWN: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, 1, false); break;
-    case SFE_CURSOR_UP: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, -1, false); break;
-    case SFE_CURSOR_FIRST: move_cursor(self, GTK_MOVEMENT_BUFFER_ENDS, -1, false); break;
-    case SFE_CURSOR_LAST: move_cursor(self, GTK_MOVEMENT_BUFFER_ENDS, 1, false); break;
+    case SFE_CURSOR_DOWN: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, 1, visual); break;
+    case SFE_CURSOR_UP: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, -1, visual); break;
+    case SFE_CURSOR_FIRST: move_cursor(self, GTK_MOVEMENT_BUFFER_ENDS, -1, visual); break;
+    case SFE_CURSOR_LAST: move_cursor(self, GTK_MOVEMENT_BUFFER_ENDS, 1, visual); break;
+    case SFE_CURSOR_PREVIOUS:
+    case SFE_CURSOR_NEXT:
+        move_cursor(self, self->view == SFE_VIEW_GRID ? GTK_MOVEMENT_VISUAL_POSITIONS : GTK_MOVEMENT_DISPLAY_LINES,
+            move == SFE_CURSOR_NEXT ? 1 : -1, visual);
+        break;
     }
+    if (visual)
+        apply_visual(self);
 }
 
 void sfe_pane_toggle_cursor_item(SfePane* self)
@@ -641,6 +662,17 @@ void sfe_pane_toggle_cursor_item(SfePane* self)
     GtkTreePath* path = highlighted(self);
     if (path == NULL)
         return;
+    if (self->visual) { /* in or out of the drawn chunks */
+        GFile* file = sfe_dir_model_file_at(self->model, path);
+        if (file != NULL && !g_hash_table_remove(self->visual_base, file))
+            g_hash_table_add(self->visual_base, g_object_ref(file));
+        g_clear_object(&file);
+        gtk_tree_path_free(path);
+        move_cursor(self, self->view == SFE_VIEW_GRID ? GTK_MOVEMENT_VISUAL_POSITIONS : GTK_MOVEMENT_DISPLAY_LINES, 1,
+            true);
+        apply_visual(self);
+        return;
+    }
     if (self->view == SFE_VIEW_GRID) {
         GtkIconView* grid = GTK_ICON_VIEW(self->grid);
         if (gtk_icon_view_path_is_selected(grid, path))
@@ -658,6 +690,166 @@ void sfe_pane_toggle_cursor_item(SfePane* self)
         move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, 1, true);
     }
     gtk_tree_path_free(path);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Visual mode                                                               */
+/* ------------------------------------------------------------------------ */
+
+bool sfe_pane_in_visual(SfePane* self)
+{
+    return self->visual;
+}
+
+bool sfe_pane_visual_drawing(SfePane* self)
+{
+    return self->visual && self->visual_anchor != NULL;
+}
+
+/* The anchor's row index, or -1 when no chunk is being drawn. */
+static int anchor_index(SfePane* self)
+{
+    if (self->visual_anchor == NULL)
+        return -1;
+    GtkTreePath* path = gtk_tree_row_reference_get_path(self->visual_anchor);
+    if (path == NULL /* the anchor's file went away */
+        || gtk_tree_row_reference_get_model(self->visual_anchor) != sfe_dir_model_get_model(self->model)) {
+        gtk_tree_path_free(path);
+        return -1;
+    }
+    int index = gtk_tree_path_get_indices(path)[0];
+    gtk_tree_path_free(path);
+    return index;
+}
+
+static void set_row_selected(SfePane* self, GtkTreePath* path, bool selected)
+{
+    if (self->view == SFE_VIEW_GRID) {
+        GtkIconView* grid = GTK_ICON_VIEW(self->grid);
+        if (gtk_icon_view_path_is_selected(grid, path) != selected)
+            (selected ? gtk_icon_view_select_path : gtk_icon_view_unselect_path)(grid, path);
+    } else {
+        GtkTreeSelection* selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list));
+        if (gtk_tree_selection_path_is_selected(selection, path) != selected)
+            (selected ? gtk_tree_selection_select_path : gtk_tree_selection_unselect_path)(selection, path);
+    }
+}
+
+/* Selects exactly the drawn chunks plus the rows between the anchor and the
+ * cursor. */
+static void apply_visual(SfePane* self)
+{
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    GtkTreeIter iter;
+    int lo = anchor_index(self), hi = lo;
+    GtkTreePath* cursor = highlighted(self);
+
+    if (lo < 0) {
+        g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
+    } else if (cursor != NULL) {
+        int c = gtk_tree_path_get_indices(cursor)[0];
+        lo = MIN(lo, c);
+        hi = MAX(hi, c);
+    }
+    if (model != NULL && gtk_tree_model_get_iter_first(model, &iter)) {
+        int i = 0;
+        do {
+            g_autoptr(GFile) file = NULL;
+            gtk_tree_model_get(model, &iter, SFE_COL_FILE, &file, -1);
+            bool selected = (i >= lo && i <= hi && lo >= 0)
+                || (file != NULL && g_hash_table_contains(self->visual_base, file));
+            GtkTreePath* path = gtk_tree_path_new_from_indices(i, -1);
+            set_row_selected(self, path, selected);
+            gtk_tree_path_free(path);
+            i++;
+        } while (gtk_tree_model_iter_next(model, &iter));
+    }
+    gtk_tree_path_free(cursor);
+    g_signal_emit(self, signals[SIGNAL_VISUAL_CHANGED], 0);
+}
+
+/* A new chunk starts at the cursor. */
+static void start_chunk(SfePane* self)
+{
+    GtkTreePath* cursor = highlighted(self);
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    if (cursor == NULL || model == NULL) {
+        gtk_tree_path_free(cursor);
+        return;
+    }
+    g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
+    self->visual_anchor = gtk_tree_row_reference_new(model, cursor);
+    /* make it the real cursor too (row 0 may only be the fallback) */
+    if (self->view == SFE_VIEW_GRID)
+        gtk_icon_view_set_cursor(GTK_ICON_VIEW(self->grid), cursor, NULL, FALSE);
+    else
+        gtk_tree_view_set_cursor(GTK_TREE_VIEW(self->list), cursor, NULL, FALSE);
+    gtk_tree_path_free(cursor);
+}
+
+/* The chunk being drawn joins the finished ones. */
+static void finish_chunk(SfePane* self)
+{
+    GList* files = sfe_pane_get_selected_files(self);
+    for (GList* l = files; l != NULL; l = l->next)
+        g_hash_table_add(self->visual_base, l->data); /* takes the reference */
+    g_list_free(files);
+    g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
+}
+
+void sfe_pane_visual_start(SfePane* self)
+{
+    if (self->visual || n_rows(self) == 0)
+        return;
+    self->visual = true;
+    g_hash_table_remove_all(self->visual_base);
+    gtk_widget_grab_focus(active_view(self));
+    start_chunk(self);
+    apply_visual(self);
+}
+
+void sfe_pane_visual_chunk(SfePane* self)
+{
+    if (!self->visual) {
+        sfe_pane_visual_start(self);
+        return;
+    }
+    if (self->visual_anchor != NULL && anchor_index(self) >= 0)
+        finish_chunk(self);
+    else
+        start_chunk(self);
+    apply_visual(self);
+}
+
+void sfe_pane_visual_swap(SfePane* self)
+{
+    int anchor = anchor_index(self);
+    GtkTreePath* cursor = highlighted(self);
+    if (anchor >= 0 && cursor != NULL) {
+        GtkTreePath* path = gtk_tree_path_new_from_indices(anchor, -1);
+        g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
+        self->visual_anchor = gtk_tree_row_reference_new(sfe_dir_model_get_model(self->model), cursor);
+        if (self->view == SFE_VIEW_GRID) {
+            gtk_icon_view_set_cursor(GTK_ICON_VIEW(self->grid), path, NULL, FALSE);
+            gtk_icon_view_scroll_to_path(GTK_ICON_VIEW(self->grid), path, FALSE, 0, 0);
+        } else {
+            /* set_cursor would select only this row; the selection is redone below */
+            gtk_tree_view_set_cursor(GTK_TREE_VIEW(self->list), path, NULL, FALSE);
+        }
+        gtk_tree_path_free(path);
+        apply_visual(self);
+    }
+    gtk_tree_path_free(cursor);
+}
+
+void sfe_pane_visual_end(SfePane* self)
+{
+    if (!self->visual)
+        return;
+    self->visual = false;
+    g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
+    g_hash_table_remove_all(self->visual_base);
+    g_signal_emit(self, signals[SIGNAL_VISUAL_CHANGED], 0);
 }
 
 /* Opens files in their applications; the first directory is opened here. */
@@ -745,6 +937,7 @@ static gboolean on_view_button_press(GtkWidget* view, GdkEventButton* event, gpo
 {
     SfePane* self = data;
 
+    sfe_pane_visual_end(self); /* the mouse takes over the selection */
     if (event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY)
         return FALSE;
     if (GTK_IS_TREE_VIEW(view) && event->window != gtk_tree_view_get_bin_window(GTK_TREE_VIEW(view)))
@@ -1049,10 +1242,12 @@ void sfe_pane_set_split_buttons(SfePane* self, bool vertical, bool horizontal, b
 void sfe_pane_set_active(SfePane* self, bool active)
 {
     GtkStyleContext* style = gtk_widget_get_style_context(GTK_WIDGET(self));
-    if (active)
+    if (active) {
         gtk_style_context_add_class(style, "sfe-active");
-    else
+    } else {
         gtk_style_context_remove_class(style, "sfe-active");
+        sfe_pane_visual_end(self);
+    }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -1074,6 +1269,8 @@ static void sfe_pane_dispose(GObject* object)
     g_clear_pointer(&self->history, sfe_history_free);
     g_clear_pointer(&self->select_after_load, g_free);
     g_clear_pointer(&self->reveal_name, g_free);
+    g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
+    g_clear_pointer(&self->visual_base, g_hash_table_unref);
     g_clear_object(&self->search_base);
     g_clear_object(&self->dir);
     G_OBJECT_CLASS(sfe_pane_parent_class)->dispose(object);
@@ -1086,6 +1283,9 @@ static void sfe_pane_class_init(SfePaneClass* klass)
     /* Emitted whenever the pane starts showing another directory. */
     signals[SIGNAL_DIRECTORY_CHANGED] = g_signal_new("directory-changed",
         G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    /* Visual mode started, ended or changed its selection. */
+    signals[SIGNAL_VISUAL_CHANGED] = g_signal_new("visual-changed",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
     /* The split / close buttons were clicked (argument: SfeSplitKind). */
     signals[SIGNAL_SPLIT] = g_signal_new("split",
         G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_INT);
@@ -1097,6 +1297,7 @@ static void sfe_pane_init(SfePane* self)
 {
     gtk_orientable_set_orientation(GTK_ORIENTABLE(self), GTK_ORIENTATION_VERTICAL);
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(self)), "sfe-pane");
+    self->visual_base = g_hash_table_new_full(g_file_hash, (GEqualFunc)g_file_equal, g_object_unref, NULL);
 
     self->history = sfe_history_new();
     self->model = sfe_dir_model_new();

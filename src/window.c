@@ -21,7 +21,9 @@ struct _SfeWindow {
     SfeOpsBar* ops_bar; /* running file operations */
     SfeCommandBar* cmdbar; /* the ":" command line */
     GtkWidget* showcmd; /* keys of a pending chord */
+    GtkWidget* mode; /* "VISUAL" while the active view is in visual mode */
     SfeKeymap* keymap; /* normal-mode keys: defaults + config [keys] */
+    SfeKeymap* visual_keymap; /* looked up first in visual mode: [keys.visual] */
     GPtrArray* pending; /* tokens of the chord typed so far */
     char* chord_command; /* run if the chord times out (it is also a prefix) */
     guint chord_timeout;
@@ -68,6 +70,8 @@ static void follow_active_pane(SfeWindow* win)
     sfe_sidebar_set_location(win->sidebar, sfe_pane_get_dir(sfe_window_get_active_pane(win)));
 }
 
+static void update_mode(SfeWindow* win);
+
 static void on_directory_changed(SfeSplit* split, SfePane* pane, gpointer data)
 {
     (void)split;
@@ -80,6 +84,7 @@ static void on_active_changed(SfeSplit* split, gpointer data)
 {
     (void)split;
     follow_active_pane(SFE_WINDOW(data));
+    update_mode(SFE_WINDOW(data));
 }
 
 static void on_set_focus(GtkWindow* window, GtkWidget* widget, gpointer data)
@@ -101,18 +106,43 @@ static void on_sidebar_open(SfeSidebar* sidebar, GFile* dir, int where, gpointer
     }
 }
 
-/* The default keys with config [keys] on top. */
+/* The default keys with config [keys] / [keys.visual] on top. */
 static void rebuild_keymap(SfeWindow* win)
 {
     sfe_keymap_free(win->keymap);
+    sfe_keymap_free(win->visual_keymap);
     win->keymap = sfe_keymap_new_default();
+    win->visual_keymap = sfe_keymap_new_visual_default();
     const SfeConfig* cfg = sfe_config();
     for (guint i = 0; i < cfg->keys->len; i++) {
         const SfeKeyOverride* k = g_ptr_array_index(cfg->keys, i);
         g_autoptr(GError) error = NULL;
-        if (!sfe_keymap_bind(win->keymap, k->sequence, k->command, &error))
+        if (!sfe_keymap_bind(k->visual ? win->visual_keymap : win->keymap, k->sequence, k->command, &error))
             g_warning("config [keys]: %s", error->message);
     }
+}
+
+/* "VISUAL" in the corner while the active view selects with v. */
+static void update_mode(SfeWindow* win)
+{
+    SfePane* pane = sfe_window_get_active_pane(win);
+    if (!sfe_pane_in_visual(pane)) {
+        gtk_widget_hide(win->mode);
+        return;
+    }
+    GList* files = sfe_pane_get_selected_files(pane);
+    guint n = g_list_length(files);
+    g_list_free_full(files, g_object_unref);
+    g_autofree char* text = g_strdup_printf("-- VISUAL --  %u selected%s", n,
+        sfe_pane_visual_drawing(pane) ? "" : "  (v starts a chunk)");
+    gtk_label_set_text(GTK_LABEL(win->mode), text);
+    gtk_widget_show(win->mode);
+}
+
+static void on_visual_changed(SfeSplit* split, SfePane* pane, gpointer data)
+{
+    (void)split, (void)pane;
+    update_mode(SFE_WINDOW(data));
 }
 
 static void apply_config(SfeWindow* win)
@@ -216,8 +246,12 @@ static bool normal_mode_key(SfeWindow* win, const GdkEventKey* event, GtkWidget*
     g_ptr_array_add(win->pending, g_steal_pointer(&token));
     const char* command = NULL;
     bool prefix = false;
-    SfeKeysResult result = sfe_keymap_lookup(win->keymap, (char* const*)win->pending->pdata, win->pending->len,
-        &command, &prefix);
+    char* const* keys = (char* const*)win->pending->pdata;
+    SfeKeysResult result = SFE_KEYS_NONE;
+    if (sfe_pane_in_visual(sfe_window_get_active_pane(win))) /* visual keys first */
+        result = sfe_keymap_lookup(win->visual_keymap, keys, win->pending->len, &command, &prefix);
+    if (result == SFE_KEYS_NONE)
+        result = sfe_keymap_lookup(win->keymap, keys, win->pending->len, &command, &prefix);
 
     if (result == SFE_KEYS_MATCH && !prefix) {
         g_autofree char* line = g_strdup(command);
@@ -306,6 +340,7 @@ static void sfe_window_dispose(GObject* object)
         drop_chord(win);
     g_clear_pointer(&win->pending, g_ptr_array_unref);
     g_clear_pointer(&win->keymap, sfe_keymap_free);
+    g_clear_pointer(&win->visual_keymap, sfe_keymap_free);
     G_OBJECT_CLASS(sfe_window_parent_class)->dispose(object);
 }
 
@@ -339,6 +374,7 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     win->split = sfe_split_new(dir);
     g_signal_connect(win->split, "directory-changed", G_CALLBACK(on_directory_changed), win);
     g_signal_connect(win->split, "active-changed", G_CALLBACK(on_active_changed), win);
+    g_signal_connect(win->split, "visual-changed", G_CALLBACK(on_visual_changed), win);
     g_signal_connect_after(win, "set-focus", G_CALLBACK(on_set_focus), win);
 
     win->ops_bar = SFE_OPS_BAR(sfe_ops_bar_new());
@@ -353,10 +389,17 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     gtk_widget_set_halign(win->showcmd, GTK_ALIGN_END);
     gtk_widget_set_valign(win->showcmd, GTK_ALIGN_END);
     gtk_widget_set_no_show_all(win->showcmd, TRUE);
+    win->mode = gtk_label_new(NULL);
+    gtk_style_context_add_class(gtk_widget_get_style_context(win->mode), "sfe-showcmd");
+    gtk_style_context_add_class(gtk_widget_get_style_context(win->mode), "sfe-mode");
+    gtk_widget_set_halign(win->mode, GTK_ALIGN_START);
+    gtk_widget_set_valign(win->mode, GTK_ALIGN_END);
+    gtk_widget_set_no_show_all(win->mode, TRUE);
     GtkWidget* overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(win->split));
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), GTK_WIDGET(win->cmdbar));
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->showcmd);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->mode);
 
     /* sidebar | (panes over the operations bar) */
     GtkWidget* content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);

@@ -31,10 +31,14 @@ typedef struct {
 
 /* The built-in bindings (n receives the count). */
 const SfeKeyBinding* sfe_keymap_defaults(size_t* n);
+/* The built-in visual-mode bindings, looked up before the ones above while
+ * a view is in visual mode ("y" yanks at once there instead of "yy"). */
+const SfeKeyBinding* sfe_keymap_visual_defaults(size_t* n);
 
 /* An empty keymap, or one with the defaults. */
 SfeKeymap* sfe_keymap_new(void);
 SfeKeymap* sfe_keymap_new_default(void);
+SfeKeymap* sfe_keymap_new_visual_default(void);
 void sfe_keymap_free(SfeKeymap* map);
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(SfeKeymap, sfe_keymap_free)
 

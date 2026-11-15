@@ -515,6 +515,8 @@ static bool run_cursor(Ctx* c, int argc, char** argv, GError** error)
         { "up", SFE_CURSOR_UP },
         { "first", SFE_CURSOR_FIRST },
         { "last", SFE_CURSOR_LAST },
+        { "previous", SFE_CURSOR_PREVIOUS },
+        { "next", SFE_CURSOR_NEXT },
     };
     for (size_t i = 0; argc == 2 && i < G_N_ELEMENTS(moves); i++) {
         if (strcmp(argv[1], moves[i].name) == 0) {
@@ -522,7 +524,7 @@ static bool run_cursor(Ctx* c, int argc, char** argv, GError** error)
             return true;
         }
     }
-    return fail(error, "usage: cursor down|up|first|last");
+    return fail(error, "usage: cursor down|up|first|last|previous|next");
 }
 
 static bool run_select(Ctx* c, int argc, char** argv, GError** error)
@@ -533,6 +535,19 @@ static bool run_select(Ctx* c, int argc, char** argv, GError** error)
         sfe_pane_select_all(c->pane);
     else
         return fail(error, "usage: select toggle|all");
+    return true;
+}
+
+static bool run_visual(Ctx* c, int argc, char** argv, GError** error)
+{
+    if (argc == 1)
+        sfe_pane_visual_chunk(c->pane);
+    else if (argc == 2 && strcmp(argv[1], "off") == 0)
+        sfe_pane_visual_end(c->pane);
+    else if (argc == 2 && strcmp(argv[1], "swap") == 0)
+        sfe_pane_visual_swap(c->pane);
+    else
+        return fail(error, "usage: visual [off|swap]");
     return true;
 }
 
@@ -772,8 +787,9 @@ static void complete_split(Ctx* c, int argi, char** argv, const char* query, con
 
 WORDS_COMPLETER(complete_on_off, "toggle", "on", "off")
 WORDS_COMPLETER(complete_view, "grid", "list")
-WORDS_COMPLETER(complete_cursor, "down", "up", "first", "last")
+WORDS_COMPLETER(complete_cursor, "down", "up", "first", "last", "previous", "next")
 WORDS_COMPLETER(complete_select, "toggle", "all")
+WORDS_COMPLETER(complete_visual, "off", "swap")
 
 /* ------------------------------------------------------------------------ */
 /* The table                                                                 */
@@ -802,8 +818,9 @@ static const Command commands[] = {
     { { "hidden", NULL, "on|off|toggle", "show or hide hidden files" }, complete_on_off, run_hidden },
     { { "view", NULL, "grid|list", "the active view's layout" }, complete_view, run_view },
     { { "q", "quit", "", "close the active view (the window if it is the last)" }, NULL, run_q },
-    { { "cursor", NULL, "down|up|first|last", "move the cursor" }, complete_cursor, run_cursor },
+    { { "cursor", NULL, "down|up|first|last|previous|next", "move the cursor" }, complete_cursor, run_cursor },
     { { "select", NULL, "toggle|all", "toggle the item under the cursor / select all" }, complete_select, run_select },
+    { { "visual", NULL, "[off|swap]", "visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end" }, complete_visual, run_visual },
     { { "command_line", NULL, "", "open the command line" }, NULL, run_command_line },
 };
 
@@ -815,6 +832,16 @@ const SfeCommandInfo* sfe_commands_info(size_t* n)
         infos[i] = commands[i].info;
     *n = G_N_ELEMENTS(commands);
     return infos;
+}
+
+static bool stays_visual(const Command* cmd)
+{
+    static const char* const keep[] = { "cursor", "select", "visual", "split" };
+    for (size_t i = 0; cmd != NULL && i < G_N_ELEMENTS(keep); i++) {
+        if (strcmp(cmd->info.name, keep[i]) == 0)
+            return true;
+    }
+    return false;
 }
 
 static const Command* find_command(const char* name)
@@ -845,14 +872,22 @@ bool sfe_command_run(SfeWindow* window, const char* line, GError** error)
 
     Ctx c = context(window);
     const Command* cmd = find_command(argv[0]);
-    if (cmd != NULL)
-        return cmd->run(&c, argc, argv, error);
-    if (find_action(argv[0]) != NULL) {
+    g_autoptr(SfePane) pane = g_object_ref(c.pane); /* the command may close it */
+    bool ok;
+    if (cmd != NULL) {
+        ok = cmd->run(&c, argc, argv, error);
+    } else if (find_action(argv[0]) != NULL) {
         if (argc > 1)
             return fail(error, "%s takes no arguments", argv[0]);
-        return run_action(&c, argv[0], NULL, error);
+        ok = run_action(&c, argv[0], NULL, error);
+    } else {
+        return fail(error, "unknown command: %s", argv[0]);
     }
-    return fail(error, "unknown command: %s", argv[0]);
+    /* Visual mode is for building a selection; any command that acts on it
+     * (yank, trash, :copy ...) ends it, keeping the selection. */
+    if (ok && !stays_visual(cmd) && sfe_window_get_active_pane(window) == pane)
+        sfe_pane_visual_end(pane);
+    return ok;
 }
 
 /* Command names: the ones above, then the actions not covered by them. */

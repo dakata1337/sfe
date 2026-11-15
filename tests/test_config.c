@@ -148,6 +148,30 @@ static void test_keys(void)
     g_assert_cmpuint(back->problems->len, ==, 0);
 }
 
+/* [keys.visual]: its own bindings; the same key may differ from [keys]. */
+static void test_visual_keys(void)
+{
+    g_autoptr(SfeConfig) cfg = parse(
+        "[keys]\n"
+        "y = \"open\"\n"
+        "[keys.visual]\n"
+        "y = \"cut\"\n");
+    g_assert_cmpuint(cfg->keys->len, ==, 2);
+    g_assert_cmpuint(cfg->problems->len, ==, 0);
+    SfeKeyOverride* normal = g_ptr_array_index(cfg->keys, 0);
+    SfeKeyOverride* visual = g_ptr_array_index(cfg->keys, 1);
+    g_assert_false(normal->visual);
+    g_assert_true(visual->visual);
+    g_assert_cmpstr(visual->command, ==, "cut");
+
+    g_autofree char* text = sfe_config_to_string(cfg);
+    g_assert_nonnull(strstr(text, "[keys.visual]"));
+    g_autoptr(SfeConfig) back = parse(text);
+    g_assert_cmpuint(back->keys->len, ==, 2);
+    g_assert_cmpuint(back->problems->len, ==, 0);
+    g_assert_true(((SfeKeyOverride*)g_ptr_array_index(back->keys, 1))->visual);
+}
+
 static void test_syntax_error(void)
 {
     g_autoptr(GError) error = NULL;
@@ -211,6 +235,7 @@ int main(int argc, char** argv)
     g_test_add_func("/config/invalid-values", test_invalid_values_keep_defaults);
     g_test_add_func("/config/old-style-actions", test_old_style_actions);
     g_test_add_func("/config/keys", test_keys);
+    g_test_add_func("/config/visual-keys", test_visual_keys);
     g_test_add_func("/config/syntax-error", test_syntax_error);
     g_test_add_func("/config/missing-file", test_missing_file_gives_defaults);
     g_test_add_func("/config/save-and-load", test_save_and_load);

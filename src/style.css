@@ -637,3 +637,9 @@ menu.sfe-menu {
     margin: 10px;
     font-family: monospace;
 }
+
+/* "-- VISUAL --" while selecting with v. */
+.sfe-window .sfe-mode {
+    color: @sfe_accent;
+    font-weight: bold;
+}

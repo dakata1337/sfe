@@ -63,6 +63,8 @@ typedef enum {
     SFE_CURSOR_UP,
     SFE_CURSOR_FIRST,
     SFE_CURSOR_LAST,
+    SFE_CURSOR_PREVIOUS, /* the item before / after (in a grid: on the same row) */
+    SFE_CURSOR_NEXT,
 } SfeCursorMove;
 
 /* Moves the cursor like the arrow keys / Home / End (selecting the item it
@@ -72,6 +74,24 @@ void sfe_pane_move_cursor(SfePane* self, SfeCursorMove move);
 /* Toggles the selection of the item under the cursor and moves the cursor
  * to the next item without touching the selection. */
 void sfe_pane_toggle_cursor_item(SfePane* self);
+
+/* Visual mode (v): the cursor moves without touching the selection and a
+ * "chunk" of rows from an anchor to the cursor is selected, like a
+ * Shift+click range. Ending a chunk keeps it and lets the cursor move
+ * freely to start the next one, so several chunks add up like Ctrl+clicks.
+ * Leaving visual mode never changes the selection; going to another folder,
+ * switching the view, searching, clicking or another view becoming active
+ * leave it. Emits "visual-changed". */
+void sfe_pane_visual_start(SfePane* self);
+/* Ends the chunk being drawn, or starts a new one at the cursor (enters
+ * visual mode if needed). */
+void sfe_pane_visual_chunk(SfePane* self);
+/* The cursor jumps to the other end of the chunk (vim's "o"). */
+void sfe_pane_visual_swap(SfePane* self);
+void sfe_pane_visual_end(SfePane* self);
+bool sfe_pane_in_visual(SfePane* self);
+/* Whether a chunk is being drawn (rather than moving between chunks). */
+bool sfe_pane_visual_drawing(SfePane* self);
 
 /* Opens files like double-clicking them (directories open in this pane). */
 void sfe_pane_open_files(SfePane* self, GList* files);

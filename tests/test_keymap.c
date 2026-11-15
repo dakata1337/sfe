@@ -120,6 +120,23 @@ static void test_defaults(void)
         g_assert_nonnull(tokens);
         g_assert_nonnull(d[i].help);
     }
+
+    /* Visual mode: "y" yanks at once (no "yy" prefix there), Esc leaves. */
+    g_autoptr(SfeKeymap) visual = sfe_keymap_new_visual_default();
+    const char* command = NULL;
+    bool prefix = true;
+    char* y[] = { "y" };
+    g_assert_cmpint(sfe_keymap_lookup(visual, y, 1, &command, &prefix), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "copy_clipboard");
+    g_assert_false(prefix);
+    char* esc[] = { "Esc" };
+    g_assert_cmpint(sfe_keymap_lookup(visual, esc, 1, &command, &prefix), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "visual off");
+    char* g[] = { "g" }; /* "gg" comes from the normal keys */
+    g_assert_cmpint(sfe_keymap_lookup(visual, g, 1, &command, &prefix), ==, SFE_KEYS_NONE);
+    d = sfe_keymap_visual_defaults(&n);
+    for (size_t i = 0; i < n; i++)
+        g_assert_nonnull(d[i].help);
 }
 
 int main(int argc, char** argv)

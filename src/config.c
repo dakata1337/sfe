@@ -85,11 +85,11 @@ static void key_override_free(gpointer p)
     g_free(k);
 }
 
-void sfe_config_add_key(SfeConfig* cfg, const char* sequence, const char* command)
+void sfe_config_add_key(SfeConfig* cfg, const char* sequence, const char* command, bool visual)
 {
     for (guint i = 0; i < cfg->keys->len; i++) { /* the last one wins */
         SfeKeyOverride* k = g_ptr_array_index(cfg->keys, i);
-        if (strcmp(k->sequence, sequence) == 0) {
+        if (strcmp(k->sequence, sequence) == 0 && k->visual == visual) {
             g_ptr_array_remove_index(cfg->keys, i);
             break;
         }
@@ -97,6 +97,7 @@ void sfe_config_add_key(SfeConfig* cfg, const char* sequence, const char* comman
     SfeKeyOverride* k = g_new0(SfeKeyOverride, 1);
     k->sequence = g_strdup(sequence);
     k->command = g_strdup(command);
+    k->visual = visual;
     g_ptr_array_add(cfg->keys, k);
 }
 
@@ -266,22 +267,28 @@ static void read_open_table(SfeConfig* cfg, toml_datum_t tab)
     }
 }
 
-static void read_keys(SfeConfig* cfg, toml_datum_t tab)
+/* [keys], and [keys.visual] inside it (`visual`). */
+static void read_keys(SfeConfig* cfg, toml_datum_t tab, bool visual)
 {
+    const char* section = visual ? "keys.visual" : "keys";
     for (int i = 0; i < tab.u.tab.size; i++) {
         toml_datum_t v = tab.u.tab.value[i];
         g_autofree char* sequence = g_strndup(tab.u.tab.key[i], tab.u.tab.len[i]);
+        if (!visual && v.type == TOML_TABLE && strcmp(sequence, "visual") == 0) {
+            read_keys(cfg, v, true);
+            continue;
+        }
         if (v.type != TOML_STRING) {
-            problem(cfg, "line %d: keys.\"%s\" must be a command (a string)", v.lineno, sequence);
+            problem(cfg, "line %d: %s.\"%s\" must be a command (a string)", v.lineno, section, sequence);
             continue;
         }
         g_autoptr(GError) error = NULL;
         g_auto(GStrv) tokens = sfe_keymap_parse(sequence, &error);
         if (tokens == NULL) {
-            problem(cfg, "line %d: keys: %s", v.lineno, error->message);
+            problem(cfg, "line %d: %s: %s", v.lineno, section, error->message);
             continue;
         }
-        sfe_config_add_key(cfg, sequence, v.u.s);
+        sfe_config_add_key(cfg, sequence, v.u.s, visual);
     }
 }
 
@@ -385,7 +392,7 @@ SfeConfig* sfe_config_parse(const char* text, gsize len, GError** error)
         else if (strcmp(name, "actions") == 0)
             read_actions(cfg, v);
         else if (strcmp(name, "keys") == 0 && v.type == TOML_TABLE)
-            read_keys(cfg, v);
+            read_keys(cfg, v, false);
         else if (is_scalar_section(name) && v.type == TOML_TABLE)
             read_section(cfg, name, v);
         else
@@ -517,12 +524,20 @@ static void append_keys(GString* out, const SfeConfig* cfg)
         "# An empty command removes a default binding.\n"
         "# \"<C-w>v\" = \"split vertical\"\n"
         "# \"x\" = \"\"\n");
-    for (guint i = 0; i < cfg->keys->len; i++) {
-        const SfeKeyOverride* k = g_ptr_array_index(cfg->keys, i);
-        append_string(out, k->sequence);
-        g_string_append(out, " = ");
-        append_string(out, k->command);
-        g_string_append_c(out, '\n');
+    bool any_visual = false;
+    for (int visual = 0; visual <= 1; visual++) {
+        if (visual && any_visual)
+            g_string_append(out, "\n[keys.visual]\n# Visual mode, looked up before [keys] while selecting with v.\n");
+        for (guint i = 0; i < cfg->keys->len; i++) {
+            const SfeKeyOverride* k = g_ptr_array_index(cfg->keys, i);
+            any_visual |= k->visual;
+            if (k->visual != visual)
+                continue;
+            append_string(out, k->sequence);
+            g_string_append(out, " = ");
+            append_string(out, k->command);
+            g_string_append_c(out, '\n');
+        }
     }
     g_string_append_c(out, '\n');
 }

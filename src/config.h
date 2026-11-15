@@ -35,6 +35,7 @@ typedef enum {
 typedef struct {
     char* sequence;
     char* command;
+    bool visual; /* from [keys.visual] */
 } SfeKeyOverride;
 
 /* A user-defined command shown in the context menu. The same name may be
@@ -131,6 +132,6 @@ char* sfe_config_to_string(const SfeConfig* cfg);
 /* Writes atomically, creating parent directories as needed. */
 bool sfe_config_save(const SfeConfig* cfg, const char* path, GError** error);
 
-void sfe_config_add_key(SfeConfig* cfg, const char* sequence, const char* command);
+void sfe_config_add_key(SfeConfig* cfg, const char* sequence, const char* command, bool visual);
 
 void sfe_config_add_user_action(SfeConfig* cfg, const char* name, const char* command, unsigned applies_to);

@@ -25,6 +25,7 @@ static const SfeKeyBinding defaults[] = {
     { "r", "rename", "rename" },
     { "R", "mass_rename", "rename with a pattern" },
     { "zh", "hidden toggle", "show / hide hidden files" },
+    { "v", "visual", "visual mode (select chunks with j / k)" },
     { "/", "search", "fuzzy search" },
     { ":", "command_line", "command line" },
     { "<C-w>v", "split vertical", "split side by side" },
@@ -41,10 +42,27 @@ static const SfeKeyBinding defaults[] = {
     { "<C-L>", "split move right", "swap with the view on the right" },
 };
 
+/* Visual mode: these first, then the keys above. */
+static const SfeKeyBinding visual_defaults[] = {
+    { "v", "visual", "end the chunk / start a new one at the cursor" },
+    { "o", "visual swap", "jump to the other end of the chunk" },
+    { "h", "cursor previous", "the item before (in a grid: to the left)" },
+    { "l", "cursor next", "the item after (in a grid: to the right)" },
+    { "<Esc>", "visual off", "leave visual mode (the selection stays)" },
+    { "y", "copy_clipboard", "copy the selection to the clipboard" },
+    { "d", "cut", "cut the selection" },
+};
+
 const SfeKeyBinding* sfe_keymap_defaults(size_t* n)
 {
     *n = G_N_ELEMENTS(defaults);
     return defaults;
+}
+
+const SfeKeyBinding* sfe_keymap_visual_defaults(size_t* n)
+{
+    *n = G_N_ELEMENTS(visual_defaults);
+    return visual_defaults;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -225,14 +243,24 @@ SfeKeymap* sfe_keymap_new(void)
     return map;
 }
 
-SfeKeymap* sfe_keymap_new_default(void)
+static SfeKeymap* new_from(const SfeKeyBinding* table, size_t n)
 {
     SfeKeymap* map = sfe_keymap_new();
-    for (size_t i = 0; i < G_N_ELEMENTS(defaults); i++) {
-        bool ok = sfe_keymap_bind(map, defaults[i].sequence, defaults[i].command, NULL);
+    for (size_t i = 0; i < n; i++) {
+        bool ok = sfe_keymap_bind(map, table[i].sequence, table[i].command, NULL);
         g_assert(ok);
     }
     return map;
+}
+
+SfeKeymap* sfe_keymap_new_default(void)
+{
+    return new_from(defaults, G_N_ELEMENTS(defaults));
+}
+
+SfeKeymap* sfe_keymap_new_visual_default(void)
+{
+    return new_from(visual_defaults, G_N_ELEMENTS(visual_defaults));
 }
 
 void sfe_keymap_free(SfeKeymap* map)
