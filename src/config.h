@@ -30,6 +30,13 @@ typedef enum {
     SFE_ACTION_ANY = SFE_ACTION_FILES | SFE_ACTION_DIRECTORIES, /* old-style [[actions]] */
 } SfeActionKind;
 
+/* A normal-mode key binding from [keys] ("<C-w>v" = "split vertical"); an
+ * empty command removes a default binding. */
+typedef struct {
+    char* sequence;
+    char* command;
+} SfeKeyOverride;
+
 /* A user-defined command shown in the context menu. The same name may be
  * defined once for files and once for directories with different commands. */
 typedef struct {
@@ -63,6 +70,9 @@ typedef struct {
 
     /* [[actions]] */
     GPtrArray* actions; /* SfeUserAction* */
+
+    /* [keys], in file order */
+    GPtrArray* keys; /* SfeKeyOverride* */
 
     /* What parsing skipped, "line 3: unknown option general.foo" (char*). */
     GPtrArray* problems;
@@ -120,5 +130,7 @@ char* sfe_config_to_string(const SfeConfig* cfg);
 
 /* Writes atomically, creating parent directories as needed. */
 bool sfe_config_save(const SfeConfig* cfg, const char* path, GError** error);
+
+void sfe_config_add_key(SfeConfig* cfg, const char* sequence, const char* command);
 
 void sfe_config_add_user_action(SfeConfig* cfg, const char* name, const char* command, unsigned applies_to);

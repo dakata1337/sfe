@@ -41,3 +41,13 @@ test_trash = executable('test-trash', 'test_trash.c',
   dependencies: core_dep,
 )
 test('trash', test_trash)
+
+test_keymap = executable('test-keymap', 'test_keymap.c',
+  dependencies: core_dep,
+)
+test('keymap', test_keymap)
+
+test_cmdline = executable('test-cmdline', 'test_cmdline.c',
+  dependencies: core_dep,
+)
+test('cmdline', test_cmdline)

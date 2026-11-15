@@ -76,6 +76,29 @@ static void user_action_free(gpointer p)
     g_free(a);
 }
 
+static void key_override_free(gpointer p)
+{
+    SfeKeyOverride* k = p;
+    g_free(k->sequence);
+    g_free(k->command);
+    g_free(k);
+}
+
+void sfe_config_add_key(SfeConfig* cfg, const char* sequence, const char* command)
+{
+    for (guint i = 0; i < cfg->keys->len; i++) { /* the last one wins */
+        SfeKeyOverride* k = g_ptr_array_index(cfg->keys, i);
+        if (strcmp(k->sequence, sequence) == 0) {
+            g_ptr_array_remove_index(cfg->keys, i);
+            break;
+        }
+    }
+    SfeKeyOverride* k = g_new0(SfeKeyOverride, 1);
+    k->sequence = g_strdup(sequence);
+    k->command = g_strdup(command);
+    g_ptr_array_add(cfg->keys, k);
+}
+
 SfeConfig* sfe_config_new(void)
 {
     SfeConfig* cfg = g_new0(SfeConfig, 1);
@@ -98,6 +121,7 @@ SfeConfig* sfe_config_new(void)
 
     cfg->open_with = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     cfg->actions = g_ptr_array_new_with_free_func(user_action_free);
+    cfg->keys = g_ptr_array_new_with_free_func(key_override_free);
     cfg->problems = g_ptr_array_new_with_free_func(g_free);
     return cfg;
 }
@@ -113,6 +137,7 @@ void sfe_config_free(SfeConfig* cfg)
     g_ptr_array_unref(cfg->bookmarks);
     g_hash_table_unref(cfg->open_with);
     g_ptr_array_unref(cfg->actions);
+    g_ptr_array_unref(cfg->keys);
     g_ptr_array_unref(cfg->problems);
     g_free(cfg);
 }
@@ -240,6 +265,19 @@ static void read_open_table(SfeConfig* cfg, toml_datum_t tab)
     }
 }
 
+static void read_keys(SfeConfig* cfg, toml_datum_t tab)
+{
+    for (int i = 0; i < tab.u.tab.size; i++) {
+        toml_datum_t v = tab.u.tab.value[i];
+        g_autofree char* sequence = g_strndup(tab.u.tab.key[i], tab.u.tab.len[i]);
+        if (v.type != TOML_STRING) {
+            problem(cfg, "line %d: keys.\"%s\" must be a command (a string)", v.lineno, sequence);
+            continue;
+        }
+        sfe_config_add_key(cfg, sequence, v.u.s);
+    }
+}
+
 static void read_bookmarks(SfeConfig* cfg, toml_datum_t arr)
 {
     if (arr.type != TOML_ARRAY) {
@@ -339,6 +377,8 @@ SfeConfig* sfe_config_parse(const char* text, gsize len, GError** error)
             read_open_table(cfg, v);
         else if (strcmp(name, "actions") == 0)
             read_actions(cfg, v);
+        else if (strcmp(name, "keys") == 0 && v.type == TOML_TABLE)
+            read_keys(cfg, v);
         else if (is_scalar_section(name) && v.type == TOML_TABLE)
             read_section(cfg, name, v);
         else
@@ -462,6 +502,24 @@ static void append_open_table(GString* out, const SfeConfig* cfg)
     g_string_append_c(out, '\n');
 }
 
+static void append_keys(GString* out, const SfeConfig* cfg)
+{
+    g_string_append(out,
+        "[keys]\n"
+        "# Normal-mode keys (see the user guide): a key sequence = a command line.\n"
+        "# An empty command removes a default binding.\n"
+        "# \"<C-w>v\" = \"split vertical\"\n"
+        "# \"x\" = \"\"\n");
+    for (guint i = 0; i < cfg->keys->len; i++) {
+        const SfeKeyOverride* k = g_ptr_array_index(cfg->keys, i);
+        append_string(out, k->sequence);
+        g_string_append(out, " = ");
+        append_string(out, k->command);
+        g_string_append_c(out, '\n');
+    }
+    g_string_append_c(out, '\n');
+}
+
 static void append_action_group(GString* out, const SfeConfig* cfg, unsigned kind, const char* table)
 {
     for (guint i = 0; i < cfg->actions->len; i++) {
@@ -504,6 +562,7 @@ char* sfe_config_to_string(const SfeConfig* cfg)
             append_bookmarks(out, cfg);
     }
     append_open_table(out, cfg);
+    append_keys(out, cfg);
     append_actions(out, cfg);
     return g_string_free(out, FALSE);
 }

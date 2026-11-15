@@ -1,0 +1,134 @@
+#include "keymap.h"
+
+#include <string.h>
+
+static void assert_tokens(const char* sequence, const char* expected)
+{
+    g_autoptr(GError) error = NULL;
+    g_auto(GStrv) tokens = sfe_keymap_parse(sequence, &error);
+    g_assert_no_error(error);
+    g_autofree char* joined = g_strjoinv(" ", tokens);
+    g_assert_cmpstr(joined, ==, expected);
+}
+
+static void test_parse(void)
+{
+    assert_tokens("j", "j");
+    assert_tokens("gg", "g g");
+    assert_tokens("<C-w>v", "C-w v");
+    assert_tokens("<c-W>", "C-W");
+    assert_tokens("<S-h>", "H"); /* shift + letter = capital */
+    assert_tokens("<C-S-h>", "C-H");
+    assert_tokens("<C-H>", "C-H");
+    assert_tokens("<Space>", "Space");
+    assert_tokens("<space>", "Space");
+    assert_tokens("<CR><Esc><BS>", "CR Esc BS");
+    assert_tokens("<S-Tab>", "S-Tab"); /* named keys keep shift */
+    assert_tokens("<A-x>", "A-x");
+    assert_tokens("<f5>", "F5");
+    assert_tokens("<lt>", "<");
+    assert_tokens("<S-:>", ":"); /* implied by the character */
+    assert_tokens("<", "<"); /* no closing bracket: a plain character */
+    assert_tokens("é", "é");
+
+    g_autoptr(GError) error = NULL;
+    g_assert_null(sfe_keymap_parse("<C-nope>", &error));
+    g_assert_nonnull(error);
+    g_clear_error(&error);
+    g_assert_null(sfe_keymap_parse("", &error));
+}
+
+static void test_token_and_format(void)
+{
+    /* What the window produces from key events. */
+    g_autofree char* a = sfe_keymap_token("h", false, false, true);
+    g_assert_cmpstr(a, ==, "H");
+    g_autofree char* b = sfe_keymap_token("H", true, false, true); /* Ctrl+Shift+h */
+    g_assert_cmpstr(b, ==, "C-H");
+    g_autofree char* c = sfe_keymap_token(" ", false, false, false);
+    g_assert_cmpstr(c, ==, "Space");
+    g_autofree char* d = sfe_keymap_token("Tab", false, false, true);
+    g_assert_cmpstr(d, ==, "S-Tab");
+    g_assert_null(sfe_keymap_token("Shift_L", false, false, true));
+
+    char* tokens[] = { "C-w", "v", "Space", "<" };
+    g_autofree char* text = sfe_keymap_format(tokens, 4);
+    g_assert_cmpstr(text, ==, "<C-w>v<Space><lt>");
+}
+
+static SfeKeysResult lookup(SfeKeymap* map, const char* sequence, const char** command, bool* prefix)
+{
+    g_auto(GStrv) tokens = sfe_keymap_parse(sequence, NULL);
+    return sfe_keymap_lookup(map, tokens, g_strv_length(tokens), command, prefix);
+}
+
+static void test_lookup(void)
+{
+    g_autoptr(SfeKeymap) map = sfe_keymap_new_default();
+    const char* command = NULL;
+    bool prefix = false;
+
+    g_assert_cmpint(lookup(map, "j", &command, &prefix), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "cursor down");
+    g_assert_false(prefix);
+
+    g_assert_cmpint(lookup(map, "g", &command, &prefix), ==, SFE_KEYS_PREFIX);
+    g_assert_null(command);
+    g_assert_cmpint(lookup(map, "gg", &command, NULL), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "cursor first");
+    g_assert_cmpint(lookup(map, "<C-w>", NULL, NULL), ==, SFE_KEYS_PREFIX);
+    g_assert_cmpint(lookup(map, "<C-w>v", &command, NULL), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "split vertical");
+    g_assert_cmpint(lookup(map, "<C-w>x", NULL, NULL), ==, SFE_KEYS_NONE);
+    g_assert_cmpint(lookup(map, "<S-h>", &command, NULL), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "split left");
+    g_assert_cmpint(lookup(map, "<C-S-l>", &command, NULL), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "split move right");
+    g_assert_cmpint(lookup(map, "q", NULL, NULL), ==, SFE_KEYS_NONE);
+}
+
+/* Config [keys]: rebind, unbind, and a binding that is also a prefix. */
+static void test_overrides(void)
+{
+    g_autoptr(SfeKeymap) map = sfe_keymap_new_default();
+    const char* command = NULL;
+    bool prefix = false;
+
+    g_assert_true(sfe_keymap_bind(map, "j", "cursor up", NULL));
+    lookup(map, "j", &command, NULL);
+    g_assert_cmpstr(command, ==, "cursor up");
+
+    g_assert_true(sfe_keymap_bind(map, "x", "", NULL));
+    g_assert_cmpint(lookup(map, "x", NULL, NULL), ==, SFE_KEYS_NONE);
+
+    g_assert_true(sfe_keymap_bind(map, "g", "cd ~", NULL));
+    g_assert_cmpint(lookup(map, "g", &command, &prefix), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "cd ~");
+    g_assert_true(prefix); /* "gg" and "gh" still start with it */
+
+    g_assert_false(sfe_keymap_bind(map, "<C-bogus>", "x", NULL));
+}
+
+/* Every default binding parses (the default keymap asserts on it). */
+static void test_defaults(void)
+{
+    size_t n = 0;
+    const SfeKeyBinding* d = sfe_keymap_defaults(&n);
+    g_assert_cmpuint(n, >, 20);
+    for (size_t i = 0; i < n; i++) {
+        g_auto(GStrv) tokens = sfe_keymap_parse(d[i].sequence, NULL);
+        g_assert_nonnull(tokens);
+        g_assert_nonnull(d[i].help);
+    }
+}
+
+int main(int argc, char** argv)
+{
+    g_test_init(&argc, &argv, NULL);
+    g_test_add_func("/keymap/parse", test_parse);
+    g_test_add_func("/keymap/token-format", test_token_and_format);
+    g_test_add_func("/keymap/lookup", test_lookup);
+    g_test_add_func("/keymap/overrides", test_overrides);
+    g_test_add_func("/keymap/defaults", test_defaults);
+    return g_test_run();
+}

@@ -114,6 +114,39 @@ static void test_old_style_actions(void)
     g_assert_nonnull(strstr(text, "[[actions.directories]]"));
 }
 
+/* [keys]: kept in order, saved and read back; non-strings are problems. */
+static void test_keys(void)
+{
+    if (g_test_subprocess()) {
+        g_log_set_always_fatal(G_LOG_FATAL_MASK);
+        g_autoptr(SfeConfig) bad = parse("[keys]\nq = 3\n");
+        g_assert_cmpuint(bad->keys->len, ==, 0);
+        g_assert_cmpuint(bad->problems->len, ==, 1);
+        return;
+    }
+    g_test_trap_subprocess(NULL, 0, G_TEST_SUBPROCESS_DEFAULT);
+    g_test_trap_assert_passed();
+    g_test_trap_assert_stderr("*keys.\"q\" must be a command*");
+
+    g_autoptr(SfeConfig) cfg = parse(
+        "[keys]\n"
+        "\"<C-w>v\" = \"split vertical\"\n"
+        "x = \"\"\n");
+    g_assert_cmpuint(cfg->keys->len, ==, 2);
+    SfeKeyOverride* first = g_ptr_array_index(cfg->keys, 0);
+    g_assert_cmpstr(first->sequence, ==, "<C-w>v");
+    g_assert_cmpstr(first->command, ==, "split vertical");
+    SfeKeyOverride* unbind = g_ptr_array_index(cfg->keys, 1);
+    g_assert_cmpstr(unbind->command, ==, "");
+
+    g_autofree char* text = sfe_config_to_string(cfg);
+    g_autoptr(SfeConfig) back = parse(text);
+    g_assert_cmpuint(back->keys->len, ==, 2);
+    SfeKeyOverride* again = g_ptr_array_index(back->keys, 0);
+    g_assert_cmpstr(again->sequence, ==, "<C-w>v");
+    g_assert_cmpuint(back->problems->len, ==, 0);
+}
+
 static void test_syntax_error(void)
 {
     g_autoptr(GError) error = NULL;
@@ -176,6 +209,7 @@ int main(int argc, char** argv)
     g_test_add_func("/config/values-round-trip", test_values_round_trip);
     g_test_add_func("/config/invalid-values", test_invalid_values_keep_defaults);
     g_test_add_func("/config/old-style-actions", test_old_style_actions);
+    g_test_add_func("/config/keys", test_keys);
     g_test_add_func("/config/syntax-error", test_syntax_error);
     g_test_add_func("/config/missing-file", test_missing_file_gives_defaults);
     g_test_add_func("/config/save-and-load", test_save_and_load);
