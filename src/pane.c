@@ -47,6 +47,7 @@ struct _SfePane {
     GtkWidget* grid; /* GtkIconView */
     GtkWidget* list; /* GtkTreeView */
     GtkWidget* message; /* GtkLabel for errors */
+    GtkWidget* message_box; /* holds it; takes the focus so the pane can be active */
     GtkCellRenderer* grid_text;
     GtkTreeViewColumn* columns[4]; /* indexed by SfeSortKey */
     gulong config_handler;
@@ -84,10 +85,31 @@ static GtkWidget* active_view(SfePane* self)
     return self->view == SFE_VIEW_GRID ? self->grid : self->list;
 }
 
+static bool focus_inside(SfePane* self)
+{
+    GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(self));
+    GtkWidget* focus = GTK_IS_WINDOW(toplevel) ? gtk_window_get_focus(GTK_WINDOW(toplevel)) : NULL;
+    return focus != NULL && gtk_widget_is_ancestor(focus, GTK_WIDGET(self));
+}
+
+/* An error in place of the files ("Cannot open this folder"). The message
+ * takes the focus the files had: a pane must stay focusable to be active
+ * (keys, clicks, closing it), even in a folder it cannot read. */
 static void show_message(SfePane* self, const char* text)
 {
+    GtkWidget* view = active_view(self);
+    bool had_focus = gtk_widget_has_focus(view) || focus_inside(self);
     gtk_label_set_text(GTK_LABEL(self->message), text);
-    gtk_stack_set_visible_child(GTK_STACK(self->stack), self->message);
+    gtk_stack_set_visible_child(GTK_STACK(self->stack), self->message_box);
+    if (had_focus || gtk_style_context_has_class(gtk_widget_get_style_context(GTK_WIDGET(self)), "sfe-active"))
+        gtk_widget_grab_focus(self->message_box);
+}
+
+static gboolean on_message_press(GtkWidget* box, GdkEventButton* event, gpointer data)
+{
+    (void)event, (void)data;
+    gtk_widget_grab_focus(box); /* a click makes this pane the active one */
+    return FALSE;
 }
 
 static void update_buttons(SfePane* self)
@@ -439,7 +461,7 @@ static void on_loaded(SfeDirModel* model, gpointer data)
     (void)model;
     SfePane* self = data;
     GtkWidget* view = active_view(self);
-    bool had_focus = gtk_widget_has_focus(view);
+    bool had_focus = gtk_widget_has_focus(view) || gtk_widget_has_focus(self->message_box);
 
     attach_model(self);
     gtk_stack_set_visible_child(GTK_STACK(self->stack), gtk_widget_get_parent(view));
@@ -649,7 +671,7 @@ void sfe_pane_set_view(SfePane* self, SfeViewMode mode)
     sfe_pane_visual_end(self);
     self->view = mode;
     attach_model(self);
-    if (gtk_stack_get_visible_child(GTK_STACK(self->stack)) != self->message)
+    if (gtk_stack_get_visible_child(GTK_STACK(self->stack)) != self->message_box)
         gtk_stack_set_visible_child(GTK_STACK(self->stack), gtk_widget_get_parent(active_view(self)));
     update_buttons(self);
     schedule_thumbnails(self);
@@ -1415,7 +1437,8 @@ void sfe_pane_focus_location(SfePane* self)
 
 void sfe_pane_focus_view(SfePane* self)
 {
-    gtk_widget_grab_focus(active_view(self));
+    bool message = gtk_stack_get_visible_child(GTK_STACK(self->stack)) == self->message_box;
+    gtk_widget_grab_focus(message ? self->message_box : active_view(self));
 }
 
 SfeViewMode sfe_pane_get_view(SfePane* self)
@@ -1511,6 +1534,12 @@ static void sfe_pane_init(SfePane* self)
     gtk_label_set_justify(GTK_LABEL(self->message), GTK_JUSTIFY_CENTER);
     gtk_label_set_line_wrap(GTK_LABEL(self->message), TRUE);
     gtk_style_context_add_class(gtk_widget_get_style_context(self->message), "sfe-placeholder");
+    self->message_box = gtk_event_box_new();
+    gtk_event_box_set_visible_window(GTK_EVENT_BOX(self->message_box), FALSE);
+    gtk_widget_set_can_focus(self->message_box, TRUE);
+    gtk_widget_add_events(self->message_box, GDK_BUTTON_PRESS_MASK);
+    g_signal_connect(self->message_box, "button-press-event", G_CALLBACK(on_message_press), NULL);
+    gtk_container_add(GTK_CONTAINER(self->message_box), self->message);
 
     self->stack = gtk_stack_new();
     gtk_stack_add_named(GTK_STACK(self->stack), scrolled(self->grid), "grid");
@@ -1522,7 +1551,7 @@ static void sfe_pane_init(SfePane* self)
         g_signal_connect(v, "value-changed", G_CALLBACK(on_view_moved), self);
         g_signal_connect(v, "changed", G_CALLBACK(on_view_moved), self);
     }
-    gtk_stack_add_named(GTK_STACK(self->stack), self->message, "message");
+    gtk_stack_add_named(GTK_STACK(self->stack), self->message_box, "message");
 
     gtk_box_pack_start(GTK_BOX(self), build_top_bar(self), FALSE, FALSE, 0);
     self->search = SFE_SEARCH_BAR(sfe_search_bar_new());
