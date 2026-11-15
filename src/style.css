@@ -638,6 +638,22 @@ menu.sfe-menu {
     font-family: monospace;
 }
 
+/* What can follow a pending chord, above showcmd. */
+.sfe-window .sfe-keyhints {
+    background-color: @sfe_bg;
+    color: @sfe_fg;
+    border: 1px solid alpha(@sfe_fg, 0.12);
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin: 10px 10px 0 10px;
+}
+
+.sfe-window .sfe-keyhint-key {
+    font-family: monospace;
+    font-weight: bold;
+    color: @sfe_accent;
+}
+
 /* "-- VISUAL --" while selecting with v. */
 .sfe-window .sfe-mode {
     color: @sfe_accent;

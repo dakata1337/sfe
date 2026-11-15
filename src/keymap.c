@@ -309,6 +309,63 @@ bool sfe_keymap_bind(SfeKeymap* map, const char* sequence, const char* command, 
     return true;
 }
 
+static const char* help_for(const char* command)
+{
+    for (size_t i = 0; i < G_N_ELEMENTS(defaults); i++) {
+        if (strcmp(defaults[i].command, command) == 0)
+            return defaults[i].help;
+    }
+    for (size_t i = 0; i < G_N_ELEMENTS(visual_defaults); i++) {
+        if (strcmp(visual_defaults[i].command, command) == 0)
+            return visual_defaults[i].help;
+    }
+    return NULL;
+}
+
+static void hint_free(gpointer p)
+{
+    SfeKeyHint* h = p;
+    g_free(h->keys);
+    g_free(h->command);
+    g_free(h);
+}
+
+static int compare_hints(gconstpointer a, gconstpointer b)
+{
+    const SfeKeyHint* x = *(SfeKeyHint* const*)a;
+    const SfeKeyHint* y = *(SfeKeyHint* const*)b;
+    return strcmp(x->keys, y->keys);
+}
+
+GPtrArray* sfe_keymap_continuations(const SfeKeymap* map, char* const* tokens, guint n, GPtrArray* hints)
+{
+    if (hints == NULL)
+        hints = g_ptr_array_new_with_free_func(hint_free);
+    for (guint i = 0; i < map->bindings->len; i++) {
+        const Binding* b = g_ptr_array_index(map->bindings, i);
+        if (b->n <= n)
+            continue;
+        bool starts = true;
+        for (guint k = 0; k < n && starts; k++)
+            starts = strcmp(b->tokens[k], tokens[k]) == 0;
+        if (!starts)
+            continue;
+        g_autofree char* keys = sfe_keymap_format(b->tokens + n, b->n - n);
+        bool known = false; /* an earlier map (visual) already has these keys */
+        for (guint k = 0; k < hints->len && !known; k++)
+            known = strcmp(((SfeKeyHint*)g_ptr_array_index(hints, k))->keys, keys) == 0;
+        if (known)
+            continue;
+        SfeKeyHint* h = g_new0(SfeKeyHint, 1);
+        h->keys = g_steal_pointer(&keys);
+        h->command = g_strdup(b->command);
+        h->help = help_for(b->command);
+        g_ptr_array_add(hints, h);
+    }
+    g_ptr_array_sort(hints, compare_hints);
+    return hints;
+}
+
 SfeKeysResult sfe_keymap_lookup(const SfeKeymap* map, char* const* tokens, guint n, const char** command,
     bool* prefix)
 {

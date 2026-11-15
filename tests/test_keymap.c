@@ -139,6 +139,35 @@ static void test_defaults(void)
         g_assert_nonnull(d[i].help);
 }
 
+/* The suggestions after a partial chord: sorted, with help, visual first. */
+static void test_continuations(void)
+{
+    g_autoptr(SfeKeymap) map = sfe_keymap_new_default();
+    char* cw[] = { "C-w" };
+    g_autoptr(GPtrArray) hints = sfe_keymap_continuations(map, cw, 1, NULL);
+    g_assert_cmpuint(hints->len, ==, 3);
+    const SfeKeyHint* q = g_ptr_array_index(hints, 0);
+    const SfeKeyHint* v = g_ptr_array_index(hints, 2);
+    g_assert_cmpstr(q->keys, ==, "q");
+    g_assert_cmpstr(v->keys, ==, "v");
+    g_assert_cmpstr(v->command, ==, "split vertical");
+    g_assert_cmpstr(v->help, ==, "split side by side");
+
+    /* A user binding without a built-in command has no help. */
+    g_assert_true(sfe_keymap_bind(map, "<C-w>x", "cd /tmp", NULL));
+    g_autoptr(GPtrArray) more = sfe_keymap_continuations(map, cw, 1, NULL);
+    g_assert_cmpuint(more->len, ==, 4);
+    g_assert_null(((SfeKeyHint*)g_ptr_array_index(more, 3))->help);
+
+    /* Keys from an earlier map win. */
+    g_autoptr(SfeKeymap) first = sfe_keymap_new();
+    g_assert_true(sfe_keymap_bind(first, "<C-w>v", "open", NULL));
+    g_autoptr(GPtrArray) both = sfe_keymap_continuations(first, cw, 1, NULL);
+    sfe_keymap_continuations(map, cw, 1, both);
+    g_assert_cmpuint(both->len, ==, 4);
+    g_assert_cmpstr(((SfeKeyHint*)g_ptr_array_index(both, 2))->command, ==, "open");
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -147,5 +176,6 @@ int main(int argc, char** argv)
     g_test_add_func("/keymap/lookup", test_lookup);
     g_test_add_func("/keymap/overrides", test_overrides);
     g_test_add_func("/keymap/defaults", test_defaults);
+    g_test_add_func("/keymap/continuations", test_continuations);
     return g_test_run();
 }

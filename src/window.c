@@ -21,6 +21,9 @@ struct _SfeWindow {
     SfeOpsBar* ops_bar; /* running file operations */
     SfeCommandBar* cmdbar; /* the ":" command line */
     GtkWidget* showcmd; /* keys of a pending chord */
+    GtkWidget* chord_box; /* the suggestions above showcmd */
+    GtkWidget* hints; /* GtkGrid: what can follow the pending chord */
+    guint hints_timeout;
     GtkWidget* mode; /* "VISUAL" while the active view is in visual mode */
     SfeKeymap* keymap; /* normal-mode keys: defaults + config [keys] */
     SfeKeymap* visual_keymap; /* looked up first in visual mode: [keys.visual] */
@@ -177,7 +180,50 @@ static void drop_chord(SfeWindow* win)
     g_ptr_array_set_size(win->pending, 0);
     g_clear_pointer(&win->chord_command, g_free);
     g_clear_handle_id(&win->chord_timeout, g_source_remove);
-    gtk_widget_hide(win->showcmd);
+    g_clear_handle_id(&win->hints_timeout, g_source_remove);
+    gtk_widget_hide(win->chord_box);
+    gtk_widget_hide(win->hints);
+}
+
+/* Fills the suggestions with what can follow the keys typed so far. */
+static void fill_hints(SfeWindow* win)
+{
+    char* const* keys = (char* const*)win->pending->pdata;
+    GPtrArray* hints = NULL;
+    if (sfe_pane_in_visual(sfe_window_get_active_pane(win)))
+        hints = sfe_keymap_continuations(win->visual_keymap, keys, win->pending->len, NULL);
+    hints = sfe_keymap_continuations(win->keymap, keys, win->pending->len, hints);
+
+    g_autoptr(GList) old = gtk_container_get_children(GTK_CONTAINER(win->hints));
+    for (GList* l = old; l != NULL; l = l->next)
+        gtk_widget_destroy(l->data);
+    for (guint i = 0; i < hints->len; i++) {
+        const SfeKeyHint* h = g_ptr_array_index(hints, i);
+        GtkWidget* key = gtk_label_new(h->keys);
+        GtkWidget* what = gtk_label_new(h->help ? h->help : h->command);
+        gtk_style_context_add_class(gtk_widget_get_style_context(key), "sfe-keyhint-key");
+        gtk_label_set_xalign(GTK_LABEL(key), 0);
+        gtk_label_set_xalign(GTK_LABEL(what), 0);
+        gtk_grid_attach(GTK_GRID(win->hints), key, 0, (int)i, 1, 1);
+        gtk_grid_attach(GTK_GRID(win->hints), what, 1, (int)i, 1, 1);
+        gtk_widget_show(key);
+        gtk_widget_show(what);
+    }
+    gtk_widget_show(win->hints); /* (no show_all: it is no-show-all) */
+    g_ptr_array_unref(hints);
+}
+
+/* Half a second into a chord the suggestions appear, and the chord then
+ * waits for its next key instead of timing out (unless the keys typed are a
+ * binding of their own, which still runs after a second). */
+static gboolean on_hints_timeout(gpointer data)
+{
+    SfeWindow* win = data;
+    win->hints_timeout = 0;
+    fill_hints(win);
+    if (win->chord_command == NULL)
+        g_clear_handle_id(&win->chord_timeout, g_source_remove);
+    return G_SOURCE_REMOVE;
 }
 
 /* A chord not finished within a second is dropped, or runs the binding it
@@ -264,9 +310,17 @@ static bool normal_mode_key(SfeWindow* win, const GdkEventKey* event, GtkWidget*
         g_free(win->chord_command);
         win->chord_command = g_strdup(command);
         gtk_label_set_text(GTK_LABEL(win->showcmd), keys);
-        gtk_widget_show(win->showcmd);
+        gtk_widget_show(win->chord_box);
         g_clear_handle_id(&win->chord_timeout, g_source_remove);
-        win->chord_timeout = g_timeout_add(1000, on_chord_timeout, win);
+        g_clear_handle_id(&win->hints_timeout, g_source_remove);
+        if (gtk_widget_get_visible(win->hints)) { /* already reading them: next level now */
+            fill_hints(win);
+            if (win->chord_command != NULL)
+                win->chord_timeout = g_timeout_add(1000, on_chord_timeout, win);
+        } else {
+            win->chord_timeout = g_timeout_add(1000, on_chord_timeout, win);
+            win->hints_timeout = g_timeout_add(500, on_hints_timeout, win);
+        }
         return true;
     }
     bool was_chord = win->pending->len > 1; /* a broken chord eats its last key */
@@ -387,8 +441,18 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     win->showcmd = gtk_label_new(NULL);
     gtk_style_context_add_class(gtk_widget_get_style_context(win->showcmd), "sfe-showcmd");
     gtk_widget_set_halign(win->showcmd, GTK_ALIGN_END);
-    gtk_widget_set_valign(win->showcmd, GTK_ALIGN_END);
-    gtk_widget_set_no_show_all(win->showcmd, TRUE);
+    win->hints = gtk_grid_new();
+    gtk_style_context_add_class(gtk_widget_get_style_context(win->hints), "sfe-keyhints");
+    gtk_grid_set_column_spacing(GTK_GRID(win->hints), 16);
+    gtk_grid_set_row_spacing(GTK_GRID(win->hints), 2);
+    gtk_widget_set_no_show_all(win->hints, TRUE);
+    win->chord_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(win->chord_box), win->hints, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(win->chord_box), win->showcmd, FALSE, FALSE, 0);
+    gtk_widget_show(win->showcmd);
+    gtk_widget_set_halign(win->chord_box, GTK_ALIGN_END);
+    gtk_widget_set_valign(win->chord_box, GTK_ALIGN_END);
+    gtk_widget_set_no_show_all(win->chord_box, TRUE);
     win->mode = gtk_label_new(NULL);
     gtk_style_context_add_class(gtk_widget_get_style_context(win->mode), "sfe-showcmd");
     gtk_style_context_add_class(gtk_widget_get_style_context(win->mode), "sfe-mode");
@@ -398,7 +462,7 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     GtkWidget* overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(win->split));
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), GTK_WIDGET(win->cmdbar));
-    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->showcmd);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->chord_box);
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->mode);
 
     /* sidebar | (panes over the operations bar) */

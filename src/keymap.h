@@ -69,3 +69,15 @@ typedef enum {
  * keys before running `command`). */
 SfeKeysResult sfe_keymap_lookup(const SfeKeymap* map, char* const* tokens, guint n, const char** command,
     bool* prefix);
+
+/* A key that can follow a partly typed chord, for the suggestions list. */
+typedef struct {
+    char* keys; /* the rest of the sequence: "v", "<C-x>q" */
+    char* command;
+    const char* help; /* of the built-in binding with that command, or NULL */
+} SfeKeyHint;
+
+/* The bindings that continue `tokens` (SfeKeyHint*, sorted by keys) appended
+ * to `hints` (a new array when NULL); keys already in `hints` are skipped,
+ * so a map looked up first wins. */
+GPtrArray* sfe_keymap_continuations(const SfeKeymap* map, char* const* tokens, guint n, GPtrArray* hints);
