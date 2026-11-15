@@ -15,11 +15,13 @@ project('sfe', 'c',
 gnome = import('gnome')
 cc = meson.get_compiler('c')
 
-if get_option('buildtype') == 'release'
-  add_project_arguments('-DBUILD_TYPE="release"', language: 'c')
-else
+# Debug builds (debug / debugoptimized) log sfe's messages (main.c). The
+# packages build with buildtype=plain (arch-meson), which must not.
+if get_option('debug')
   add_project_arguments('-DDEBUG', language: 'c')
   add_project_arguments('-DBUILD_TYPE="debug"', language: 'c')
+else
+  add_project_arguments('-DBUILD_TYPE="release"', language: 'c')
 endif
 
 add_project_arguments(cc.get_supported_arguments(

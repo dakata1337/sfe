@@ -6,6 +6,10 @@ new version.
 
 ## Unreleased
 
+- Installed packages no longer print sfe's debug messages: debug logging
+  now follows meson's `debug` option instead of "anything but a release
+  build" (the Arch packages build with `buildtype=plain`).
+
 ## 1.3.0
 
 - The views always end with empty space (a third of the view, at least
