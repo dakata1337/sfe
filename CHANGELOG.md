@@ -6,6 +6,8 @@ new version.
 
 ## Unreleased
 
+## 1.3.0
+
 - The views always end with empty space (a third of the view, at least
   six rows in the list and one row in the grid), to right-click for the
   folder's menu in long folders.
@@ -13,6 +15,7 @@ new version.
   instead of a rectangle.
 - In narrow views the list drops columns from the right (Type, then
   Modified, then Size) to make room for the names.
+  Column widths follow their contents and can no longer be dragged.
 - The sidebar says "No devices" (or "No removable drives" with the
   removable-only setting) instead of showing an empty *Devices* heading.
 
