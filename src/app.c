@@ -1,10 +1,13 @@
 #include "app.h"
 
 #include "actions.h"
+#include "chooser.h"
 #include "defaultfm.h"
 #include "icons.h"
 
 #include "sfe-build.h"
+#include <stdio.h>
+#include <unistd.h>
 #include "theme.h"
 #include "window.h"
 
@@ -18,6 +21,9 @@ struct _SfeApplication {
     char* last_written; /* text of our own last save, to ignore its echo */
     GFileMonitor* config_monitor;
     guint reload_source;
+    SfeChooser* chooser; /* chooser mode (--choose), or NULL */
+    FILE* answer; /* chooser mode: where the chosen URIs go (the real stdout) */
+    int exit_status; /* chooser mode: 0 chosen, 1 cancelled */
 };
 
 G_DEFINE_TYPE(SfeApplication, sfe_application, GTK_TYPE_APPLICATION)
@@ -252,6 +258,14 @@ static void sfe_application_startup(GApplication* gapp)
 
 static void sfe_application_activate(GApplication* gapp)
 {
+    SfeApplication* app = SFE_APPLICATION(gapp);
+    if (app->chooser != NULL) { /* a file dialog for another program */
+        g_autoptr(GFile) dir = app->chooser->folder ? g_file_new_for_commandline_arg(app->chooser->folder) : NULL;
+        SfeWindow* window = sfe_window_new(app, dir);
+        sfe_window_set_chooser(window, app->chooser);
+        gtk_window_present(GTK_WINDOW(window));
+        return;
+    }
     GtkWindow* window = GTK_WINDOW(sfe_window_new(SFE_APPLICATION(gapp), NULL));
     gtk_window_present(window);
     sfe_default_fm_maybe_ask(window); /* first start only */
@@ -283,6 +297,7 @@ static void sfe_application_finalize(GObject* object)
     SfeApplication* app = SFE_APPLICATION(object);
 
     sfe_config_free(app->config);
+    sfe_chooser_free(app->chooser);
     g_free(app->config_path);
     g_free(app->last_written);
     G_OBJECT_CLASS(sfe_application_parent_class)->finalize(object);
@@ -291,10 +306,35 @@ static void sfe_application_finalize(GObject* object)
 /* --version is answered here, without starting the UI. */
 static int sfe_application_handle_local_options(GApplication* gapp, GVariantDict* options)
 {
-    (void)gapp;
+    SfeApplication* app = SFE_APPLICATION(gapp);
     if (g_variant_dict_contains(options, "version")) {
         g_print("sfe %s\n", SFE_VERSION);
         return 0;
+    }
+    const char* mode = NULL;
+    if (g_variant_dict_lookup(options, "choose", "&s", &mode)) {
+        SfeChooser* c = g_new0(SfeChooser, 1);
+        if (!sfe_chooser_parse_mode(mode, &c->mode)) {
+            g_printerr("sfe: --choose takes open, save or folder\n");
+            sfe_chooser_free(c);
+            return 2;
+        }
+        c->multiple = g_variant_dict_contains(options, "multiple");
+        g_variant_dict_lookup(options, "title", "s", &c->title);
+        g_variant_dict_lookup(options, "folder", "^ay", &c->folder);
+        g_variant_dict_lookup(options, "name", "s", &c->name);
+        g_variant_dict_lookup(options, "accept-label", "s", &c->accept_label);
+        app->chooser = c;
+        app->exit_status = 1; /* cancelled unless something is chosen */
+        /* Standard output carries only the answer: a private copy of it is
+         * kept for that, and everything else written there (log messages,
+         * libraries) goes to standard error. */
+        int fd = dup(STDOUT_FILENO);
+        app->answer = fd >= 0 ? fdopen(fd, "w") : NULL;
+        dup2(STDERR_FILENO, STDOUT_FILENO);
+        /* Its own process: the answer must come from this one, not from an
+         * sfe that is already running. */
+        g_application_set_flags(gapp, g_application_get_flags(gapp) | G_APPLICATION_NON_UNIQUE);
     }
     return -1; /* go on */
 }
@@ -320,6 +360,12 @@ static void sfe_application_init(SfeApplication* app)
 {
     static const GOptionEntry entries[] = {
         { "version", 'v', 0, G_OPTION_ARG_NONE, NULL, "Show the version and quit", NULL },
+        { "choose", 0, 0, G_OPTION_ARG_STRING, NULL, "Be a file dialog: open, save or folder; prints the chosen URIs", "MODE" },
+        { "multiple", 0, 0, G_OPTION_ARG_NONE, NULL, "With --choose open: several files can be chosen", NULL },
+        { "title", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose: the window title", "TITLE" },
+        { "folder", 0, 0, G_OPTION_ARG_FILENAME, NULL, "With --choose: where to start", "DIR" },
+        { "name", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose save: the suggested file name", "NAME" },
+        { "accept-label", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose: the label of the Open / Save button", "LABEL" },
         { NULL, 0, 0, 0, NULL, NULL, NULL },
     };
     g_application_add_main_option_entries(G_APPLICATION(app), entries);
@@ -334,4 +380,26 @@ SfeApplication* sfe_application_new(void)
         "application-id", SFE_APP_ID,
         "flags", G_APPLICATION_HANDLES_OPEN,
         NULL);
+}
+
+const SfeChooser* sfe_application_get_chooser(SfeApplication* app)
+{
+    return app->chooser;
+}
+
+void sfe_application_set_exit_status(SfeApplication* app, int status)
+{
+    app->exit_status = status;
+}
+
+int sfe_application_get_exit_status(SfeApplication* app, int run_status)
+{
+    return app->chooser != NULL && run_status == 0 ? app->exit_status : run_status;
+}
+
+void sfe_application_answer(SfeApplication* app, const char* line)
+{
+    FILE* out = app->answer ? app->answer : stdout;
+    fprintf(out, "%s\n", line);
+    fflush(out);
 }

@@ -764,3 +764,21 @@ menu.sfe-menu {
 .sfe-window .sfe-sidebar progressbar.sfe-usage.sfe-full progress {
     background-color: @sfe_error;
 }
+
+/* Chooser mode (sfe --choose): Cancel / Open under the views. */
+.sfe-window .sfe-chooser-bar {
+    padding: 8px 12px;
+    background-color: @sfe_bg;
+    border-top: 1px solid alpha(@sfe_fg, 0.08);
+}
+
+.sfe-window .sfe-chooser-bar button {
+    padding: 4px 16px;
+    background-color: alpha(@sfe_fg, 0.08);
+    color: @sfe_fg;
+}
+
+.sfe-window .sfe-chooser-bar button.suggested-action {
+    background-color: @sfe_accent;
+    color: @sfe_accent_fg;
+}

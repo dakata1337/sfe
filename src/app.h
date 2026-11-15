@@ -3,6 +3,7 @@
 /* The application: owns the configuration and all windows. One process
  * serves every sfe window, so clipboard operations work between them. */
 
+#include "chooser.h"
 #include "config.h"
 #include <gtk/gtk.h>
 
@@ -20,6 +21,14 @@ const SfeConfig* sfe_config(void);
 
 /* Takes ownership of `cfg`, writes it to disk and emits "config-changed". */
 void sfe_application_set_config(SfeApplication* app, SfeConfig* cfg);
+
+/* Chooser mode (sfe --choose, see chooser.h): its options, or NULL; the
+ * exit status (0 chosen, 1 cancelled), which main() returns. */
+const SfeChooser* sfe_application_get_chooser(SfeApplication* app);
+void sfe_application_set_exit_status(SfeApplication* app, int status);
+/* Writes one line of the chooser's answer to the real standard output. */
+void sfe_application_answer(SfeApplication* app, const char* line);
+int sfe_application_get_exit_status(SfeApplication* app, int run_status);
 
 /* A copy of the current configuration, for editing and passing back to
  * sfe_application_set_config(). */

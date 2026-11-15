@@ -11,5 +11,6 @@ int main(int argc, char** argv)
     gdk_set_allowed_backends("wayland,x11");
 
     g_autoptr(SfeApplication) app = sfe_application_new();
-    return g_application_run(G_APPLICATION(app), argc, argv);
+    int status = g_application_run(G_APPLICATION(app), argc, argv);
+    return sfe_application_get_exit_status(app, status); /* chooser mode: chosen or cancelled */
 }

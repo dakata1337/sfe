@@ -10,6 +10,7 @@
 #include "pathentry.h"
 #include "search.h"
 #include "thumbs.h"
+#include "window.h"
 #include <math.h>
 
 #define LIST_ICON_SIZE 16
@@ -268,6 +269,10 @@ GFile* sfe_pane_get_dir(SfePane* self)
 static void activate_file(SfePane* self, GFile* file, GFileInfo* info)
 {
     g_autoptr(GError) error = NULL;
+    GtkWidget* toplevel = gtk_widget_get_toplevel(GTK_WIDGET(self));
+
+    if (SFE_IS_WINDOW(toplevel) && sfe_window_chooser_pick(SFE_WINDOW(toplevel), file))
+        return; /* a file dialog: picking is choosing */
 
     if (g_file_info_get_file_type(info) == G_FILE_TYPE_DIRECTORY) {
         sfe_pane_navigate(self, file);

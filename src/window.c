@@ -4,12 +4,14 @@
 #include "actions.h"
 #include "cmdbar.h"
 #include "commands.h"
+#include "dialogs.h"
 #include "keymap.h"
 #include "opsbar.h"
 #include "sidebar.h"
 #include "split.h"
 #include "undo.h"
 #include "util.h"
+#include <stdio.h>
 #include <string.h>
 
 #define SIDEBAR_WIDTH 220 /* initial width */
@@ -27,6 +29,10 @@ struct _SfeWindow {
     GtkWidget* hints; /* GtkGrid: what can follow the pending chord */
     guint hints_timeout;
     GtkWidget* mode; /* "VISUAL" while the active view is in visual mode */
+    GtkWidget* content; /* panes over the operations bar (and the chooser bar) */
+    const SfeChooser* chooser; /* chooser mode (sfe --choose), or NULL */
+    GtkWidget* chooser_name; /* save: the file name entry */
+    bool chosen; /* the answer was printed */
     SfeKeymap* keymap; /* normal-mode keys: defaults + config [keys] */
     SfeKeymap* visual_keymap; /* looked up first in visual mode: [keys.visual] */
     GPtrArray* pending; /* tokens of the chord typed so far */
@@ -36,6 +42,8 @@ struct _SfeWindow {
 };
 
 G_DEFINE_TYPE(SfeWindow, sfe_window, GTK_TYPE_APPLICATION_WINDOW)
+
+static void accept(SfeWindow* win);
 
 SfeSplit* sfe_window_get_split(SfeWindow* win)
 {
@@ -378,6 +386,11 @@ static gboolean sfe_window_key_press(GtkWidget* widget, GdkEventKey* event)
 
     if (!event->is_modifier)
         sfe_command_bar_dismiss(win->cmdbar);
+    if (win->chooser != NULL && (event->keyval == GDK_KEY_Return || event->keyval == GDK_KEY_KP_Enter)
+        && (event->state & gtk_accelerator_get_default_mod_mask()) == GDK_CONTROL_MASK) {
+        accept(win); /* Ctrl+Enter: the Open / Save / Select button */
+        return TRUE;
+    }
     if (GTK_IS_EDITABLE(focus)) {
         drop_chord(win);
         if (gtk_window_propagate_key_event(GTK_WINDOW(widget), event))
@@ -532,7 +545,7 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->mode);
 
     /* sidebar | (panes over the operations bar) */
-    GtkWidget* content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    GtkWidget* content = win->content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
     gtk_box_pack_start(GTK_BOX(content), overlay, TRUE, TRUE, 0);
     gtk_box_pack_start(GTK_BOX(content), GTK_WIDGET(win->ops_bar), FALSE, FALSE, 0);
 
@@ -549,4 +562,171 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     win->config_handler = g_signal_connect(app, "config-changed", G_CALLBACK(on_config_changed), win);
     sfe_pane_focus_view(sfe_window_get_active_pane(win));
     return win;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Chooser mode                                                              */
+/* ------------------------------------------------------------------------ */
+
+/* Prints the answer (file URIs, one per line) and ends: exit status 0. */
+static void finish_choosing(SfeWindow* win, GList* files)
+{
+    for (GList* l = files; l != NULL; l = l->next) {
+        g_autofree char* uri = g_file_get_uri(l->data);
+        sfe_application_answer(sfe_app(), uri);
+    }
+    win->chosen = true;
+    sfe_application_set_exit_status(sfe_app(), 0);
+    g_application_quit(G_APPLICATION(sfe_app()));
+}
+
+static bool is_folder(GFile* file)
+{
+    return g_file_query_file_type(file, G_FILE_QUERY_INFO_NONE, NULL) == G_FILE_TYPE_DIRECTORY;
+}
+
+static void on_replace_confirmed(gpointer data)
+{
+    GFile* file = data;
+    SfeWindow* win = g_object_get_data(G_OBJECT(file), "sfe-window");
+    GList one = { .data = file };
+    finish_choosing(win, &one);
+}
+
+/* Open / Save / Select. */
+static void accept(SfeWindow* win)
+{
+    SfePane* pane = sfe_window_get_active_pane(win);
+    GFile* dir = sfe_pane_get_dir(pane);
+    GList* selected = sfe_pane_get_selected_files(pane);
+    GList* files = NULL;
+    GFile* folder = NULL; /* a selected folder (open: walk into it) */
+
+    for (GList* l = selected; l != NULL; l = l->next) {
+        if (is_folder(l->data))
+            folder = folder ? folder : l->data;
+        else
+            files = g_list_append(files, l->data);
+    }
+    switch (win->chooser->mode) {
+    case SFE_CHOOSE_OPEN:
+        if (files == NULL && folder != NULL) {
+            sfe_pane_navigate(pane, folder);
+        } else if (files != NULL) {
+            if (!win->chooser->multiple && files->next != NULL) {
+                g_list_free(files->next); /* one file asked for: the first */
+                files->next = NULL;
+            }
+            finish_choosing(win, files);
+        }
+        break;
+    case SFE_CHOOSE_FOLDER: {
+        GList one = { .data = folder ? folder : dir };
+        finish_choosing(win, &one);
+        break;
+    }
+    case SFE_CHOOSE_SAVE: {
+        const char* name = gtk_entry_get_text(GTK_ENTRY(win->chooser_name));
+        if (*name == '\0' || strchr(name, '/') != NULL)
+            break;
+        GFile* file = g_file_get_child_for_display_name(dir, name, NULL);
+        if (file == NULL)
+            break;
+        if (g_file_query_exists(file, NULL)) { /* the program will overwrite it: ask */
+            g_autofree char* question = g_strdup_printf("Replace “%s”?", name);
+            g_object_set_data(G_OBJECT(file), "sfe-window", win);
+            sfe_confirm(GTK_WIDGET(win), question, "A file with this name already exists here.", "Replace", true,
+                on_replace_confirmed, file, g_object_unref);
+            break;
+        }
+        GList one = { .data = file };
+        finish_choosing(win, &one);
+        g_object_unref(file);
+        break;
+    }
+    }
+    g_list_free(files);
+    g_list_free_full(selected, g_object_unref);
+}
+
+bool sfe_window_chooser_pick(SfeWindow* win, GFile* file)
+{
+    if (win->chooser == NULL || is_folder(file))
+        return false;
+    if (win->chooser->mode == SFE_CHOOSE_SAVE) { /* the name to save as */
+        g_autofree char* base = g_file_get_basename(file);
+        g_autofree char* name = g_filename_display_name(base);
+        gtk_entry_set_text(GTK_ENTRY(win->chooser_name), name);
+        gtk_widget_grab_focus(win->chooser_name);
+        return true;
+    }
+    if (win->chooser->mode == SFE_CHOOSE_OPEN && win->chooser->multiple) {
+        accept(win); /* Enter / double-click: everything selected */
+    } else if (win->chooser->mode == SFE_CHOOSE_OPEN) {
+        GList one = { .data = file };
+        finish_choosing(win, &one);
+    }
+    return true;
+}
+
+static void on_accept(GtkButton* button, gpointer data)
+{
+    (void)button;
+    accept(data);
+}
+
+static void on_cancel(GtkButton* button, gpointer data)
+{
+    (void)button;
+    (void)data;
+    g_application_quit(G_APPLICATION(sfe_app())); /* exit status stays 1 */
+}
+
+void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
+{
+    static const char* const titles[] = { "Open", "Save", "Select Folder" };
+    static const char* const labels[] = { "Open", "Save", "Select" };
+    win->chooser = chooser;
+    gtk_window_set_title(GTK_WINDOW(win), chooser->title ? chooser->title : titles[chooser->mode]);
+    gtk_window_set_default_size(GTK_WINDOW(win), 900, 600);
+
+    GtkWidget* bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_style_context_add_class(gtk_widget_get_style_context(bar), "sfe-chooser-bar");
+    if (chooser->mode == SFE_CHOOSE_SAVE) {
+        win->chooser_name = gtk_entry_new();
+        gtk_entry_set_text(GTK_ENTRY(win->chooser_name), chooser->name ? chooser->name : "");
+        gtk_entry_set_placeholder_text(GTK_ENTRY(win->chooser_name), "File name");
+        g_signal_connect_swapped(win->chooser_name, "activate", G_CALLBACK(accept), win);
+        gtk_box_pack_start(GTK_BOX(bar), gtk_label_new("Name"), FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(bar), win->chooser_name, TRUE, TRUE, 0);
+    } else {
+        GtkWidget* hint = gtk_label_new(chooser->mode == SFE_CHOOSE_FOLDER
+                ? "Pick a folder, or Select for the one shown"
+                : chooser->multiple ? "Pick files (Ctrl+click for several)" : "Pick a file");
+        gtk_style_context_add_class(gtk_widget_get_style_context(hint), "sfe-placeholder");
+        gtk_label_set_xalign(GTK_LABEL(hint), 0);
+        gtk_box_pack_start(GTK_BOX(bar), hint, TRUE, TRUE, 0);
+    }
+    GtkWidget* cancel = gtk_button_new_with_label("Cancel");
+    GtkWidget* ok = gtk_button_new_with_label(chooser->accept_label ? chooser->accept_label : labels[chooser->mode]);
+    gtk_style_context_add_class(gtk_widget_get_style_context(ok), "suggested-action");
+    g_signal_connect(cancel, "clicked", G_CALLBACK(on_cancel), win);
+    g_signal_connect(ok, "clicked", G_CALLBACK(on_accept), win);
+    gtk_box_pack_end(GTK_BOX(bar), ok, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(bar), cancel, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(win->content), bar, FALSE, FALSE, 0);
+    gtk_widget_show_all(bar);
+    if (win->chooser_name != NULL) {
+        gtk_widget_grab_focus(win->chooser_name);
+        /* "notes.txt": the name selected without the extension, ready to type over */
+        const char* text = gtk_entry_get_text(GTK_ENTRY(win->chooser_name));
+        const char* dot = strrchr(text, '.');
+        gtk_editable_select_region(GTK_EDITABLE(win->chooser_name), 0,
+            dot && dot != text ? (int)g_utf8_pointer_to_offset(text, dot) : -1);
+    }
+}
+
+bool sfe_window_is_chooser(SfeWindow* win)
+{
+    return win->chooser != NULL;
 }
