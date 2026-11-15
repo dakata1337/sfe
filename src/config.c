@@ -20,6 +20,7 @@ G_DEFINE_QUARK(sfe-config-error-quark, sfe_config_error)
 static const char* const view_names[] = { "grid", "list", NULL };
 static const char* const sort_names[] = { "name", "size", "modified", "type", NULL };
 static const char* const file_icon_names[] = { "system", "tinted", "symbolic", NULL };
+static const char* const device_names[] = { "all", "removable", NULL };
 
 #define FIELD(f) offsetof(SfeConfig, f)
 
@@ -36,6 +37,7 @@ static const SfeOption options[] = {
     { "general", "decorations", SFE_OPT_BOOL, FIELD(decorations), "Draw a window title bar (turn off on tiling compositors)", .label = "Window title bar" },
     { "preview", "thumbnails", SFE_OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails", .label = "Thumbnails" },
     { "preview", "thumbnail_max_mb", SFE_OPT_INT, FIELD(thumbnail_max_mb), "Skip thumbnails for files larger than this (MiB)", .min = 1, .max = 1 << 20, .label = "Thumbnail size limit (MiB)" },
+    { "sidebar", "devices", SFE_OPT_ENUM, FIELD(devices), "Devices listed: all (removable drives and disks) | removable (only what can be unplugged: flash drives, SD cards)", .choices = device_names, .label = "Devices" },
     { "sidebar", "show_gtk_bookmarks", SFE_OPT_BOOL, FIELD(show_gtk_bookmarks), "Also list bookmarks from ~/.config/gtk-3.0/bookmarks", .label = "Show GTK bookmarks" },
 };
 

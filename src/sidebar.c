@@ -7,6 +7,7 @@
 #include "dialogs.h"
 #include "dirtree.h"
 #include "trash.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -27,6 +28,8 @@ typedef struct {
     char* device_id; /* devices only */
     bool removable; /* devices only */
     int bookmark_index; /* index in the config's bookmarks, or -1 */
+    GtkWidget* usage; /* mounted devices: GtkProgressBar of the space used */
+    char* tooltip; /* mounted devices: the device's details, before the usage line */
 } RowData;
 
 struct _SfeSidebar {
@@ -40,6 +43,7 @@ struct _SfeSidebar {
     GFileMonitor* gtk_bookmarks; /* ~/.config/gtk-3.0/bookmarks */
     GFileMonitor* trash; /* the trash folder: empty / full icon */
     guint rebuild_source;
+    guint usage_timer; /* redoes the devices' usage bars */
     bool positioned; /* divider placed at 2/3 once */
     GtkWidget* list_sw; /* the places' scrolled window, hidden while the tree fills the sidebar */
     GtkWidget* tree_button; /* in the tree's top bar */
@@ -63,6 +67,7 @@ static void rebuild(SfeSidebar* self);
 
 static void row_data_free(gpointer p)
 {
+    g_free(((RowData*)p)->tooltip);
     RowData* d = p;
     g_clear_object(&d->file);
     g_free(d->device_id);
@@ -281,12 +286,94 @@ static void on_eject_clicked(GtkButton* button, gpointer data)
     unmount_device(self, d, d->removable);
 }
 
+/* ---- Space used on mounted devices ---------------------------------------- */
+
+#define USAGE_REFRESH_S 30 /* files come and go: the bars are redone this often */
+#define USAGE_FULL 0.9 /* above this the bar is drawn in the warning colour */
+
+static void on_usage(GObject* source, GAsyncResult* res, gpointer data)
+{
+    g_autoptr(GtkWidget) row = data; /* a reference: the sidebar may have been rebuilt */
+    g_autoptr(GFileInfo) info = g_file_query_filesystem_info_finish(G_FILE(source), res, NULL);
+    RowData* d = row_data(GTK_LIST_BOX_ROW(row));
+    if (info == NULL || d == NULL || d->usage == NULL || gtk_widget_get_parent(row) == NULL)
+        return;
+    guint64 size = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_FILESYSTEM_SIZE);
+    guint64 free_bytes = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_FILESYSTEM_FREE);
+    guint64 used = g_file_info_has_attribute(info, G_FILE_ATTRIBUTE_FILESYSTEM_USED)
+        ? g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_FILESYSTEM_USED)
+        : size - MIN(size, free_bytes);
+    if (size == 0)
+        return;
+    double fraction = CLAMP((double)used / (double)size, 0.0, 1.0);
+    gtk_progress_bar_set_fraction(GTK_PROGRESS_BAR(d->usage), fraction);
+    GtkStyleContext* style = gtk_widget_get_style_context(d->usage);
+    if (fraction >= USAGE_FULL)
+        gtk_style_context_add_class(style, "sfe-full");
+    else
+        gtk_style_context_remove_class(style, "sfe-full");
+    gtk_widget_show(d->usage);
+
+    /* The numbers only in the tooltip: the bar alone stays quiet. */
+    g_autofree char* used_text = g_format_size(used);
+    g_autofree char* size_text = g_format_size(size);
+    g_autofree char* free_text = g_format_size(free_bytes);
+    g_autofree char* tip = g_strdup_printf("%s\n%s used of %s (%d%%) · %s free", d->tooltip ? d->tooltip : "",
+        used_text, size_text, (int)lround(fraction * 100), free_text);
+    gtk_widget_set_tooltip_text(row, tip);
+    g_debug("device usage: %s", tip);
+}
+
+static void query_usage(GtkWidget* row)
+{
+    RowData* d = row_data(GTK_LIST_BOX_ROW(row));
+    if (d == NULL || d->usage == NULL || d->file == NULL)
+        return;
+    g_file_query_filesystem_info_async(d->file,
+        G_FILE_ATTRIBUTE_FILESYSTEM_SIZE "," G_FILE_ATTRIBUTE_FILESYSTEM_FREE "," G_FILE_ATTRIBUTE_FILESYSTEM_USED,
+        G_PRIORITY_LOW, NULL, on_usage, g_object_ref(row));
+}
+
+static gboolean on_usage_timer(gpointer data)
+{
+    SfeSidebar* self = data;
+    g_autoptr(GList) rows = gtk_container_get_children(GTK_CONTAINER(self->list));
+    for (GList* l = rows; l != NULL; l = l->next)
+        query_usage(l->data);
+    return G_SOURCE_CONTINUE;
+}
+
+/* The name over a thin bar of the space used. */
+static void add_usage_bar(GtkWidget* row, RowData* d)
+{
+    GtkWidget* box = row_box(row);
+    g_autoptr(GList) children = gtk_container_get_children(GTK_CONTAINER(box));
+    GtkWidget* label = g_list_nth_data(children, 1);
+    GtkWidget* column = gtk_box_new(GTK_ORIENTATION_VERTICAL, 3);
+    gtk_widget_set_valign(column, GTK_ALIGN_CENTER);
+
+    g_object_ref(label);
+    gtk_container_remove(GTK_CONTAINER(box), label);
+    gtk_box_pack_start(GTK_BOX(column), label, FALSE, FALSE, 0);
+    g_object_unref(label);
+
+    d->usage = gtk_progress_bar_new();
+    gtk_style_context_add_class(gtk_widget_get_style_context(d->usage), "sfe-usage");
+    gtk_widget_set_no_show_all(d->usage, TRUE); /* shown once the numbers are in */
+    gtk_box_pack_start(GTK_BOX(column), d->usage, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), column, TRUE, TRUE, 0);
+    gtk_box_reorder_child(GTK_BOX(box), column, 1);
+}
+
 static void add_devices(SfeSidebar* self)
 {
     GPtrArray* devices = sfe_devices_get_list(sfe_devices_get_default());
+    bool removable_only = sfe_config()->devices == SFE_DEVICES_REMOVABLE;
 
     for (guint i = 0; i < devices->len; i++) {
         SfeDevice* dev = g_ptr_array_index(devices, i);
+        if (removable_only && !dev->removable)
+            continue;
         g_autoptr(GFile) file = dev->mount_path ? g_file_new_for_path(dev->mount_path) : NULL;
         GtkWidget* row = add_row(self, SECTION_DEVICES, dev->icon_name, dev->name, file);
         RowData* d = row_data(GTK_LIST_BOX_ROW(row));
@@ -295,6 +382,11 @@ static void add_devices(SfeSidebar* self)
         d->removable = dev->removable;
         if (dev->tooltip != NULL)
             gtk_widget_set_tooltip_text(row, dev->tooltip);
+        if (dev->mount_path != NULL) {
+            d->tooltip = g_strdup(dev->tooltip);
+            add_usage_bar(row, d);
+            query_usage(row);
+        }
         if (!dev->mount_path)
             gtk_style_context_add_class(gtk_widget_get_style_context(row), "sfe-unmounted");
         if (dev->can_unmount) {
@@ -697,6 +789,7 @@ static void sfe_sidebar_dispose(GObject* object)
     drop_monitor(self, &self->gtk_bookmarks);
     drop_monitor(self, &self->trash);
     g_clear_handle_id(&self->rebuild_source, g_source_remove);
+    g_clear_handle_id(&self->usage_timer, g_source_remove);
     g_clear_object(&self->location);
     G_OBJECT_CLASS(sfe_sidebar_parent_class)->dispose(object);
 }
@@ -755,6 +848,7 @@ static void sfe_sidebar_init(SfeSidebar* self)
     watch_gtk_bookmarks(self);
     rebuild(self); /* creates the trash folder if needed */
     watch_trash(self);
+    self->usage_timer = g_timeout_add_seconds(USAGE_REFRESH_S, on_usage_timer, self);
 }
 
 GtkWidget* sfe_sidebar_new(void)

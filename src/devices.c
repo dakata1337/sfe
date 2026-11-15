@@ -109,6 +109,12 @@ static guint64 prop_uint64(GDBusObject* object, const char* iface, const char* n
     return v != NULL && g_variant_is_of_type(v, G_VARIANT_TYPE_UINT64) ? g_variant_get_uint64(v) : 0;
 }
 
+/* The mount point to show from Filesystem.MountPoints (aay): one the user
+ * cares about (see is_user_mount), else "/" for the system disk (`root`);
+ * NULL when not mounted. `system_only` says it is mounted only elsewhere
+ * (/boot, /var/lib/docker ...). */
+static bool is_user_mount(const char* path);
+
 /* The first entry of Filesystem.MountPoints (aay), or NULL. */
 static char* first_mount_point(GDBusObject* object)
 {
@@ -117,6 +123,26 @@ static char* first_mount_point(GDBusObject* object)
         return NULL;
     g_autoptr(GVariant) first = g_variant_get_child_value(v, 0);
     return g_strdup(g_variant_get_bytestring(first));
+}
+
+static char* pick_mount_point(GDBusObject* object, bool* root, bool* system_only)
+{
+    g_autoptr(GVariant) v = get_prop(object, IFACE_FS, "MountPoints");
+    *root = *system_only = false;
+    if (v == NULL || g_variant_n_children(v) == 0)
+        return NULL;
+    for (gsize i = 0; i < g_variant_n_children(v); i++) {
+        g_autoptr(GVariant) child = g_variant_get_child_value(v, i);
+        const char* path = g_variant_get_bytestring(child);
+        if (is_user_mount(path))
+            return g_strdup(path);
+        if (strcmp(path, "/") == 0)
+            *root = true;
+    }
+    if (*root)
+        return g_strdup("/");
+    *system_only = true;
+    return NULL;
 }
 
 /* The Drive object a block device belongs to, or NULL. */
@@ -198,14 +224,15 @@ static SfeDevice* device_from_udisks(SfeDevices* self, GDBusObject* object)
     if (fs == NULL || prop_bool(object, IFACE_BLOCK, "HintIgnore"))
         return NULL;
 
-    g_autofree char* mount = first_mount_point(object);
+    bool root = false, system_only = false;
+    g_autofree char* mount = pick_mount_point(object, &root, &system_only);
     g_autoptr(GDBusObject) drive = get_drive(self, object);
     bool removable = drive_is_removable(drive);
     bool system = prop_bool(object, IFACE_BLOCK, "HintSystem");
     guint64 size = prop_uint64(object, IFACE_BLOCK, "Size");
 
-    if (mount != NULL && !is_user_mount(mount))
-        return NULL; /* /, /boot, swap-like system mounts */
+    if (system_only)
+        return NULL; /* /boot, /var/...: not for the sidebar */
     if (mount == NULL && system && size < MIN_INTERNAL_SIZE)
         return NULL;
 
@@ -219,8 +246,9 @@ static SfeDevice* device_from_udisks(SfeDevices* self, GDBusObject* object)
         d->icon_name = g_strdup(removable ? "drive-removable-media-symbolic" : "drive-harddisk-symbolic");
     d->mount_path = g_steal_pointer(&mount);
     d->removable = removable;
+    d->system_root = root;
     d->can_mount = d->mount_path == NULL;
-    d->can_unmount = d->mount_path != NULL;
+    d->can_unmount = d->mount_path != NULL && !root; /* the system cannot be unmounted */
     return d;
 }
 

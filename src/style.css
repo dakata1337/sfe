@@ -736,3 +736,22 @@ menu.sfe-menu {
 .sfe-icon-choice-title {
     font-weight: bold;
 }
+
+/* Sidebar devices: a thin bar of the space used under the name. */
+.sfe-window .sfe-sidebar progressbar.sfe-usage trough,
+.sfe-window .sfe-sidebar progressbar.sfe-usage progress {
+    min-height: 3px;
+    border-radius: 2px;
+}
+
+.sfe-window .sfe-sidebar progressbar.sfe-usage trough {
+    background-color: alpha(@sfe_fg, 0.12);
+}
+
+.sfe-window .sfe-sidebar progressbar.sfe-usage progress {
+    background-color: alpha(@sfe_accent, 0.85);
+}
+
+.sfe-window .sfe-sidebar progressbar.sfe-usage.sfe-full progress {
+    background-color: @sfe_error;
+}

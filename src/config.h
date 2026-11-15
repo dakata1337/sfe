@@ -46,6 +46,12 @@ typedef struct {
     unsigned applies_to; /* SFE_ACTION_* */
 } SfeUserAction;
 
+/* Which devices the sidebar lists ([sidebar] devices). */
+typedef enum {
+    SFE_DEVICES_ALL, /* removable drives and internal disks */
+    SFE_DEVICES_REMOVABLE, /* only what can be unplugged */
+} SfeDeviceFilter;
+
 /* How file icons are drawn ([general] file_icons). */
 typedef enum {
     SFE_FILE_ICONS_SYSTEM, /* the icon theme's own colours */
@@ -73,6 +79,7 @@ typedef struct {
     /* [sidebar] */
     GPtrArray* bookmarks; /* char*, may start with "~" */
     bool show_gtk_bookmarks;
+    int devices; /* SfeDeviceFilter */
 
     /* [open]: extension (lowercase, no dot) -> command with %f */
     GHashTable* open_with;

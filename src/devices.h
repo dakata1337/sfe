@@ -20,6 +20,7 @@ typedef struct {
     char* icon_name; /* symbolic icon */
     char* mount_path; /* NULL when not mounted */
     bool removable; /* "eject" unmounts it and powers the drive off */
+    bool system_root; /* the filesystem mounted at "/" */
     bool can_mount;
     bool can_unmount;
 } SfeDevice;
