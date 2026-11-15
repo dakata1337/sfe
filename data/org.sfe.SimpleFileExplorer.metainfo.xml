@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.2.0" date="2026-11-15">
+      <description>
+        <p>Mounted drives in the sidebar show how full they are, with the numbers on hover; the system disk is listed too, and a setting limits the list to removable drives.</p>
+      </description>
+    </release>
     <release version="1.1.1" date="2026-11-15">
       <description>
         <p>Fixes two crashes in the command line completion and a view in an unreadable folder (such as /root) that could not be focused or closed.</p>
