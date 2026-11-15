@@ -3,7 +3,8 @@
 /* One directory view: top bar (back, forward, parent, path entry, view
  * toggle, split and close buttons) above a grid or list of files.
  *
- * Signals: "directory-changed", "split" (SfeSplitKind), "close". */
+ * Signals: "directory-changed", "selection-changed", "visual-changed",
+ * "split" (SfeSplitKind), "close". */
 
 #include "config.h"
 #include "filefilter.h"

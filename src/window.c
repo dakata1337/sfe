@@ -13,6 +13,7 @@
 #endif
 #include "keymap.h"
 #include "opsbar.h"
+#include "preview.h"
 #include "sidebar.h"
 #include "split.h"
 #include "undo.h"
@@ -41,6 +42,7 @@ struct _SfeWindow {
     GPtrArray* filters; /* SfeFileFilter*, or NULL */
     int filter_index; /* the one in use */
     GPtrArray* choice_widgets; /* GtkCheckButton / GtkComboBoxText, "sfe-choice-id" set */
+    SfePreview* preview; /* the selected file, beside the views */
     bool chosen; /* the answer was printed */
     SfeKeymap* keymap; /* normal-mode keys: defaults + config [keys] */
     SfeKeymap* visual_keymap; /* looked up first in visual mode: [keys.visual] */
@@ -133,14 +135,35 @@ static void update_mode(SfeWindow* win);
 
 static void apply_filter(SfeWindow* win);
 
+/* The chooser's preview follows the active view's selection. */
+static void update_preview(SfeWindow* win)
+{
+    SfePane* pane = win->preview ? sfe_window_get_active_pane(win) : NULL;
+    if (pane == NULL)
+        return;
+    GList* files = sfe_pane_get_selected_files(pane);
+    sfe_preview_set_files(win->preview, files);
+    g_list_free_full(files, g_object_unref);
+}
+
+static void on_selection_changed(SfeSplit* split, SfePane* pane, gpointer data)
+{
+    (void)split;
+    SfeWindow* win = SFE_WINDOW(data);
+    if (pane == sfe_window_get_active_pane(win))
+        update_preview(win);
+}
+
 static void on_directory_changed(SfeSplit* split, SfePane* pane, gpointer data)
 {
     (void)split;
     SfeWindow* win = SFE_WINDOW(data);
     if (win->filters != NULL) /* a view opened later gets the filter too */
         apply_filter(win);
-    if (pane == sfe_window_get_active_pane(win))
+    if (pane == sfe_window_get_active_pane(win)) {
         follow_active_pane(win);
+        update_preview(win);
+    }
 }
 
 static void on_active_changed(SfeSplit* split, gpointer data)
@@ -148,6 +171,7 @@ static void on_active_changed(SfeSplit* split, gpointer data)
     (void)split;
     follow_active_pane(SFE_WINDOW(data));
     update_mode(SFE_WINDOW(data));
+    update_preview(SFE_WINDOW(data));
 }
 
 static void on_set_focus(GtkWindow* window, GtkWidget* widget, gpointer data)
@@ -523,6 +547,7 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     g_signal_connect(win->split, "directory-changed", G_CALLBACK(on_directory_changed), win);
     g_signal_connect(win->split, "active-changed", G_CALLBACK(on_active_changed), win);
     g_signal_connect(win->split, "visual-changed", G_CALLBACK(on_visual_changed), win);
+    g_signal_connect(win->split, "selection-changed", G_CALLBACK(on_selection_changed), win);
     g_signal_connect_after(win, "set-focus", G_CALLBACK(on_set_focus), win);
 
     win->ops_bar = SFE_OPS_BAR(sfe_ops_bar_new());
@@ -832,7 +857,23 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
         else
             g_signal_connect_after(win, "realize", G_CALLBACK(attach_to_parent), NULL); /* (the GdkWindow exists then) */
     }
-    gtk_window_set_default_size(GTK_WINDOW(win), 900, 600);
+    gtk_window_set_default_size(GTK_WINDOW(win), 1060, 640);
+
+    /* The views get the preview on their right: [views | preview]. */
+    GList* children = gtk_container_get_children(GTK_CONTAINER(win->content));
+    GtkWidget* views = g_object_ref(children->data);
+    g_list_free(children);
+    gtk_container_remove(GTK_CONTAINER(win->content), views);
+    GtkWidget* paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+    win->preview = SFE_PREVIEW(sfe_preview_new());
+    gtk_paned_pack1(GTK_PANED(paned), views, TRUE, FALSE);
+    gtk_paned_pack2(GTK_PANED(paned), GTK_WIDGET(win->preview), FALSE, FALSE);
+    g_object_unref(views);
+    gtk_box_pack_start(GTK_BOX(win->content), paned, TRUE, TRUE, 0);
+    gtk_box_reorder_child(GTK_BOX(win->content), paned, 0);
+    gtk_widget_show(paned);
+    gtk_widget_show(GTK_WIDGET(win->preview));
+    update_preview(win);
 
     /* [Name  ____________]                      (save only)
      * [Images ▾] [options] hint ...  [Cancel] [Open] */

@@ -106,6 +106,7 @@ ui_src = files(
   'src/pane.c',
   'src/pathentry.c',
   'src/prefs.c',
+  'src/preview.c',
   'src/props.c',
   'src/renamedlg.c',
   'src/search.c',

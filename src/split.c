@@ -30,6 +30,7 @@ enum {
     SIGNAL_ACTIVE_CHANGED,
     SIGNAL_DIRECTORY_CHANGED,
     SIGNAL_VISUAL_CHANGED,
+    SIGNAL_SELECTION_CHANGED,
     N_SIGNALS,
 };
 static guint signals[N_SIGNALS];
@@ -335,6 +336,11 @@ static void on_pane_visual_changed(SfePane* pane, gpointer data)
     g_signal_emit(data, signals[SIGNAL_VISUAL_CHANGED], 0, pane);
 }
 
+static void on_pane_selection_changed(SfePane* pane, gpointer data)
+{
+    g_signal_emit(data, signals[SIGNAL_SELECTION_CHANGED], 0, pane);
+}
+
 static SfePane* add_pane(SfeSplit* self, GFile* dir)
 {
     SfePane* pane = g_object_ref_sink(sfe_pane_new(dir));
@@ -343,6 +349,7 @@ static SfePane* add_pane(SfeSplit* self, GFile* dir)
     g_signal_connect(pane, "close", G_CALLBACK(on_pane_close), self);
     g_signal_connect(pane, "directory-changed", G_CALLBACK(on_pane_directory_changed), self);
     g_signal_connect(pane, "visual-changed", G_CALLBACK(on_pane_visual_changed), self);
+    g_signal_connect(pane, "selection-changed", G_CALLBACK(on_pane_selection_changed), self);
     self->panes[self->n_panes++] = pane;
     return pane;
 }
@@ -474,6 +481,8 @@ static void sfe_split_class_init(SfeSplitClass* klass)
     signals[SIGNAL_DIRECTORY_CHANGED] = g_signal_new("directory-changed", G_TYPE_FROM_CLASS(klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, SFE_TYPE_PANE);
     signals[SIGNAL_VISUAL_CHANGED] = g_signal_new("visual-changed", G_TYPE_FROM_CLASS(klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, SFE_TYPE_PANE);
+    signals[SIGNAL_SELECTION_CHANGED] = g_signal_new("selection-changed", G_TYPE_FROM_CLASS(klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, SFE_TYPE_PANE);
 }
 

@@ -82,6 +82,8 @@ struct _SfePane {
     bool visual;
     GtkTreeRowReference* visual_anchor; /* NULL between chunks */
     GHashTable* visual_base; /* GFile* set */
+
+    guint selection_source; /* a pending "selection-changed" */
 };
 
 G_DEFINE_TYPE(SfePane, sfe_pane, GTK_TYPE_BOX)
@@ -91,6 +93,7 @@ enum {
     SIGNAL_VISUAL_CHANGED,
     SIGNAL_SPLIT,
     SIGNAL_CLOSE,
+    SIGNAL_SELECTION_CHANGED,
     N_SIGNALS,
 };
 static guint signals[N_SIGNALS];
@@ -1716,6 +1719,24 @@ static GtkWidget* scrolled(GtkWidget* child)
     return sw;
 }
 
+/* Selections change a row at a time (Shift+click, select all, visual
+ * mode): "selection-changed" goes out once, when they are done. */
+static gboolean emit_selection_changed(gpointer data)
+{
+    SfePane* self = data;
+    self->selection_source = 0;
+    g_signal_emit(self, signals[SIGNAL_SELECTION_CHANGED], 0);
+    return G_SOURCE_REMOVE;
+}
+
+static void on_selection_changed(gpointer view_or_selection, gpointer data)
+{
+    (void)view_or_selection;
+    SfePane* self = data;
+    if (self->selection_source == 0)
+        self->selection_source = g_idle_add(emit_selection_changed, self);
+}
+
 static GtkWidget* build_grid(SfePane* self)
 {
     GtkWidget* grid = gtk_icon_view_new();
@@ -1744,6 +1765,7 @@ static GtkWidget* build_grid(SfePane* self)
     self->grid_text = text;
 
     g_signal_connect(grid, "item-activated", G_CALLBACK(on_grid_activated), self);
+    g_signal_connect(grid, "selection-changed", G_CALLBACK(on_selection_changed), self);
     g_signal_connect(grid, "key-press-event", G_CALLBACK(on_view_key_press), self);
     g_signal_connect(grid, "button-press-event", G_CALLBACK(on_view_button_press), self);
     g_signal_connect(grid, "motion-notify-event", G_CALLBACK(on_view_motion), self);
@@ -1796,6 +1818,7 @@ static GtkWidget* build_list(SfePane* self)
     add_text_column(self, list, "Type", SFE_COL_TYPE_TEXT, SFE_SORT_TYPE, 0.0f);
 
     g_signal_connect(list, "row-activated", G_CALLBACK(on_list_activated), self);
+    g_signal_connect(gtk_tree_view_get_selection(tree), "changed", G_CALLBACK(on_selection_changed), self);
     g_signal_connect(list, "key-press-event", G_CALLBACK(on_view_key_press), self);
     g_signal_connect(list, "button-press-event", G_CALLBACK(on_view_button_press), self);
     g_signal_connect(list, "motion-notify-event", G_CALLBACK(on_view_motion), self);
@@ -1965,6 +1988,7 @@ static void sfe_pane_dispose(GObject* object)
     g_clear_object(&self->thumb_cancel);
     g_clear_handle_id(&self->thumb_source, g_source_remove);
     g_clear_handle_id(&self->columns_source, g_source_remove);
+    g_clear_handle_id(&self->selection_source, g_source_remove);
     if (self->model != NULL) {
         g_signal_handlers_disconnect_by_data(self->model, self);
         g_clear_object(&self->model);
@@ -1993,6 +2017,9 @@ static void sfe_pane_class_init(SfePaneClass* klass)
     signals[SIGNAL_SPLIT] = g_signal_new("split",
         G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_INT);
     signals[SIGNAL_CLOSE] = g_signal_new("close",
+        G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    /* The selected files changed (once per change, after it is done). */
+    signals[SIGNAL_SELECTION_CHANGED] = g_signal_new("selection-changed",
         G_TYPE_FROM_CLASS(klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 

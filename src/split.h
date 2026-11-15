@@ -25,7 +25,8 @@ G_DECLARE_FINAL_TYPE(SfeSplit, sfe_split, SFE, SPLIT, GtkBox)
 
 /* Signals:
  *   "active-changed"             another pane became active
- *   "directory-changed" (pane)   any pane changed directory */
+ *   "directory-changed" (pane)   any pane changed directory
+ *   "selection-changed" (pane)   the files selected in a pane changed */
 SfeSplit* sfe_split_new(GFile* dir);
 
 SfePane* sfe_split_get_active(SfeSplit* self);

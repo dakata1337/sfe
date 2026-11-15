@@ -782,3 +782,13 @@ menu.sfe-menu {
     background-color: @sfe_accent;
     color: @sfe_accent_fg;
 }
+
+.sfe-window .sfe-preview {
+    padding: 24px 12px;
+    background-color: @sfe_bg;
+    border-left: 1px solid alpha(@sfe_fg, 0.08);
+}
+
+.sfe-window .sfe-preview-name {
+    font-weight: bold;
+}
