@@ -15,6 +15,13 @@ project('sfe', 'c',
 gnome = import('gnome')
 cc = meson.get_compiler('c')
 
+if get_option('buildtype') == 'release'
+  add_project_arguments('-DBUILD_TYPE="release"', language: 'c')
+else
+  add_project_arguments('-DDEBUG', language: 'c')
+  add_project_arguments('-DBUILD_TYPE="debug"', language: 'c')
+endif
+
 add_project_arguments(cc.get_supported_arguments(
   '-Wno-gnu-statement-expression', # GLib macros (clang)
   '-Wno-missing-field-initializers', # allow partial initializers in tables

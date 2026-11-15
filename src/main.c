@@ -3,7 +3,7 @@
 int main(int argc, char** argv)
 {
     /* Enable GTK debug messages for debug builds */
-#if buildtype == debug
+#if defined(DEBUG)
     g_setenv("G_MESSAGES_DEBUG", "sfe", true);
 #endif
 
