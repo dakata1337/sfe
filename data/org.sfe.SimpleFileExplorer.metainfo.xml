@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.1.0" date="2026-11-15">
+      <description>
+        <p>File icons can follow the theme's colours: folders in the accent colour, or one-colour icons, chosen in Settings with a preview of each style.</p>
+      </description>
+    </release>
     <release version="1.0.0" date="2026-11-15">
       <description>
         <p>The first release.</p>
