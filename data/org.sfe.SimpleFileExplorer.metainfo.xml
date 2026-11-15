@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.4.1" date="2026-11-15">
+      <description>
+        <p>Documentation: how to make Chromium and Electron apps use sfe as their file dialog when the session bus address is not set.</p>
+      </description>
+    </release>
     <release version="1.4.0" date="2026-11-15">
       <description>
         <p>sfe can be the Open / Save dialog of other programs (through xdg-desktop-portal, set in Settings), with the program's file type filters and options, a preview of the selected file, and folder-only and one-file selection where the program asks for it.</p>

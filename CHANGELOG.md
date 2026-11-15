@@ -6,6 +6,15 @@ new version.
 
 ## Unreleased
 
+## 1.4.1
+
+- Docs: Chromium and Electron apps (Claude Desktop, VS Code, …) use sfe as
+  their file dialog only when they can reach the session bus.
+  `docs/file-chooser.md` now has a troubleshooting section on setting
+  `DBUS_SESSION_BUS_ADDRESS` for the session (needed without systemd,
+  e.g. on Artix), and on an old `sfe-portal` still answering after an
+  update.
+
 ## 1.4.0
 
 - sfe can be the file dialog of other programs: *Settings → System → Use sfe
