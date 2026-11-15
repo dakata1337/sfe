@@ -365,11 +365,12 @@ static void add_usage_bar(GtkWidget* row, RowData* d)
     gtk_box_reorder_child(GTK_BOX(box), column, 1);
 }
 
-/* Removable drives first (flash drives, SD cards), then the mounted disks
- * (the system disk), then the disks that can be mounted; by name within. */
+/* Mounted disks (the system disk) first, then the disks that can be
+ * mounted, and at the end the removable drives (flash drives, SD cards);
+ * by name within. */
 static int device_group(const SfeDevice* dev)
 {
-    return dev->removable ? 0 : dev->mount_path != NULL ? 1 : 2;
+    return dev->removable ? 2 : dev->mount_path != NULL ? 0 : 1;
 }
 
 static int compare_devices(gconstpointer a, gconstpointer b)
