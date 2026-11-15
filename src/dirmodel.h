@@ -58,7 +58,8 @@ GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self);
 void sfe_dir_model_set_show_hidden(SfeDirModel* self, bool show);
 
 /* A file dialog's type filter: only matching files (and every folder) are
- * shown. Borrowed: keep it alive while set; NULL shows everything. */
+ * shown; a folders-only filter hides every file. Borrowed: keep it alive
+ * while set; NULL shows everything. */
 void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter);
 
 /* Shows only files whose name matches `query` (fuzzy, see fuzzy.h), best

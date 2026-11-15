@@ -40,6 +40,7 @@ struct _SfeWindow {
     const SfeChooser* chooser; /* chooser mode (sfe --choose), or NULL */
     GtkWidget* chooser_name; /* save: the file name entry */
     GPtrArray* filters; /* SfeFileFilter*, or NULL */
+    SfeFileFilter* folder_filter; /* folder dialogs: folders only (instead of `filters`) */
     int filter_index; /* the one in use */
     GPtrArray* choice_widgets; /* GtkCheckButton / GtkComboBoxText, "sfe-choice-id" set */
     SfePreview* preview; /* the selected file, beside the views */
@@ -158,7 +159,7 @@ static void on_directory_changed(SfeSplit* split, SfePane* pane, gpointer data)
 {
     (void)split;
     SfeWindow* win = SFE_WINDOW(data);
-    if (win->filters != NULL) /* a view opened later gets the filter too */
+    if (win->filters != NULL || win->folder_filter != NULL) /* a view opened later gets the filter too */
         apply_filter(win);
     if (pane == sfe_window_get_active_pane(win)) {
         follow_active_pane(win);
@@ -512,6 +513,7 @@ static void sfe_window_dispose(GObject* object)
     g_clear_pointer(&win->keymap, sfe_keymap_free);
     g_clear_pointer(&win->visual_keymap, sfe_keymap_free);
     g_clear_pointer(&win->filters, g_ptr_array_unref);
+    g_clear_pointer(&win->folder_filter, sfe_file_filter_free);
     g_clear_pointer(&win->choice_widgets, g_ptr_array_unref);
     G_OBJECT_CLASS(sfe_window_parent_class)->dispose(object);
 }
@@ -769,7 +771,8 @@ static void attach_to_parent(GtkWidget* widget, gpointer data)
 /* The type filter in use, for every view. */
 static void apply_filter(SfeWindow* win)
 {
-    const SfeFileFilter* filter = win->filters && win->filter_index >= 0 && win->filter_index < (int)win->filters->len
+    const SfeFileFilter* filter = win->folder_filter ? win->folder_filter
+        : win->filters && win->filter_index >= 0 && win->filter_index < (int)win->filters->len
         ? g_ptr_array_index(win->filters, win->filter_index)
         : NULL;
     for (int i = 0; i < sfe_split_get_n_panes(win->split); i++)
@@ -857,11 +860,11 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
         else
             g_signal_connect_after(win, "realize", G_CALLBACK(attach_to_parent), NULL); /* (the GdkWindow exists then) */
     }
-    gtk_window_set_default_size(GTK_WINDOW(win), chooser->mode == SFE_CHOOSE_SAVE ? 900 : 1060, 640);
+    gtk_window_set_default_size(GTK_WINDOW(win), chooser->mode == SFE_CHOOSE_OPEN ? 1060 : 900, 640);
 
-    /* Open / folder: the views get the preview on their right:
-     * [views | preview]. Saving needs none (the name is what matters). */
-    if (chooser->mode != SFE_CHOOSE_SAVE) {
+    /* Opening files: the views get the preview on their right:
+     * [views | preview]. Saving and folders need none. */
+    if (chooser->mode == SFE_CHOOSE_OPEN) {
         GList* children = gtk_container_get_children(GTK_CONTAINER(win->content));
         GtkWidget* views = g_object_ref(children->data);
         g_list_free(children);
@@ -893,14 +896,27 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
         gtk_box_pack_start(GTK_BOX(bar), name_row, FALSE, FALSE, 0);
     }
     GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
-    GtkWidget* combo = chooser->filters ? filter_combo(win) : NULL;
+    /* A folder dialog lists only folders: the program's file types (some
+     * send them anyway) do not apply. */
+    GtkWidget* combo = NULL;
+    if (chooser->mode == SFE_CHOOSE_FOLDER) {
+        win->folder_filter = sfe_file_filter_new_folders_only();
+        apply_filter(win);
+    } else if (chooser->filters != NULL) {
+        combo = filter_combo(win);
+    }
     if (combo != NULL)
         gtk_box_pack_start(GTK_BOX(row), combo, FALSE, FALSE, 0);
     if (chooser->choices != NULL)
         add_choices(win, GTK_BOX(row));
     if (chooser->mode != SFE_CHOOSE_SAVE) {
-        GtkWidget* hint = gtk_label_new(chooser->mode == SFE_CHOOSE_FOLDER
-                ? "Pick a folder, or Select for the one shown"
+        /* the button's label as shown: "_Upload" → "Upload" */
+        g_autofree char* button = g_strdup(chooser->accept_label ? chooser->accept_label : labels[chooser->mode]);
+        char* underscore = strchr(button, '_');
+        if (underscore != NULL)
+            memmove(underscore, underscore + 1, strlen(underscore));
+        g_autofree char* folder_hint = g_strdup_printf("Pick a folder, or %s for the one shown", button);
+        GtkWidget* hint = gtk_label_new(chooser->mode == SFE_CHOOSE_FOLDER ? folder_hint
                 : chooser->multiple ? "Pick files (Ctrl+click for several)" : "Pick a file");
         gtk_style_context_add_class(gtk_widget_get_style_context(hint), "sfe-placeholder");
         gtk_label_set_xalign(GTK_LABEL(hint), 0);
@@ -908,7 +924,8 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
         gtk_box_pack_start(GTK_BOX(row), hint, TRUE, TRUE, 0);
     }
     GtkWidget* cancel = gtk_button_new_with_label("Cancel");
-    GtkWidget* ok = gtk_button_new_with_label(chooser->accept_label ? chooser->accept_label : labels[chooser->mode]);
+    /* (the portal allows mnemonics: GTK programs send "_Open") */
+    GtkWidget* ok = gtk_button_new_with_mnemonic(chooser->accept_label ? chooser->accept_label : labels[chooser->mode]);
     gtk_style_context_add_class(gtk_widget_get_style_context(ok), "suggested-action");
     g_signal_connect(cancel, "clicked", G_CALLBACK(on_cancel), win);
     g_signal_connect(ok, "clicked", G_CALLBACK(on_accept), win);

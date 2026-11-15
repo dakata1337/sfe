@@ -169,9 +169,8 @@ static bool is_shown(SfeDirModel* self, GFileInfo* info)
 {
     if (!passes_hidden(self, info))
         return false;
-    if (self->filter != NULL && !info_is_dir(info) /* folders stay, to walk into */
-        && !sfe_file_filter_matches(self->filter, g_file_info_get_display_name(info),
-            g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE)))
+    if (!sfe_file_filter_shows(self->filter, g_file_info_get_display_name(info),
+            g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE), info_is_dir(info)))
         return false;
     if (self->query == NULL)
         return true;

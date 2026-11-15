@@ -16,6 +16,16 @@ void sfe_file_filter_free(gpointer p)
     g_free(f);
 }
 
+SfeFileFilter* sfe_file_filter_new_folders_only(void)
+{
+    SfeFileFilter* f = g_new0(SfeFileFilter, 1);
+    f->name = g_strdup("Folders");
+    f->globs = g_ptr_array_new_with_free_func(g_free);
+    f->mime_types = g_ptr_array_new_with_free_func(g_free);
+    f->folders_only = true;
+    return f;
+}
+
 GPtrArray* sfe_file_filters_parse(const char* text, GError** error)
 {
     g_autoptr(GVariant) v = g_variant_parse(G_VARIANT_TYPE("a(sa(us))"), text, NULL, NULL, error);
@@ -69,4 +79,11 @@ bool sfe_file_filter_matches(const SfeFileFilter* filter, const char* name, cons
             return true;
     }
     return false;
+}
+
+bool sfe_file_filter_shows(const SfeFileFilter* filter, const char* name, const char* content_type, bool is_dir)
+{
+    if (filter == NULL || is_dir)
+        return true;
+    return !filter->folders_only && sfe_file_filter_matches(filter, name, content_type);
 }
