@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>File Dialog Tester</title>
+<!--
+  Opens the browser's Open / Save dialogs with different file type filters,
+  to test sfe as the system file dialog (docs/file-chooser.md). Open this
+  file from disk in the browser; nothing is uploaded anywhere.
+
+  Zen / Firefox: about:config → widget.use-xdg-desktop-portal.file-picker = 1.
+  For "Download", also Settings → "Always ask you where to save files".
+-->
+<style>
+  :root {
+    --bg: #f6f6f4; --card: #ffffff; --fg: #1d1d1b; --dim: #6b6b66;
+    --line: #dddcd6; --accent: #2f6fde; --accent-fg: #fff;
+    --ok: #1f8a4c; --bad: #c2382f; --chip: #ecebe6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #151514; --card: #1e1e1c; --fg: #ecebe6; --dim: #9a9993;
+      --line: #33332f; --accent: #6b9cff; --accent-fg: #0d1526;
+      --ok: #4cc17f; --bad: #ff7a70; --chip: #2a2a27;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 system-ui, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  p.lead { color: var(--dim); margin: 0 0 20px; }
+  section {
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .chip {
+    border: 1px solid var(--line); background: var(--chip); color: var(--fg);
+    border-radius: 999px; padding: 4px 12px; font: inherit; font-size: 0.9rem; cursor: pointer;
+  }
+  .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+  label.field { display: block; font-size: 0.85rem; color: var(--dim); margin-bottom: 4px; }
+  input[type="text"], select {
+    width: 100%; padding: 7px 10px; font: inherit; color: var(--fg);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  }
+  input[type="text"] { font-family: ui-monospace, monospace; font-size: 0.9rem; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin: 12px 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+  button.main {
+    background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 6px;
+    padding: 8px 18px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button.main:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.main.secondary { background: var(--chip); color: var(--fg); border: 1px solid var(--line); }
+  .note { color: var(--dim); font-size: 0.85rem; margin: 8px 0 0; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--dim); font-weight: 500; }
+  td.name { word-break: break-all; }
+  .ok { color: var(--ok); font-weight: 600; }
+  .bad { color: var(--bad); font-weight: 600; }
+  #log {
+    font: 0.85rem/1.5 ui-monospace, monospace; white-space: pre-wrap; margin: 0;
+    max-height: 220px; overflow: auto; color: var(--dim);
+  }
+  code { font-family: ui-monospace, monospace; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>File dialog tester</h1>
+  <p class="lead">Opens the browser's Open and Save dialogs with different file types, to check
+    which filters reach the system file dialog and what comes back.</p>
+
+  <section>
+    <h2>Open</h2>
+    <div class="chips" id="open-presets"></div>
+    <label class="field" for="accept">accept (comma separated: <code>.ext</code>, <code>type/subtype</code>, <code>type/*</code>; empty = any file)</label>
+    <input type="text" id="accept" spellcheck="false">
+    <div class="row">
+      <label><input type="checkbox" id="multiple"> Several files (<code>multiple</code>)</label>
+      <label><input type="checkbox" id="folder"> A folder (<code>webkitdirectory</code>)</label>
+    </div>
+    <button class="main" id="open">Open…</button>
+    <table id="picked" hidden>
+      <thead><tr><th>File</th><th>Type</th><th>Size</th><th>Matches accept</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Save</h2>
+    <div class="chips" id="save-presets"></div>
+    <div class="grid">
+      <div>
+        <label class="field" for="save-name">File name</label>
+        <input type="text" id="save-name" spellcheck="false">
+      </div>
+      <div>
+        <label class="field" for="save-type">MIME type</label>
+        <input type="text" id="save-type" spellcheck="false">
+      </div>
+    </div>
+    <div class="row">
+      <button class="main" id="download">Download…</button>
+      <button class="main secondary" id="picker">showSaveFilePicker…</button>
+    </div>
+    <p class="note"><b>Download</b> asks where to save only with "Always ask you where to save files"
+      on; the browser builds the filter from the name and type. <b>showSaveFilePicker</b> sends the
+      type and extension as a filter, but only Chromium-based browsers have it.</p>
+  </section>
+
+  <section>
+    <h2>Log</h2>
+    <pre id="log"></pre>
+  </section>
+</main>
+
+<script>
+const OPEN_PRESETS = [
+  ["Any file", ""],
+  ["Images", "image/*"],
+  ["PNG + JPEG", ".png,.jpg,.jpeg"],
+  ["PNG (MIME)", "image/png"],
+  ["PDF", ".pdf,application/pdf"],
+  ["Text", "text/plain,.md,.txt"],
+  ["Audio + video", "audio/*,video/*"],
+  ["Office", ".doc,.docx,.odt,.xls,.xlsx,.ods"],
+  ["Archives", ".zip,.tar,.gz,.7z"],
+  ["Upper case .JPG", ".JPG"],
+];
+const SAVE_PRESETS = [
+  ["Text", "notes.txt", "text/plain"],
+  ["Markdown", "readme.md", "text/markdown"],
+  ["CSV", "table.csv", "text/csv"],
+  ["JSON", "data.json", "application/json"],
+  ["PNG", "picture.png", "image/png"],
+  ["SVG", "drawing.svg", "image/svg+xml"],
+  ["No extension", "untitled", "application/octet-stream"],
+];
+
+const $ = (id) => document.getElementById(id);
+const log = (text) => {
+  const time = new Date().toLocaleTimeString();
+  $("log").textContent = `${time}  ${text}\n` + $("log").textContent;
+};
+
+function chips(container, presets, onPick) {
+  const buttons = presets.map((preset, i) => {
+    const b = document.createElement("button");
+    b.className = "chip";
+    b.textContent = preset[0];
+    b.addEventListener("click", () => {
+      buttons.forEach((other) => other.setAttribute("aria-pressed", String(other === b)));
+      onPick(preset);
+    });
+    container.append(b);
+    return b;
+  });
+  buttons[0].click();
+}
+
+// ---- Open ----------------------------------------------------------------
+
+chips($("open-presets"), OPEN_PRESETS, ([, accept]) => { $("accept").value = accept; });
+
+// Whether a file passes `accept`, the way the browser means it.
+function matches(file, accept) {
+  const rules = accept.split(",").map((r) => r.trim().toLowerCase()).filter(Boolean);
+  if (rules.length === 0) return true;
+  const name = file.name.toLowerCase();
+  const type = (file.type || "").toLowerCase();
+  return rules.some((rule) => rule.startsWith(".") ? name.endsWith(rule)
+    : rule.endsWith("/*") ? type.startsWith(rule.slice(0, -1))
+    : type === rule);
+}
+
+function size(bytes) {
+  const units = ["B", "kB", "MB", "GB"];
+  let i = 0;
+  while (bytes >= 1000 && i < units.length - 1) { bytes /= 1000; i++; }
+  return `${i ? bytes.toFixed(1) : bytes} ${units[i]}`;
+}
+
+$("open").addEventListener("click", () => {
+  // A new input each time, so the current settings apply.
+  const input = document.createElement("input");
+  input.type = "file";
+  const accept = $("accept").value.trim();
+  if (accept) input.accept = accept;
+  input.multiple = $("multiple").checked;
+  input.webkitdirectory = $("folder").checked;
+  log(`open: accept="${accept}" multiple=${input.multiple} folder=${input.webkitdirectory}`);
+  input.addEventListener("change", () => showPicked([...input.files], accept));
+  input.addEventListener("cancel", () => log("open: cancelled"));
+  input.click();
+});
+
+function showPicked(files, accept) {
+  const body = $("picked").querySelector("tbody");
+  body.replaceChildren();
+  for (const f of files) {
+    const ok = matches(f, accept);
+    const row = document.createElement("tr");
+    const cells = [f.webkitRelativePath || f.name, f.type || "(unknown)", size(f.size), ok ? "yes" : "no"];
+    cells.forEach((text, i) => {
+      const td = document.createElement("td");
+      td.textContent = text;
+      if (i === 0) td.className = "name";
+      if (i === 3) td.className = ok ? "ok" : "bad";
+      row.append(td);
+    });
+    body.append(row);
+  }
+  $("picked").hidden = files.length === 0;
+  const misses = files.filter((f) => !matches(f, accept)).length;
+  log(`open: ${files.length} file(s)` + (misses ? `, ${misses} not matching accept` : ""));
+}
+
+// ---- Save ----------------------------------------------------------------
+
+chips($("save-presets"), SAVE_PRESETS, ([, name, type]) => {
+  $("save-name").value = name;
+  $("save-type").value = type;
+});
+
+// Something to save, in the chosen type.
+async function content(type) {
+  if (type === "image/png") {
+    const canvas = document.createElement("canvas");
+    canvas.width = 320; canvas.height = 200;
+    const g = canvas.getContext("2d");
+    const grad = g.createLinearGradient(0, 0, 320, 200);
+    grad.addColorStop(0, "#2f6fde"); grad.addColorStop(1, "#e0a43a");
+    g.fillStyle = grad; g.fillRect(0, 0, 320, 200);
+    return new Promise((done) => canvas.toBlob(done, "image/png"));
+  }
+  const text = {
+    "text/csv": "name,size\napple,1\nbanana,2\n",
+    "application/json": JSON.stringify({ test: "sfe file dialog", when: new Date() }, null, 2),
+    "image/svg+xml": '<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64"><circle cx="32" cy="32" r="28" fill="#2f6fde"/></svg>',
+  }[type] ?? `Saved from the file dialog tester at ${new Date()}\n`;
+  return new Blob([text], { type });
+}
+
+$("download").addEventListener("click", async () => {
+  const name = $("save-name").value.trim() || "untitled";
+  const type = $("save-type").value.trim() || "application/octet-stream";
+  const url = URL.createObjectURL(await content(type));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  log(`download: name="${name}" type="${type}"`);
+});
+
+if (!("showSaveFilePicker" in window)) {
+  $("picker").disabled = true;
+  $("picker").title = "This browser has no showSaveFilePicker (Chromium-based browsers only)";
+}
+
+$("picker").addEventListener("click", async () => {
+  const name = $("save-name").value.trim() || "untitled";
+  const type = $("save-type").value.trim() || "application/octet-stream";
+  const dot = name.lastIndexOf(".");
+  const options = { suggestedName: name };
+  if (dot > 0) options.types = [{ description: type, accept: { [type]: [name.slice(dot)] } }];
+  log(`showSaveFilePicker: ${JSON.stringify(options)}`);
+  try {
+    const handle = await window.showSaveFilePicker(options);
+    const writable = await handle.createWritable();
+    await writable.write(await content(type));
+    await writable.close();
+    log(`showSaveFilePicker: saved as "${handle.name}"`);
+  } catch (e) {
+    log(`showSaveFilePicker: ${e.name === "AbortError" ? "cancelled" : e.message}`);
+  }
+});
+</script>
+</body>
+</html>

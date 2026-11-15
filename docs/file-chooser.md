@@ -19,8 +19,8 @@ sfe adds two pieces:
 
 - **`sfe --choose open|save|folder`**: a separate sfe window with a bar at
   the bottom (a name field for saving, the file type filter, the program's
-  extra options, *Cancel*, *Open* / *Save* / *Select*) and a preview of the
-  selected file on the right. Enter or a double-click on a file chooses it;
+  extra options, *Cancel*, *Open* / *Save* / *Select*) and, when opening,
+  a preview of the selected file on the right. Enter or a double-click on a file chooses it;
   Ctrl+Enter is the *Open* / *Save* button. It prints the chosen files as
   URIs and exits with 0, or exits with 1 when cancelled. Try it on its own:
 
@@ -89,12 +89,19 @@ sfe adds two pieces:
 - **The parent window** (`parent_window`): the dialog is attached to the
   program that asked (`wayland:` handles through xdg-foreign, `x11:` window
   ids), so the compositor can keep it above that window.
-- **Preview**: the selected file's thumbnail (images, and videos or
+- **Preview** (Open and folder dialogs): the selected file's thumbnail (images, and videos or
   documents with a thumbnailer) or icon, with its type, size, date and an
   image's dimensions.
 
 Tested through the real portal with Zen, and by calling the backend over a
 private D-Bus session bus.
+
+To try different filters from a browser, open
+[`tests/manual/file-dialogs.html`](../tests/manual/file-dialogs.html) from
+disk: it opens the Open dialog with a chosen `accept` list (and multiple /
+folder), checks what comes back against it, and saves files of a chosen
+name and type (a download, or `showSaveFilePicker` in Chromium-based
+browsers).
 
 ## Not done yet
 

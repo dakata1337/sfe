@@ -857,23 +857,26 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
         else
             g_signal_connect_after(win, "realize", G_CALLBACK(attach_to_parent), NULL); /* (the GdkWindow exists then) */
     }
-    gtk_window_set_default_size(GTK_WINDOW(win), 1060, 640);
+    gtk_window_set_default_size(GTK_WINDOW(win), chooser->mode == SFE_CHOOSE_SAVE ? 900 : 1060, 640);
 
-    /* The views get the preview on their right: [views | preview]. */
-    GList* children = gtk_container_get_children(GTK_CONTAINER(win->content));
-    GtkWidget* views = g_object_ref(children->data);
-    g_list_free(children);
-    gtk_container_remove(GTK_CONTAINER(win->content), views);
-    GtkWidget* paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
-    win->preview = SFE_PREVIEW(sfe_preview_new());
-    gtk_paned_pack1(GTK_PANED(paned), views, TRUE, FALSE);
-    gtk_paned_pack2(GTK_PANED(paned), GTK_WIDGET(win->preview), FALSE, FALSE);
-    g_object_unref(views);
-    gtk_box_pack_start(GTK_BOX(win->content), paned, TRUE, TRUE, 0);
-    gtk_box_reorder_child(GTK_BOX(win->content), paned, 0);
-    gtk_widget_show(paned);
-    gtk_widget_show(GTK_WIDGET(win->preview));
-    update_preview(win);
+    /* Open / folder: the views get the preview on their right:
+     * [views | preview]. Saving needs none (the name is what matters). */
+    if (chooser->mode != SFE_CHOOSE_SAVE) {
+        GList* children = gtk_container_get_children(GTK_CONTAINER(win->content));
+        GtkWidget* views = g_object_ref(children->data);
+        g_list_free(children);
+        gtk_container_remove(GTK_CONTAINER(win->content), views);
+        GtkWidget* paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
+        win->preview = SFE_PREVIEW(sfe_preview_new());
+        gtk_paned_pack1(GTK_PANED(paned), views, TRUE, FALSE);
+        gtk_paned_pack2(GTK_PANED(paned), GTK_WIDGET(win->preview), FALSE, FALSE);
+        g_object_unref(views);
+        gtk_box_pack_start(GTK_BOX(win->content), paned, TRUE, TRUE, 0);
+        gtk_box_reorder_child(GTK_BOX(win->content), paned, 0);
+        gtk_widget_show(paned);
+        gtk_widget_show(GTK_WIDGET(win->preview));
+        update_preview(win);
+    }
 
     /* [Name  ____________]                      (save only)
      * [Images ▾] [options] hint ...  [Cancel] [Open] */
