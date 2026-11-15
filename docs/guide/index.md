@@ -20,6 +20,7 @@ Wayland. This guide covers every feature and every shortcut.
 - [Renaming](#renaming)
 - [Properties](#properties)
 - [Drives](#drives)
+- [Vim-style keys and the command line](#vim-style-keys-and-the-command-line)
 - [Debugging](#debugging)
 - [Configuration](#configuration)
 - [Themes](#themes)
@@ -263,6 +264,110 @@ polkit.addRule(function(action, subject) {
 
 Encrypted (LUKS) drives are not supported yet.
 
+## Vim-style keys and the command line
+
+Everything works from the keyboard. In the file views single keys are
+commands (*normal mode*); text fields (the path bar, the search, the command
+line, dialogs) take keys as text, and Esc leaves them. The mouse, the buttons
+and the shortcuts below keep working as before.
+
+### Normal-mode keys
+
+`<C-w>v` means Ctrl+W, then V; `H` is Shift+H and `<C-H>` Ctrl+Shift+H.
+While a chord is unfinished its keys show in the bottom-right corner; one
+not finished within a second is dropped, and Esc drops it at once.
+
+| Keys | Command | Does |
+|---|---|---|
+| `j` / `k` | `cursor down` / `cursor up` | move the cursor |
+| `gg` / `G` | `cursor first` / `cursor last` | first / last item |
+| `h`, `<BS>` | `cd ..` | parent folder |
+| `l` | `open` | open the folder or file |
+| `gh` | `cd ~` | home folder |
+| `<C-o>` / `<C-i>` | `back` / `forward` | history |
+| `<Space>` | `select toggle` | select or unselect the item, move to the next |
+| `yy` | `copy_clipboard` | copy the selection to the clipboard |
+| `dd` | `cut` | cut the selection |
+| `p` | `paste` | paste into this view |
+| `x` / `X` | `trash` / `delete` | move to trash / delete permanently (asks) |
+| `r` / `R` | `rename` / `mass_rename` | rename / rename with a pattern |
+| `zh` | `hidden toggle` | show / hide hidden files |
+| `/` | `search` | the fuzzy search |
+| `:` | | the command line |
+| `<C-w>v` / `<C-w>s` | `split vertical` / `split horizontal` | split side by side / top and bottom (same rules as the buttons) |
+| `<C-w>q` | `split close` | close the view (the window if it is the last) |
+| `W` | `split next` | next view: left, right-top, right-bottom |
+| `H` `J` `K` `L` | `split left` / `down` / `up` / `right` | focus the view in that direction |
+| `<C-H>` `<C-J>` `<C-K>` `<C-L>` | `split move left` / … | swap the active view with the one in that direction |
+
+### The command line
+
+`:` opens a line at the bottom of the views:
+
+![The command line completing a destination](images/command-line.png)
+
+- **Enter** runs the command, **Esc** cancels. Errors stay in the bar, in
+  red, until the next key.
+- **Tab** / **Shift+Tab** go through the completions; with a single one,
+  Tab takes it and goes on (after `Projects/` it lists what is inside).
+  **Up** / **Down** walk the commands typed this session.
+- Arguments are split like in a shell: `'My Files'`, `"My Files"` or
+  `My\ Files`. Completion inserts names already escaped.
+- Completion knows where things are: names from the **active view** come
+  first (relative to its folder), then the other views clockwise
+  (right-top, right-bottom, left) as full paths with `~`. Each line is
+  tagged with where it comes from. Within a group the best fuzzy match
+  (as in [Search](#search)) comes first.
+
+| Command | Arguments | Does |
+|---|---|---|
+| `cd` | `[<folder>]` | go to a folder (home without one) |
+| `open` | `[<file>…]` | open files and folders (the selection without any) |
+| `copy` (`cp`) | `<file>… <destination>` | copy into a folder |
+| `move` (`mv`) | `<file>… <destination>` | move into a folder |
+| `symlink` (`ln`) | `<target>… <folder or link name>` | make symbolic links |
+| `rename` | `[<file> <new name>]` | rename (the dialog without arguments) |
+| `mass_rename` | `[<file>…]` | rename with a pattern |
+| `new_file` (`touch`) | `[<name>…]` | create empty files (the dialog without a name) |
+| `new_directory` (`mkdir`) | `[<name>…]` | create folders, with the folders on the way |
+| `trash` | `[<file>…]` | move to the trash (the selection without any) |
+| `delete` | `[<file>…]` | delete permanently (asks) |
+| `copy_clipboard` (`yank`) | `[<file>…]` | copy to the clipboard |
+| `cut` | `[<file>…]` | cut to the clipboard |
+| `mount` | `<device>` | mount a drive and open it |
+| `unmount` | `<device>` | unmount a drive |
+| `eject` | `<device>` | unmount and power off a removable drive |
+| `split` | `move\|next\|vertical\|horizontal\|left\|right\|up\|down\|absolute\|close` | the split commands above; `absolute left\|right\|right-top\|right-bottom\|top\|bottom` focuses a position, offering only the ones that exist |
+| `bookmark` | `[<folder>]` | bookmark a folder (this one without an argument) |
+| `unbookmark` | `[<bookmark>]` | remove one of sfe's bookmarks |
+| `hidden` | `on\|off\|toggle` | show or hide hidden files |
+| `view` | `grid\|list` | the active view's layout |
+| `cursor` | `down\|up\|first\|last` | move the cursor |
+| `select` | `toggle\|all` | toggle the item under the cursor / select all |
+| `command_line` |  | open the command line |
+| `q` (`quit`) | | close the active view |
+
+Every action is a command too, with `-` written as `_`: `:paste`,
+`:preferences`, `:properties`, `:search`, `:reload`, `:back`, `:forward`,
+`:up`, `:compress`, `:extract`, `:restore`, `:empty_trash`, `:select_all`,
+`:view_grid`, `:view_list`, `:new_window` and so on; they act on the
+selection, like the menu. `:copy` and `:move` always need a destination
+folder: `:copy notes.txt ~/Backup`. For the second and later arguments the
+other views' folders are offered first.
+
+### Changing the keys
+
+Keys are bound in `config.toml`; an empty command removes a default:
+
+```toml
+[keys]
+"<C-w>v" = "split vertical"
+"gd" = "cd ~/Downloads"
+"x" = ""
+```
+
+A binding can be any command line, with arguments.
+
 ## Debugging
 
 Run sfe with `G_MESSAGES_DEBUG=sfe sfe` to see debug messages (navigation,
@@ -313,7 +418,8 @@ instantly. The same window with the plain Adwaita theme:
 
 ## Keyboard shortcuts
 
-Every shortcut in one place.
+Every shortcut in one place. The single-letter keys of normal mode are in
+[Vim-style keys](#normal-mode-keys).
 
 | Shortcut | Action |
 |---|---|
@@ -344,7 +450,7 @@ Every shortcut in one place.
 | Ctrl+\\ | split side by side |
 | Ctrl+- | split top / bottom |
 | F6 | next view |
-| Ctrl+W | close the view |
+| Ctrl+W Q | close the view |
 | Ctrl+P | preferences |
 | Ctrl+N | new window |
 | Ctrl+Q | quit |

@@ -268,6 +268,18 @@ sleep 0.6
 goto 2 Pictures/Holiday
 shot splits
 
+# The command line completing a destination: the other view's folder first.
+launch Projects/website
+key CTRL backslash
+sleep 0.6
+goto 2 Documents
+key SHIFT h
+key SHIFT semicolon
+type_text "copy index.html "
+sleep 0.8
+shot command-line
+key "" Escape
+
 launch Downloads
 key "" Home
 key "" Right

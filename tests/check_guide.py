@@ -5,8 +5,10 @@
 
 Reads the default shortcuts from the action table (src/actions.c) and the
 application shortcuts (src/app.c), and checks that each one appears in the
-"Keyboard shortcuts" table of docs/guide/index.md. Adding a shortcut without
-documenting it makes `meson test` fail.
+"Keyboard shortcuts" table of docs/guide/index.md. The normal-mode keys
+(src/keymap.c) and the ":" commands (src/commands.c) must appear, in
+backticks, in the "Vim-style keys and the command line" section. Adding a
+shortcut, key or command without documenting it makes `meson test` fail.
 """
 
 import os
@@ -61,9 +63,30 @@ def main():
     missing = [(name, display(a)) for name, a in actions + app if display(a) not in documented]
     for name, shortcut in missing:
         print(f"docs/guide/index.md: shortcut {shortcut} ({name}) is not in the Keyboard shortcuts table")
+
+    # The vim-style section: default keys and commands, each in backticks.
+    with open(os.path.join(root, "docs", "guide", "index.md"), encoding="utf-8") as f:
+        guide = f.read()
+    section = guide.split("## Vim-style keys and the command line", 1)[1].split("\n## ", 1)[0]
+    quoted = set(re.findall(r"`([^`]+)`", section))
+    with open(os.path.join(root, "src", "keymap.c"), encoding="utf-8") as f:
+        keys = re.findall(r'\{ "([^"]+)", "[^"]*", "[^"]*" \}', f.read())
+    with open(os.path.join(root, "src", "commands.c"), encoding="utf-8") as f:
+        commands = re.findall(r'\{ \{ "([a-z_]+)", (?:NULL|"[a-z]+"),', f.read())
+    if not keys or not commands:
+        sys.exit("found no keys in src/keymap.c or no commands in src/commands.c: has the format changed?")
+    for key in keys:
+        if key not in quoted:
+            print(f"docs/guide/index.md: normal-mode key `{key}` is not in the vim-style keys section")
+            missing.append(key)
+    for command in commands:
+        if command not in quoted:
+            print(f"docs/guide/index.md: command `{command}` is not in the command line section")
+            missing.append(command)
+
     if missing:
         sys.exit(1)
-    print(f"all {len(actions) + len(app)} shortcuts are documented")
+    print(f"all {len(actions) + len(app)} shortcuts, {len(keys)} keys and {len(commands)} commands are documented")
 
 
 if __name__ == "__main__":
