@@ -7,3 +7,11 @@
 /packaging/arch/*/pkg/
 /packaging/arch/*/*.pkg.tar.*
 /packaging/arch/*/*.tar.gz
+# tomlc17 is vendored: only its sources, license and README are tracked.
+/thirdparty/tomlc17/*
+!/thirdparty/tomlc17/src/
+!/thirdparty/tomlc17/LICENSE
+!/thirdparty/tomlc17/README.md
+/thirdparty/tomlc17/src/*
+!/thirdparty/tomlc17/src/tomlc17.c
+!/thirdparty/tomlc17/src/tomlc17.h
