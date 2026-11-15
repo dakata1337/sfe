@@ -852,6 +852,31 @@ void sfe_pane_visual_end(SfePane* self)
     g_signal_emit(self, signals[SIGNAL_VISUAL_CHANGED], 0);
 }
 
+void sfe_pane_center_cursor(SfePane* self)
+{
+    GtkTreePath* path = NULL;
+    if (self->visual) { /* the first selected item */
+        GList* rows = self->view == SFE_VIEW_GRID
+            ? gtk_icon_view_get_selected_items(GTK_ICON_VIEW(self->grid))
+            : gtk_tree_selection_get_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)), NULL);
+        for (GList* l = rows; l != NULL; l = l->next) {
+            if (path == NULL || gtk_tree_path_compare(l->data, path) < 0)
+                path = l->data;
+        }
+        path = path ? gtk_tree_path_copy(path) : NULL;
+        g_list_free_full(rows, (GDestroyNotify)gtk_tree_path_free);
+    }
+    if (path == NULL)
+        path = highlighted(self);
+    if (path == NULL)
+        return;
+    if (self->view == SFE_VIEW_GRID)
+        gtk_icon_view_scroll_to_path(GTK_ICON_VIEW(self->grid), path, TRUE, 0.5, 0.5);
+    else
+        gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(self->list), path, NULL, TRUE, 0.5, 0);
+    gtk_tree_path_free(path);
+}
+
 /* Opens files in their applications; the first directory is opened here. */
 void sfe_pane_open_files(SfePane* self, GList* files)
 {

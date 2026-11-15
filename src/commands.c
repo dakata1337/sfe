@@ -551,6 +551,15 @@ static bool run_visual(Ctx* c, int argc, char** argv, GError** error)
     return true;
 }
 
+static bool run_center(Ctx* c, int argc, char** argv, GError** error)
+{
+    (void)argv;
+    if (argc != 1)
+        return fail(error, "center takes no arguments");
+    sfe_pane_center_cursor(c->pane);
+    return true;
+}
+
 static bool run_command_line(Ctx* c, int argc, char** argv, GError** error)
 {
     (void)argc, (void)argv, (void)error;
@@ -821,6 +830,7 @@ static const Command commands[] = {
     { { "cursor", NULL, "down|up|first|last|previous|next", "move the cursor" }, complete_cursor, run_cursor },
     { { "select", NULL, "toggle|all", "toggle the item under the cursor / select all" }, complete_select, run_select },
     { { "visual", NULL, "[off|swap]", "visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end" }, complete_visual, run_visual },
+    { { "center", NULL, "", "scroll the cursor (in visual mode the first selected item) to the middle" }, NULL, run_center },
     { { "command_line", NULL, "", "open the command line" }, NULL, run_command_line },
 };
 
@@ -836,7 +846,7 @@ const SfeCommandInfo* sfe_commands_info(size_t* n)
 
 static bool stays_visual(const Command* cmd)
 {
-    static const char* const keep[] = { "cursor", "select", "visual", "split" };
+    static const char* const keep[] = { "cursor", "select", "visual", "center", "split" };
     for (size_t i = 0; cmd != NULL && i < G_N_ELEMENTS(keep); i++) {
         if (strcmp(cmd->info.name, keep[i]) == 0)
             return true;

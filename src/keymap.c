@@ -25,6 +25,7 @@ static const SfeKeyBinding defaults[] = {
     { "r", "rename", "rename" },
     { "R", "mass_rename", "rename with a pattern" },
     { "zh", "hidden toggle", "show / hide hidden files" },
+    { "zz", "center", "scroll the cursor to the middle" },
     { "v", "visual", "visual mode (select chunks with j / k)" },
     { "/", "search", "fuzzy search" },
     { ":", "command_line", "command line" },

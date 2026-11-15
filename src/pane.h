@@ -93,6 +93,10 @@ bool sfe_pane_in_visual(SfePane* self);
 /* Whether a chunk is being drawn (rather than moving between chunks). */
 bool sfe_pane_visual_drawing(SfePane* self);
 
+/* Scrolls the cursor's item to the middle of the view; in visual mode the
+ * first selected item. */
+void sfe_pane_center_cursor(SfePane* self);
+
 /* Opens files like double-clicking them (directories open in this pane). */
 void sfe_pane_open_files(SfePane* self, GList* files);
 
