@@ -13,6 +13,8 @@
  * returns the URIs it prints, with the filter in use and the values of the
  * program's extra options ("choices"). GIO only. */
 
+#include "portalreq.h"
+
 #include <gio/gio.h>
 #include <stdbool.h>
 #include <string.h>
@@ -58,14 +60,37 @@ static GDBusNodeInfo* interface_info;
 static GDBusNodeInfo* request_info;
 static GMainLoop* loop;
 
+/* With no dialog open for this long the backend exits, so an updated
+ * sfe-portal takes over at the next request (D-Bus starts it again). */
+#define IDLE_EXIT_SECONDS 120
+
+static guint idle_source;
+static int open_dialogs;
+
+static gboolean on_idle_exit(gpointer data)
+{
+    (void)data;
+    idle_source = 0;
+    g_debug("idle for %d s: exiting", IDLE_EXIT_SECONDS);
+    g_main_loop_quit(loop);
+    return G_SOURCE_REMOVE;
+}
+
+static void dialogs_changed(int delta)
+{
+    open_dialogs += delta;
+    g_clear_handle_id(&idle_source, g_source_remove);
+    if (open_dialogs == 0)
+        idle_source = g_timeout_add_seconds(IDLE_EXIT_SECONDS, on_idle_exit, NULL);
+}
+
 /* One dialog in progress. */
 typedef struct {
     GDBusMethodInvocation* invocation;
     GDBusConnection* connection;
     GSubprocess* chooser;
     guint request_id; /* the Request object at the handle path */
-    GPtrArray* save_names; /* SaveFiles: names to put into the chosen folder */
-    GVariant* filters; /* a(sa(us)) as asked, to answer current_filter, or NULL */
+    SfePortalRequest* request;
 } Dialog;
 
 static void dialog_free(Dialog* d)
@@ -74,9 +99,9 @@ static void dialog_free(Dialog* d)
         g_dbus_connection_unregister_object(d->connection, d->request_id);
     g_clear_object(&d->chooser);
     g_object_unref(d->connection);
-    g_clear_pointer(&d->save_names, g_ptr_array_unref);
-    g_clear_pointer(&d->filters, g_variant_unref);
+    sfe_portal_request_free(d->request);
     g_free(d);
+    dialogs_changed(-1);
 }
 
 static void reply(Dialog* d, guint response, GVariant* results)
@@ -109,75 +134,10 @@ static void on_chooser_done(GObject* source, GAsyncResult* res, gpointer data)
         if (error != NULL)
             g_warning("sfe --choose: %s", error->message);
         reply(d, g_subprocess_get_if_exited(d->chooser) ? RESPONSE_CANCELLED : RESPONSE_OTHER, NULL);
-        dialog_free(d);
-        return;
+    } else {
+        reply(d, RESPONSE_OK, sfe_portal_request_results(d->request, out));
     }
-    GVariantBuilder uris, choices;
-    g_variant_builder_init(&uris, G_VARIANT_TYPE_STRING_ARRAY);
-    g_variant_builder_init(&choices, G_VARIANT_TYPE("a(ss)"));
-    bool any_choice = false;
-    int filter = -1;
-    g_auto(GStrv) lines = g_strsplit(out ? out : "", "\n", -1);
-    for (int i = 0; lines[i] != NULL; i++) {
-        if (*lines[i] == '\0')
-            continue;
-        if (g_str_has_prefix(lines[i], "#filter ")) { /* the filter in use */
-            filter = (int)g_ascii_strtoll(lines[i] + strlen("#filter "), NULL, 10);
-            continue;
-        }
-        if (g_str_has_prefix(lines[i], "#choice ")) { /* "#choice ID VALUE" */
-            g_auto(GStrv) parts = g_strsplit(lines[i] + strlen("#choice "), " ", 2);
-            if (parts[0] != NULL) {
-                g_variant_builder_add(&choices, "(ss)", parts[0], parts[1] ? parts[1] : "");
-                any_choice = true;
-            }
-            continue;
-        }
-        if (lines[i][0] == '#')
-            continue;
-        if (d->save_names == NULL) {
-            g_variant_builder_add(&uris, "s", lines[i]);
-            continue;
-        }
-        /* SaveFiles: the user chose a folder; each file goes into it */
-        g_autoptr(GFile) folder = g_file_new_for_uri(lines[i]);
-        for (guint k = 0; k < d->save_names->len; k++) {
-            g_autoptr(GFile) file = g_file_get_child(folder, g_ptr_array_index(d->save_names, k));
-            g_autofree char* uri = g_file_get_uri(file);
-            g_variant_builder_add(&uris, "s", uri);
-        }
-        break;
-    }
-    GVariantBuilder results;
-    g_variant_builder_init(&results, G_VARIANT_TYPE_VARDICT);
-    g_variant_builder_add(&results, "{sv}", "uris", g_variant_builder_end(&uris));
-    GVariant* choice_list = g_variant_builder_end(&choices);
-    if (any_choice)
-        g_variant_builder_add(&results, "{sv}", "choices", choice_list);
-    else
-        g_variant_unref(g_variant_ref_sink(choice_list));
-    if (d->filters != NULL && filter >= 0 && filter < (int)g_variant_n_children(d->filters))
-        g_variant_builder_add(&results, "{sv}", "current_filter", g_variant_get_child_value(d->filters, filter));
-    reply(d, RESPONSE_OK, g_variant_builder_end(&results));
     dialog_free(d);
-}
-
-static char* option_bytestring(GVariant* options, const char* key)
-{
-    g_autoptr(GVariant) v = g_variant_lookup_value(options, key, G_VARIANT_TYPE_BYTESTRING);
-    return v ? g_strdup(g_variant_get_bytestring(v)) : NULL;
-}
-
-static char* option_string(GVariant* options, const char* key)
-{
-    const char* s = NULL;
-    return g_variant_lookup(options, key, "&s", &s) ? g_strdup(s) : NULL;
-}
-
-static bool option_bool(GVariant* options, const char* key)
-{
-    gboolean b = FALSE;
-    return g_variant_lookup(options, key, "b", &b) && b;
 }
 
 /* The sfe to run: SFE_PORTAL_SFE (tests, uninstalled builds), else the
@@ -195,99 +155,20 @@ static void on_method_call(GDBusConnection* connection, const char* sender, cons
     const char *handle, *app_id, *parent, *title;
     g_autoptr(GVariant) options = NULL;
     g_variant_get(params, "(&o&s&s&s@a{sv})", &handle, &app_id, &parent, &title, &options);
-    g_debug("%s from %s (%s): %s", method, app_id, parent, title);
+    if (g_log_writer_default_would_drop(G_LOG_LEVEL_DEBUG, G_LOG_DOMAIN) == FALSE) {
+        g_autofree char* text = g_variant_print(options, TRUE);
+        g_debug("%s from %s (%s): %s %s", method, app_id, parent, title, text);
+    }
 
     Dialog* d = g_new0(Dialog, 1);
+    dialogs_changed(+1);
     d->invocation = invocation;
     d->connection = g_object_ref(connection);
-    g_autoptr(GPtrArray) argv = g_ptr_array_new_with_free_func(g_free);
-    g_ptr_array_add(argv, g_strdup(sfe_binary()));
-    g_autofree char* folder = option_bytestring(options, "current_folder");
-    g_autofree char* name = NULL;
-
-    if (strcmp(method, "OpenFile") == 0) {
-        g_ptr_array_add(argv, g_strdup("--choose"));
-        g_ptr_array_add(argv, g_strdup(option_bool(options, "directory") ? "folder" : "open"));
-        if (option_bool(options, "multiple"))
-            g_ptr_array_add(argv, g_strdup("--multiple"));
-    } else if (strcmp(method, "SaveFile") == 0) {
-        g_ptr_array_add(argv, g_strdup("--choose"));
-        g_ptr_array_add(argv, g_strdup("save"));
-        name = option_string(options, "current_name");
-        g_autofree char* current = option_bytestring(options, "current_file"); /* replacing a file */
-        if (current != NULL && *current != '\0') {
-            g_free(folder);
-            folder = g_path_get_dirname(current);
-            g_free(name);
-            name = g_path_get_basename(current);
-        }
-    } else { /* SaveFiles: a folder for several files */
-        g_ptr_array_add(argv, g_strdup("--choose"));
-        g_ptr_array_add(argv, g_strdup("folder"));
-        d->save_names = g_ptr_array_new_with_free_func(g_free);
-        g_autoptr(GVariant) files = g_variant_lookup_value(options, "files", G_VARIANT_TYPE_BYTESTRING_ARRAY);
-        for (gsize i = 0; files != NULL && i < g_variant_n_children(files); i++) {
-            g_autoptr(GVariant) f = g_variant_get_child_value(files, i);
-            g_ptr_array_add(d->save_names, g_path_get_basename(g_variant_get_bytestring(f)));
-        }
-    }
-    if (title != NULL && *title != '\0') {
-        g_ptr_array_add(argv, g_strdup("--title"));
-        g_ptr_array_add(argv, g_strdup(title));
-    }
-    if (folder != NULL && *folder != '\0') {
-        g_ptr_array_add(argv, g_strdup("--folder"));
-        g_ptr_array_add(argv, g_strdup(folder));
-    }
-    if (name != NULL && *name != '\0') {
-        g_ptr_array_add(argv, g_strdup("--name"));
-        g_ptr_array_add(argv, g_strdup(name));
-    }
-    if (parent != NULL && *parent != '\0') { /* "wayland:HANDLE" / "x11:XID": sfe attaches to it */
-        g_ptr_array_add(argv, g_strdup("--parent"));
-        g_ptr_array_add(argv, g_strdup(parent));
-    }
-    /* File type filters, and the one to start with. current_filter should
-     * be one of the filters; alone (no list) the program wants only those
-     * files, and one missing from the list is added to it. */
-    g_autoptr(GVariant) asked = g_variant_lookup_value(options, "filters", G_VARIANT_TYPE("a(sa(us))"));
-    g_autoptr(GVariant) current = g_variant_lookup_value(options, "current_filter", G_VARIANT_TYPE("(sa(us))"));
-    GVariantBuilder list;
-    g_variant_builder_init(&list, G_VARIANT_TYPE("a(sa(us))"));
-    gsize n = 0;
-    int start = -1;
-    for (gsize i = 0; asked != NULL && i < g_variant_n_children(asked); i++, n++) {
-        g_autoptr(GVariant) f = g_variant_get_child_value(asked, i);
-        if (start < 0 && current != NULL && g_variant_equal(f, current))
-            start = (int)i;
-        g_variant_builder_add_value(&list, f);
-    }
-    if (current != NULL && start < 0) {
-        g_variant_builder_add_value(&list, current);
-        start = (int)n++;
-    }
-    d->filters = g_variant_ref_sink(g_variant_builder_end(&list));
-    if (n > 0) {
-        g_ptr_array_add(argv, g_strdup("--filters"));
-        g_ptr_array_add(argv, g_variant_print(d->filters, TRUE));
-        if (start >= 0) {
-            g_ptr_array_add(argv, g_strdup("--current-filter"));
-            g_ptr_array_add(argv, g_strdup_printf("%d", start));
-        }
-    } else {
-        g_clear_pointer(&d->filters, g_variant_unref);
-    }
-    /* Extra options (check boxes, drop-downs), answered as "choices". */
-    g_autoptr(GVariant) choice_list = g_variant_lookup_value(options, "choices", G_VARIANT_TYPE("a(ssa(ss)s)"));
-    if (choice_list != NULL && g_variant_n_children(choice_list) > 0) {
-        g_ptr_array_add(argv, g_strdup("--choices"));
-        g_ptr_array_add(argv, g_variant_print(choice_list, TRUE));
-    }
-    g_autofree char* accept = option_string(options, "accept_label");
-    if (accept != NULL && *accept != '\0') {
-        g_ptr_array_add(argv, g_strdup("--accept-label"));
-        g_ptr_array_add(argv, g_strdup(accept));
-    }
+    d->request = sfe_portal_request_new(method, parent, title, options);
+    g_autoptr(GPtrArray) argv = g_ptr_array_new();
+    g_ptr_array_add(argv, (char*)sfe_binary());
+    for (guint i = 0; i < d->request->args->len; i++)
+        g_ptr_array_add(argv, g_ptr_array_index(d->request->args, i));
     g_ptr_array_add(argv, NULL);
 
     static const GDBusInterfaceVTable request_vtable = { on_request_call, NULL, NULL, { 0 } };
@@ -339,6 +220,7 @@ int main(void)
     loop = g_main_loop_new(NULL, FALSE);
     guint owner = g_bus_own_name(G_BUS_TYPE_SESSION, BUS_NAME, G_BUS_NAME_OWNER_FLAGS_NONE, on_bus_acquired, NULL,
         on_name_lost, NULL, NULL);
+    dialogs_changed(0); /* the idle timer starts now */
     g_main_loop_run(loop);
     g_bus_unown_name(owner);
     return 0;

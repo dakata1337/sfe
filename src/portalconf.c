@@ -119,7 +119,8 @@ int sfe_portal_restart(void)
         g_autofree char* exe = g_file_read_link(exe_link, NULL); /* readable for our own processes only */
         g_autofree char* base = exe ? g_path_get_basename(exe) : NULL;
         GStatBuf owner;
-        if (base != NULL && strcmp(base, "xdg-desktop-portal") == 0 && g_stat(dir, &owner) == 0
+        bool portal = base != NULL && (strcmp(base, "xdg-desktop-portal") == 0 || strcmp(base, "sfe-portal") == 0);
+        if (portal && g_stat(dir, &owner) == 0
             && owner.st_uid == getuid() && kill((pid_t)pid, SIGTERM) == 0)
             stopped++;
     }

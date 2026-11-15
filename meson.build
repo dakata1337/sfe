@@ -73,6 +73,7 @@ core_src = files(
   'src/keymap.c',
   'src/opener.c',
   'src/portalconf.c',
+  'src/portalreq.c',
   'src/rename.c',
   'src/thumbs.c',
   'src/trash.c',
@@ -129,7 +130,8 @@ install_data('data/sfe.desktop',
 
 # The file dialog backend for xdg-desktop-portal (src/portal/sfe-portal.c).
 # Installed, it is only used when portals.conf names it for FileChooser.
-executable('sfe-portal', 'src/portal/sfe-portal.c',
+executable('sfe-portal', 'src/portal/sfe-portal.c', 'src/portalreq.c',
+  include_directories: include_directories('src'),
   dependencies: [glib_dep, gio_dep],
   c_args: ['-DSFE_BINDIR="@0@"'.format(get_option('prefix') / get_option('bindir'))],
   install: true,

@@ -19,8 +19,9 @@ sfe adds two pieces:
 
 - **`sfe --choose open|save|folder`**: a separate sfe window with a bar at
   the bottom (a name field for saving, the file type filter, the program's
-  extra options, *Cancel*, *Open* / *Save* / *Select*) and, when opening,
-  a preview of the selected file on the right. Enter or a double-click on a file chooses it;
+  extra options, *Cancel*, *Open* / *Save* / *Select*) and, when opening
+  files, a preview of the selected file on the right. A folder dialog
+  lists only folders. Enter or a double-click on a file chooses it;
   Ctrl+Enter is the *Open* / *Save* button. It prints the chosen files as
   URIs and exits with 0, or exits with 1 when cancelled. Try it on its own:
 
@@ -59,10 +60,14 @@ sfe adds two pieces:
    org.freedesktop.impl.portal.FileChooser=sfe
    ```
 
-   and restarts the portal so the next dialog uses it. Switching it off
-   takes the line out again. By hand: edit the file, then
-   `pkill -f '^/usr/lib/xdg-desktop-portal$'` (D-Bus starts it again on the
-   next request).
+   and restarts the portal (and a running `sfe-portal`) so the next dialog
+   uses it. Switching it off takes the line out again. By hand: edit the
+   file, then `pkill -f '^/usr/lib/xdg-desktop-portal$'` (D-Bus starts it
+   again on the next request).
+
+   After updating sfe, the new `sfe-portal` answers once the old one has
+   exited: it does so after two minutes without an open dialog (versions
+   before that ran until logout: `pkill -x sfe-portal` once).
 
 3. In Zen / Firefox: `about:config` → `widget.use-xdg-desktop-portal.file-picker` = `1`.
    Then *Save Page As…* or an upload button opens sfe.
@@ -72,12 +77,13 @@ sfe adds two pieces:
 
 ## What works
 
-- Open one file, several files (`multiple`), or a folder (`directory`).
+- Open one file, several files (`multiple`), or a folder (`directory`,
+  `<input webkitdirectory>` in browsers: only folders are listed).
 - Save with the suggested name and folder; replacing an existing file asks
   first. "Save as" for an existing file starts there.
 - SaveFiles (saving several files at once into a folder).
-- The request's title and button label; closing the request (the program
-  gave up) closes sfe.
+- The request's title and button label (with its mnemonic, GTK programs
+  send `_Open`); closing the request (the program gave up) closes sfe.
 - **File type filters** (`filters`, `current_filter`): a drop-down in the
   bar; files that don't match are hidden (folders stay). Globs are shell
   patterns (`*.[pP][nN][gG]` works) and match regardless of case;
@@ -89,12 +95,15 @@ sfe adds two pieces:
 - **The parent window** (`parent_window`): the dialog is attached to the
   program that asked (`wayland:` handles through xdg-foreign, `x11:` window
   ids), so the compositor can keep it above that window.
-- **Preview** (Open and folder dialogs): the selected file's thumbnail (images, and videos or
+- **Preview** (when opening files): the selected file's thumbnail (images, and videos or
   documents with a thumbnailer) or icon, with its type, size, date and an
   image's dimensions.
 
-Tested through the real portal with Zen, and by calling the backend over a
-private D-Bus session bus.
+Tested through the real portal with Zen; through xdg-desktop-portal on a
+private D-Bus session bus with a GTK 3 program asking the way Firefox does;
+and in `tests/test_portalreq.c`, which turns requests shaped like
+Firefox's (`*.[pP][dD][fF]` globs, folder requests that also carry filters)
+into sfe's arguments and checks which files the dialog then lists.
 
 To try different filters from a browser, open
 [`tests/manual/file-dialogs.html`](../tests/manual/file-dialogs.html) from

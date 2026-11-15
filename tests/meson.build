@@ -81,3 +81,8 @@ test_filefilter = executable('test-filefilter', 'test_filefilter.c',
   dependencies: core_dep,
 )
 test('filefilter', test_filefilter)
+
+test_portalreq = executable('test-portalreq', 'test_portalreq.c',
+  dependencies: core_dep,
+)
+test('portalreq', test_portalreq)

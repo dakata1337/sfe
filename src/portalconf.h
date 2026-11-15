@@ -40,6 +40,8 @@ char* sfe_portal_conf_seed(const char* desktop);
 /* Whether sfe-portal is installed (its sfe.portal file in a data dir). */
 bool sfe_portal_installed(void);
 
-/* Stops the user's xdg-desktop-portal so it reads the change; D-Bus starts
- * it again on the next request. Returns how many were stopped. */
+/* Stops the user's xdg-desktop-portal so it reads the change, and a running
+ * sfe-portal so the installed one answers next (an old one would keep
+ * running after an update); D-Bus starts them again on the next request.
+ * Returns how many were stopped. */
 int sfe_portal_restart(void);
