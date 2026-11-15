@@ -113,7 +113,73 @@ static int fuzzy_dp(const gunichar* text, const gunichar* orig, glong tlen, cons
     return best;
 }
 
+/* The fuzzy tier's letters: the same scoring as fuzzy_dp(), kept as a full
+ * table so the best path can be followed back. Fills `at` (qlen indices). */
+static void fuzzy_path(const gunichar* text, const gunichar* orig, glong tlen, const gunichar* query, glong qlen,
+    glong* at)
+{
+    int* score = g_new(int, qlen * tlen);
+    glong* from = g_new(glong, qlen * tlen);
+
+    for (glong j = 0; j < tlen; j++) {
+        int bonus = (is_boundary(orig, j) ? BONUS_BOUNDARY : 0) + (j == 0 ? BONUS_FIRST : 0);
+        score[j] = text[j] == query[0] ? SCORE_MATCH + bonus - PENALTY_GAP * (int)j : NEG;
+        from[j] = -1;
+    }
+    for (glong i = 1; i < qlen; i++) {
+        for (glong j = 0; j < tlen; j++) {
+            int best = NEG;
+            glong best_k = -1;
+            for (glong k = 0; k < j && text[j] == query[i]; k++) {
+                int prev = score[(i - 1) * tlen + k];
+                if (prev <= NEG)
+                    continue;
+                int s = prev + (k == j - 1 ? BONUS_CONSECUTIVE : -PENALTY_GAP * (int)(j - k - 1));
+                if (s > best) {
+                    best = s;
+                    best_k = k;
+                }
+            }
+            score[i * tlen + j] = best > NEG ? best + SCORE_MATCH + (is_boundary(orig, j) ? BONUS_BOUNDARY : 0) : NEG;
+            from[i * tlen + j] = best_k;
+        }
+    }
+    glong end = 0;
+    for (glong j = 1; j < tlen; j++) {
+        if (score[(qlen - 1) * tlen + j] > score[(qlen - 1) * tlen + end])
+            end = j;
+    }
+    for (glong i = qlen - 1; i >= 0; i--) {
+        at[i] = end;
+        end = from[i * tlen + end];
+    }
+    g_free(score);
+    g_free(from);
+}
+
+/* Character indices -> byte offsets of `text`. */
+static void add_positions(GArray* positions, const char* text, const glong* at, glong n)
+{
+    for (glong i = 0; positions != NULL && i < n; i++) {
+        int byte = (int)(g_utf8_offset_to_pointer(text, at[i]) - text);
+        g_array_append_val(positions, byte);
+    }
+}
+
+static void add_run(GArray* positions, const char* text, glong start, glong n)
+{
+    g_autofree glong* at = g_new(glong, MAX(n, 1));
+    for (glong i = 0; i < n; i++)
+        at[i] = start + i;
+    add_positions(positions, text, at, n);
+}
+
 int sfe_fuzzy_score(const char* query, const char* text)
+{
+    return sfe_fuzzy_match(query, text, NULL);
+}
+
+int sfe_fuzzy_match(const char* query, const char* text, GArray* positions)
 {
     if (query == NULL || *query == '\0')
         return 0;
@@ -128,12 +194,14 @@ int sfe_fuzzy_score(const char* query, const char* text)
         return qlen == 0 ? 0 : SFE_FUZZY_NO_MATCH;
 
     int shortness = 1000 - (int)tlen; /* shorter names rank higher */
-    if (qlen == tlen && equal_at(t, 0, q, qlen))
-        return TIER_EXACT * TIER_SCALE + 1000;
-    if (qlen == stem_length(t, tlen) && equal_at(t, 0, q, qlen))
-        return TIER_STEM * TIER_SCALE + shortness;
-    if (equal_at(t, 0, q, qlen))
+    if (equal_at(t, 0, q, qlen)) {
+        add_run(positions, text, 0, qlen);
+        if (qlen == tlen)
+            return TIER_EXACT * TIER_SCALE + 1000;
+        if (qlen == stem_length(t, tlen))
+            return TIER_STEM * TIER_SCALE + shortness;
         return TIER_PREFIX * TIER_SCALE + shortness;
+    }
 
     glong first = -1, word = -1;
     for (glong i = 1; i + qlen <= tlen && word < 0; i++) {
@@ -144,13 +212,22 @@ int sfe_fuzzy_score(const char* query, const char* text)
                 word = i;
         }
     }
-    if (word >= 0)
+    if (word >= 0) {
+        add_run(positions, text, word, qlen);
         return TIER_WORD * TIER_SCALE + shortness - (int)word;
-    if (first >= 0)
+    }
+    if (first >= 0) {
+        add_run(positions, text, first, qlen);
         return TIER_SUBSTRING * TIER_SCALE + shortness - (int)first;
+    }
 
     int dp = fuzzy_dp(t, orig, tlen, q, qlen);
     if (dp <= NEG)
         return SFE_FUZZY_NO_MATCH;
+    if (positions != NULL) {
+        g_autofree glong* at = g_new(glong, qlen);
+        fuzzy_path(t, orig, tlen, q, qlen, at);
+        add_positions(positions, text, at, qlen);
+    }
     return TIER_FUZZY * TIER_SCALE + CLAMP(TIER_SCALE / 2 + dp - (int)tlen / 4, 0, TIER_SCALE - 1);
 }

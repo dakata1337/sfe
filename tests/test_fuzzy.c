@@ -1,5 +1,7 @@
 #include "fuzzy.h"
 
+#include <stdbool.h>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -91,6 +93,48 @@ static void test_realistic_sort(void)
     g_assert_cmpint(score(query, "meson.build"), ==, SFE_FUZZY_NO_MATCH);
 }
 
+static char* marked(const char* query, const char* text)
+{
+    g_autoptr(GArray) at = g_array_new(FALSE, FALSE, sizeof(int));
+    if (sfe_fuzzy_match(query, text, at) == SFE_FUZZY_NO_MATCH)
+        return NULL;
+    GString* out = g_string_new(NULL);
+    guint k = 0;
+    for (const char* p = text; *p; p = g_utf8_next_char(p)) {
+        bool hit = k < at->len && g_array_index(at, int, k) == (int)(p - text);
+        if (hit)
+            k++;
+        g_string_append(out, hit ? "[" : "");
+        g_string_append_len(out, p, g_utf8_next_char(p) - p);
+        g_string_append(out, hit ? "]" : "");
+    }
+    g_assert_cmpuint(k, ==, at->len);
+    return g_string_free(out, FALSE);
+}
+
+/* The matched letters, for highlighting. */
+static void test_positions(void)
+{
+    struct {
+        const char* query;
+        const char* text;
+        const char* expect;
+    } cases[] = {
+        { "mk", "mkdir", "[m][k]dir" },
+        { "dir", "new_directory", "new_[d][i][r]ectory" },
+        { "ec", "eject", "ej[e][c]t" },
+        { "nf", "new_folder", "[n]ew_[f]older" },
+        { "té", "été", "é[t][é]" },
+    };
+    for (size_t i = 0; i < G_N_ELEMENTS(cases); i++) {
+        g_autofree char* got = marked(cases[i].query, cases[i].text);
+        g_assert_cmpstr(got, ==, cases[i].expect);
+    }
+    g_autofree char* none = marked("xyz", "mkdir");
+    g_assert_null(none);
+    g_assert_cmpint(sfe_fuzzy_match("mk", "mkdir", NULL), ==, sfe_fuzzy_score("mk", "mkdir"));
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -100,5 +144,6 @@ int main(int argc, char** argv)
     g_test_add_func("/fuzzy/smart-case", test_smart_case);
     g_test_add_func("/fuzzy/unicode", test_unicode);
     g_test_add_func("/fuzzy/realistic", test_realistic_sort);
+    g_test_add_func("/fuzzy/positions", test_positions);
     return g_test_run();
 }
