@@ -76,7 +76,7 @@ program for an extension, see [Configuration](#configuration).
   current folder in the middle. Its root is your home folder, or the drive
   the folder is on. Click a folder to open it. The button in its *Folders*
   bar lets the tree fill the whole sidebar; press it again (or
-  `:toggle_tree`) to bring the places back, with the divider where you
+  `:tree toggle`) to bring the places back, with the divider where you
   left it.
 - Right-click → *Open in Split* opens a place or a tree folder in a new view
   (see [Split views](#split-views)); middle-click, or right-click → *Open in
@@ -317,7 +317,7 @@ once; one left alone without the list is dropped after a second.
 | `gh` | `cd ~` | home folder |
 | `<C-o>` / `<C-i>` | `back` / `forward` | history |
 | `<Space>` | `select toggle` | select or unselect the item, move to the next |
-| `yy` | `copy_clipboard` | copy the selection to the clipboard |
+| `yy` | `yank` | copy the selection to the clipboard |
 | `dd` | `cut` | cut the selection |
 | `p` | `paste` | paste into this view |
 | `u` | `undo` | undo the last change to files ([Undo](#undo)) |
@@ -355,7 +355,7 @@ The corner shows `-- VISUAL --` and how many items are selected.
 | `v` | `visual` | end the chunk / start a new one at the cursor |
 | `o` | `visual swap` | jump to the other end of the chunk |
 | `h` / `l` | `cursor previous` / `cursor next` | the item before / after |
-| `y` | `copy_clipboard` | copy the selection to the clipboard |
+| `y` | `yank` | copy the selection to the clipboard |
 | `d` | `cut` | cut the selection |
 | `<Esc>` | `visual off` | leave visual mode |
 
@@ -382,47 +382,69 @@ selection.
   first (relative to its folder), then the other views clockwise
   (right-top, right-bottom, left) as full paths with `~`. Each line is
   tagged with where it comes from. Within a group the best fuzzy match
-  (as in [Search](#search)) comes first.
+  (as in [Search](#search)) comes first, and the letters you typed are
+  in the accent colour.
+- Command names come one per line with their other names
+  (`mkdir | new_directory | new_folder`), the arguments dimmed after
+  them and what they do on the right. Tab puts in the name that matched
+  best, so `:new_f` + Tab gives `new_folder`. Commands meant for key
+  bindings (`cursor`, `select`, `visual`, `center`, `command_line`) come
+  last, dimmed.
+
+![Command names with their other names, arguments and the typed letters marked](images/command-names.png)
 
 | Command | Arguments | Does |
 |---|---|---|
 | `cd` | `[<folder>]` | go to a folder (home without one) |
 | `open` | `[<file>…]` | open files and folders (the selection without any) |
-| `copy` (`cp`) | `<file>… <destination>` | copy into a folder |
-| `move` (`mv`) | `<file>… <destination>` | move into a folder |
-| `symlink` (`ln`) | `<target>… <folder or link name>` | make symbolic links |
+| `open_with` | `[<application> [<file>…]]` | open with an installed program (Tab lists them, the ones for the selected file's type first); the chooser without one |
+| `cp` (`copy`) | `<file>… <destination>` | copy into a folder |
+| `mv` (`move`) | `<file>… <destination>` | move into a folder |
+| `ln` (`symlink`) | `<target>… <folder or link name>` | make symbolic links |
 | `rename` | `[<file> <new name>]` | rename (the dialog without arguments) |
 | `mass_rename` | `[<file>…]` | rename with a pattern |
-| `new_file` (`touch`) | `[<name>…]` | create empty files (the dialog without a name) |
-| `new_directory` (`mkdir`) | `[<name>…]` | create folders, with the folders on the way |
+| `touch` (`new_file`) | `[<name>…]` | create empty files (the dialog without a name) |
+| `mkdir` (`new_directory`, `new_folder`) | `[<name>…]` | create folders, with the folders on the way (the dialog without a name) |
 | `trash` | `[<file>…]` | move to the trash (the selection without any) |
 | `delete` | `[<file>…]` | delete permanently (asks) |
-| `copy_clipboard` (`yank`) | `[<file>…]` | copy to the clipboard |
+| `yank` (`copy_clipboard`) | `[<file>…]` | copy to the clipboard |
 | `cut` | `[<file>…]` | cut to the clipboard |
+| `paste` | `[<folder>]` | paste the clipboard here, or into a folder |
+| `undo` | `[<step>]` | undo the last change to files, or an older one ([Undo](#undo)) |
 | `mount` | `<device>` | mount a drive and open it |
 | `unmount` | `<device>` | unmount a drive |
 | `eject` | `<device>` | unmount and power off a removable drive |
 | `split` | `move\|next\|vertical\|horizontal\|left\|right\|up\|down\|absolute\|close` | the split commands above; `absolute left\|right\|right-top\|right-bottom\|top\|bottom` focuses a position, offering only the ones that exist |
-| `bookmark` | `[<folder>]` | bookmark a folder (this one without an argument) |
-| `unbookmark` | `[<bookmark>]` | remove one of sfe's bookmarks |
+| `q` (`quit`) | | close the active view, like `split close` |
+| `bookmark` | `[<folder>…]` | bookmark folders: the ones given, else the selected folders, else this one |
+| `unbookmark` | `[<bookmark>…]` | remove sfe's bookmarks the same way |
 | `hidden` | `on\|off\|toggle` | show or hide hidden files |
+| `sidebar` | `on\|off\|toggle` | show or hide the sidebar (Ctrl+S) |
+| `tree` | `full\|normal\|toggle` | let the folder tree fill the sidebar, or not |
 | `view` | `grid\|list` | the active view's layout |
 | `cursor` | `down\|up\|first\|last\|previous\|next` | move the cursor (`previous` / `next`: the item before / after) |
 | `select` | `toggle\|all` | toggle the item under the cursor / select all |
 | `visual` | `[off\|swap]` | visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end |
 | `center` | | scroll the cursor (in visual mode the first selected item) to the middle |
-| `undo` | `[<step>]` | undo the last change to files, or an older one ([Undo](#undo)) |
 | `command_line` |  | open the command line |
-| `q` (`quit`) | | close the active view |
 
-Every action is a command too, with `-` written as `_`: `:paste`,
-`:preferences`, `:properties`, `:search`, `:reload`, `:back`, `:forward`,
-`:up`, `:compress`, `:extract`, `:restore`, `:empty_trash`, `:select_all`,
-`:view_grid`, `:view_list`, `:new_window`, `:toggle_sidebar`,
-`:toggle_tree` and so on; they act on the
-selection, like the menu. `:copy` and `:move` always need a destination
-folder: `:copy notes.txt ~/Backup`. For the second and later arguments the
+`:bookmark` and `:unbookmark` use the selection only when you made it on
+purpose: in visual mode, or with several items selected. The item under
+the cursor alone doesn't count, since `j` / `k` select what they land on.
+Both say so when there is nothing to do.
+
+The menu actions without a command of their own are commands too, with
+`-` written as `_`: `:preferences`, `:properties`, `:search`, `:reload`,
+`:back`, `:forward`, `:up`, `:compress`, `:extract`, `:restore`,
+`:empty_trash`, `:location`, `:new_window` and so on; they act on the
+selection, like the menu. `:cp` and `:mv` always need a destination
+folder: `:cp notes.txt ~/Backup`. For the second and later arguments the
 other views' folders are offered first.
+
+Older names (`toggle_hidden`, `view_grid`, `split_vertical`,
+`close_pane`, `paste_into`, `toggle_sidebar`, …) still work for now, so
+key bindings in `config.toml` keep working, but each use says which
+command replaces it. They will be removed in a later version.
 
 ### Changing the keys
 

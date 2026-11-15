@@ -148,7 +148,7 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 | `gh` | `:cd ~` | home |
 | Ctrl+O / Ctrl+I | `:back` / `:forward` | history |
 | Space | | toggle the selection of the current item and move down |
-| `yy` | `:copy_clipboard` | copy the selection (or the current item) to the clipboard |
+| `yy` | `:yank` | copy the selection (or the current item) to the clipboard |
 | `dd` | `:cut` | cut |
 | `p` | `:paste` | paste into this view |
 | `x` / `X` | `:trash` / `:delete` | move to trash / delete permanently (asks) |
@@ -188,7 +188,7 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
   ```toml
   [keys]
   "<C-w>v" = "split vertical"
-  "yy" = "copy_clipboard"
+  "yy" = "yank"
   ```
 - While a chord is pending (`g`, `y`, `d`, `z`, Ctrl+W), the keys typed so far show at the right of the command bar, like vim's `showcmd`. After 0.5 s a list of the keys that can follow appears above it, with their help text (TODO, 2026-11-15); the chord then waits for the next key. A chord that isn't finished within 1 s without the list is dropped.
 
@@ -201,22 +201,25 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 
 **Context-aware completion.** Candidates come in groups, always in this order: the **active view** first, then the other views clockwise (right-top, right-bottom, then left). Within a group, candidates are ranked by the fuzzy matcher from milestone 7 (exact > prefix > word start > substring > fuzzy). Each candidate shows a small tag saying where it comes from (`left`, `right-top`, `bookmark`, `device`, …).
 
-**Commands.** Every row of the action table is also a command; the arguments are what's new.
+**Commands.** Every row of the action table is also a command; the arguments are what's new. Completion shows one row per command with its aliases (`mkdir | new_directory | new_folder`), the arguments dimmed and the help on the right, with the matched letters in the accent colour; actions that duplicate a command are not offered (typed, they still run with a deprecation note, to be removed later), and the key-binding helpers come last, dimmed (TODO, 2026-11-15).
 
 | Command | Arguments (what completion offers) |
 |---|---|
-| `:copy` / `:move` | `<file>… <destination>`. The destination is always required. For the second and later arguments, the other views' folders are offered first, then the files of the views. |
-| `:symlink` | `<target>… <destination folder or link name>` |
+| `:cp` / `:mv` (`:copy` / `:move`) | `<file>… <destination>`. The destination is always required. For the second and later arguments, the other views' folders are offered first, then the files of the views. |
+| `:ln` (`:symlink`) | `<target>… <destination folder or link name>` |
 | `:rename` | `<file> <new name>`. Once the file is chosen, Tab offers its current name for editing. |
 | `:mass_rename` | `[<file>…]` (default: the selection); opens the milestone 6 dialog |
-| `:new_file` / `:new_directory` | `<name>` (aliases `:touch`, `:mkdir`) |
+| `:touch` / `:mkdir` | `<name>` (aliases `:new_file`, `:new_directory`, `:new_folder`) |
 | `:trash` / `:delete` | `<file>…` |
 | `:mount` / `:unmount` / `:eject` | `<device>`: unmounted drives for `mount`, mounted ones for the others |
 | `:split` | sub-commands, with **`move` and `next` listed first**, then `vertical`, `horizontal`, `left`, `right`, `up`, `down`, `absolute`, `close` |
-| `:bookmark` / `:unbookmark` | `[<folder>]` (default: the active view) / `<bookmark>` (existing ones) |
+| `:bookmark` / `:unbookmark` | `[<folder>…]` / `[<bookmark>…]`; without arguments the folders selected on purpose (visual mode or several items), else the active view's folder |
+| `:paste` | `[<folder>]` |
+| `:open_with` | `[<application> [<file>…]]`: installed programs, the ones for the selected type first |
+| `:sidebar` / `:tree` | `on/off/toggle` / `full/normal/toggle` |
 | `:cd` / `:open` | `<path>` / `<file>` |
 | `:hidden` / `:view` | `on/off/toggle` / `grid/list` |
-| `:q` | close the active view |
+| `:q` (`:quit`) | close the active view, like `:split close` |
 
 ## 8. Decisions confirmed with you
 

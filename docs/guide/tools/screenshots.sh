@@ -294,6 +294,13 @@ sleep 0.8
 shot command-line
 key "" Escape
 
+# Command names: one row each, with their aliases and the typed letters marked.
+key SHIFT semicolon
+type_text "re"
+sleep 0.8
+shot_region command-names 220 $((H - 260)) $((W - 220)) 260
+key "" Escape
+
 launch Downloads
 key "" Home
 key "" Right
