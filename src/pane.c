@@ -874,6 +874,10 @@ void sfe_pane_center_cursor(SfePane* self)
         gtk_icon_view_scroll_to_path(GTK_ICON_VIEW(self->grid), path, TRUE, 0.5, 0.5);
     else
         gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(self->list), path, NULL, TRUE, 0.5, 0);
+    /* back to the left edge, where the names are */
+    GtkAdjustment* h = gtk_scrollable_get_hadjustment(GTK_SCROLLABLE(active_view(self)));
+    if (h != NULL)
+        gtk_adjustment_set_value(h, gtk_adjustment_get_lower(h));
     gtk_tree_path_free(path);
 }
 
