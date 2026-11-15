@@ -101,6 +101,9 @@ key() { # MODS KEY [WINDOW=main|dialog]
     sleep 0.15
 }
 
+# Runs a ":" command in the main window.
+type_cmd() { key SHIFT semicolon; type_text "$1"; key "" Return; sleep 0.6; }
+
 # Types text key by key (US layout).
 type_text() { # TEXT [WINDOW]
     printf '%s' "$1" | python3 -c '
@@ -387,7 +390,11 @@ key "" Escape dialog
 launch Pictures
 key CTRL p
 sleep 1
-shot preferences dialog
+shot settings dialog
+type_cmd "settings keys"
+sleep 0.8
+shot settings-keys dialog
+key "" Escape dialog
 key "" Escape dialog
 
 # A long copy to show the progress bar.
@@ -413,7 +420,6 @@ shot_region chord-hints $((W - 420)) $((H - 150)) 420 150
 key "" Escape
 
 # The undo history after a few changes (in Documents, which no later shot shows).
-type_cmd() { key SHIFT semicolon; type_text "$1"; key "" Return; sleep 0.6; }
 type_cmd "mkdir Drafts"
 type_cmd "copy notes.md Drafts"
 type_cmd "rename todo.txt tasks.txt"

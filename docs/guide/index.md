@@ -79,7 +79,7 @@ instead of their icon, in the grid and the list.
   thumbnailer is installed for them.
 - A file that cannot be thumbnailed (damaged, unsupported) keeps its icon
   and isn't tried again until it changes.
-- *Preferences* (or `[preview]` in `config.toml`) switches thumbnails off
+- *Settings → Thumbnails* (or `[preview]` in `config.toml`) switches thumbnails off
   and sets the size limit: bigger files keep their icon (50 MiB by default).
   Only local files get thumbnails.
 
@@ -445,6 +445,7 @@ selection.
 | `sidebar` | `on\|off\|toggle` | show or hide the sidebar (Ctrl+S) |
 | `tree` | `full\|normal\|toggle` | let the folder tree fill the sidebar, or not |
 | `view` | `grid\|list` | the active view's layout |
+| `settings` (`preferences`) | `[<page>]` | the settings window, on a page: `general`, `thumbnails`, `sidebar`, `keys`, `commands`, `programs`, `system` |
 | `cursor` | `down\|up\|first\|last\|previous\|next` | move the cursor (`previous` / `next`: the item before / after) |
 | `select` | `toggle\|all` | toggle the item under the cursor / select all |
 | `visual` | `[off\|swap]` | visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end |
@@ -457,7 +458,7 @@ the cursor alone doesn't count, since `j` / `k` select what they land on.
 Both say so when there is nothing to do.
 
 The menu actions without a command of their own are commands too, with
-`-` written as `_`: `:preferences`, `:properties`, `:search`, `:reload`,
+`-` written as `_`: `:properties`, `:search`, `:reload`,
 `:back`, `:forward`, `:up`, `:compress`, `:extract`, `:restore`,
 `:empty_trash`, `:location`, `:new_window` and so on; they act on the
 selection, like the menu. `:cp` and `:mv` always need a destination
@@ -495,13 +496,29 @@ mounting, configuration reloads).
 
 ## Configuration
 
-**Ctrl+P** opens *Preferences*: start folder, hidden files, scale, view,
-icon size, sorting, delete confirmation, window title bar, thumbnails and
-their size limit, and GTK bookmarks. Changes apply immediately.
+**Ctrl+P** (or `:settings`) opens *Settings*. Changes apply immediately and
+are saved to `config.toml`.
 
-![Preferences](images/preferences.png)
+![Settings](images/settings.png)
 
-*Preferences → Default file manager* makes sfe open folders for other
+- **General**: start folder, hidden files, scale, default view, icon size,
+  sorting, delete confirmation and the window title bar. *Scale* grows
+  everything: text, icons, buttons and the sidebar.
+- **Thumbnails**: on or off, and the size limit ([Thumbnails](#thumbnails)).
+- **Sidebar**: GTK bookmarks.
+- **Keys**: every key with its command and what it does. Double-click a
+  command to change it (any command line works, with arguments); *Add…*
+  binds new keys, normal or visual mode only; *Unbind* switches a key off;
+  *Reset* brings the built-in command back. Changed keys are bold.
+- **Custom Commands**: the commands of your own in the right-click menu
+  ([Custom commands](#custom-commands)), edited in place: name, command,
+  and whether they are for files, folders or both.
+- **Programs**: which program opens which extension, as in `[open]`.
+- **System**: make sfe the default file manager, open `config.toml`.
+
+![The Keys page](images/settings-keys.png)
+
+*Settings → System → Default file manager* makes sfe open folders for other
 applications and `xdg-open` (it sets `inode/directory` in `mimeapps.list`).
 On first start sfe asks once whether to do this. This needs the installed
 `sfe.desktop`, so it is unavailable when running sfe from the build folder.
@@ -576,7 +593,7 @@ Every shortcut in one place. The single-letter keys of normal mode are in
 | F6 | next view |
 | Ctrl+W Q | close the view |
 | Ctrl+Z | undo the last change to files |
-| Ctrl+P | preferences |
+| Ctrl+P | settings |
 | Ctrl+S | hide / show the sidebar |
 | Ctrl+N | new window |
 | Ctrl+Q | quit |
