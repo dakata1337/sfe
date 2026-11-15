@@ -7,9 +7,22 @@
 # it with keystrokes and saves PNGs into docs/guide/images/. sfe runs in a
 # private mount namespace (unshare) where the demo home is /home/alex, so no
 # real paths or user names end up in the pictures. Requirements: Hyprland
-# >= 0.57 (Lua dispatcher), grim, unshare (unprivileged user namespaces),
-# python3 with Pillow, and a US keyboard layout (text is typed key by key).
-# The dark screenshots use the colours of your ~/.config/gtk-3.0/gtk.css.
+# >= 0.57 (Lua dispatcher), grim >= 1.5 (-T), unshare (unprivileged user
+# namespaces), python3 with Pillow, and a US keyboard layout (text is typed
+# key by key). The dark screenshots use the colours of your
+# ~/.config/gtk-3.0/gtk.css.
+#
+# Nothing shows up on your desktop: the test windows (class "sfe-guide", so a
+# window rule can tell them from your own sfe) open on the hidden
+# special:magic workspace without taking focus, keys go straight to them,
+# and each window is captured on its own (grim -T). They run without the
+# session bus, so they never hand their window over to a running sfe, and
+# your clipboard (the copy/paste shots use it) is restored afterwards when
+# wl-clipboard is installed.
+#
+# Context menus are popups, which a window capture leaves out: the menu
+# screenshots are kept as they are unless SFE_GUIDE_MENU=1, which shows
+# special:magic on your screen for a moment to take them.
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/../../.." && pwd)
@@ -21,9 +34,33 @@ FAKE=/home/alex          # where sfe sees it
 W=1200
 H=960
 P=
+PUMP=
+CLIP_TYPE=
 
 mkdir -p "$OUT"
+
+# Test windows: hidden, floating, never focused. (The rule only matches the
+# "sfe-guide" class and lasts until Hyprland reloads its config.)
+hyprctl eval 'hl.window_rule({ name = "sfe-guide-hidden", match = { class = "^sfe-guide$" },
+    workspace = "special:magic silent", float = true, no_initial_focus = true })' >/dev/null
+ln -s "$SFE" "$WORK/sfe-guide" # the program name becomes the window class
+
+# Keep the clipboard to put it back at the end.
+if command -v wl-paste >/dev/null && command -v wl-copy >/dev/null; then
+    # Plain text when offered (what most pastes want), else the first type.
+    types=$(wl-paste --list-types 2>/dev/null) || types=
+    CLIP_TYPE=$(printf '%s\n' "$types" | grep -m1 -x 'text/plain;charset=utf-8' \
+        || printf '%s\n' "$types" | grep -m1 -x 'text/plain' \
+        || printf '%s\n' "$types" | head -n1)
+    if [ -n "$CLIP_TYPE" ]; then
+        wl-paste --no-newline --type "$CLIP_TYPE" >"$WORK/clipboard" 2>/dev/null || CLIP_TYPE=
+    fi
+fi
 python3 "$ROOT/docs/guide/tools/demo-home.py" "$DEMO" >/dev/null
+# Already asked whether sfe should be the default file manager (that dialog
+# would take the keys of the first shots).
+mkdir -p "$DEMO/.local/state/sfe"
+: >"$DEMO/.local/state/sfe/asked-default-file-manager"
 if [ -d "$HOME/.config/gtk-3.0" ]; then
     mkdir -p "$DEMO/.config/gtk-3.0"
     cp "$HOME"/.config/gtk-3.0/*.css "$DEMO/.config/gtk-3.0/" 2>/dev/null || true
@@ -34,14 +71,19 @@ fi
 
 clients() { hyprctl clients -j; }
 
-# Address of PID's largest (main) or smallest (dialog) window.
-window_of() { # PID largest|smallest
+# A field ("address", "stableId") of PID's largest (main) or smallest
+# (dialog) window.
+field_of() { # PID largest|smallest FIELD
     clients | python3 -c '
 import json, sys
 cs = [c for c in json.load(sys.stdin) if c["pid"] == int(sys.argv[1])]
 cs.sort(key=lambda c: c["size"][0] * c["size"][1], reverse=sys.argv[2] == "largest")
-print(cs[0]["address"] if cs else "")' "$1" "$2"
+print(cs[0][sys.argv[3]] if cs else "")' "$1" "$2" "$3"
 }
+
+window_of() { field_of "$1" "$2" address; } # PID largest|smallest
+
+which_of() { [ "${1:-main}" = dialog ] && echo smallest || echo largest; }
 
 geometry_of() { # ADDRESS
     clients | python3 -c '
@@ -54,7 +96,7 @@ for c in json.load(sys.stdin):
 dispatch() { hyprctl dispatch "$1" >/dev/null; }
 
 key() { # MODS KEY [WINDOW=main|dialog]
-    target=$(window_of "$P" "$([ "${3:-main}" = dialog ] && echo smallest || echo largest)")
+    target=$(window_of "$P" "$(which_of "${3:-main}")")
     dispatch "hl.dsp.send_shortcut({ mods = \"$1\", key = \"$2\", window = \"address:$target\" })"
     sleep 0.15
 }
@@ -78,18 +120,46 @@ for ch in sys.stdin.read():
     done
 }
 
+# A hidden window only draws when something asks for a frame, so its
+# animations (the progress bar sliding in, ...) would stand still. Asking
+# for one about ten times a second keeps it drawing as if it were visible.
+start_pump() {
+    (
+        while kill -0 "$P" 2>/dev/null; do
+            for id in $(clients | python3 -c '
+import json, sys
+print(" ".join(c["stableId"] for c in json.load(sys.stdin) if c["pid"] == int(sys.argv[1])))' "$P"); do
+                grim -t ppm -T "$id" - >/dev/null 2>&1 || true
+            done
+            sleep 0.05
+        done
+    ) 2>/dev/null & # grim may crash when a window closes under it: harmless
+    PUMP=$!
+}
+
 # Stops the sfe this script started (never any other running sfe).
 stop_sfe() {
+    if [ -n "$PUMP" ]; then
+        kill "$PUMP" 2>/dev/null || true
+        PUMP=
+    fi
     if [ -n "$P" ]; then
         kill "$P" 2>/dev/null || true
         sleep 0.3
     fi
 }
 
-goto() { # PATH (inside the demo home)
-    key CTRL l
-    key CTRL a
-    type_text "$FAKE/$1"
+# Goes UPS folders up, then down PATH through the search (it walks into
+# folders at each "/"; Return opens the match). Not the path bar: its inline
+# completion needs real keyboard focus, which a hidden window never has.
+goto() { # UPS PATH
+    for _ in $(seq "$1"); do
+        key ALT Up
+        sleep 0.4
+    done
+    key CTRL f
+    type_text "$2"
+    sleep 0.4
     key "" Return
     sleep 0.8
 }
@@ -112,33 +182,70 @@ launch() { # DIR [XDG_CONFIG_HOME]
         mkdir -p "$REAL_HOME" "$FAKE"
         mount --bind "$WORK/realhome" "$REAL_HOME"
         mount --bind "$DEMO" "$FAKE"
-        exec env HOME="$FAKE" XDG_CONFIG_HOME="$CONFIG" XDG_DATA_HOME="$FAKE/.local/share" "$SFE" "$FAKE/$DIR"
+        exec env HOME="$FAKE" XDG_CONFIG_HOME="$CONFIG" XDG_DATA_HOME="$FAKE/.local/share" \
+            XDG_STATE_HOME="$FAKE/.local/state" \
+            DBUS_SESSION_BUS_ADDRESS=disabled: "$WORK/sfe-guide" "$FAKE/$DIR"
     ' >/dev/null 2>&1 &
     P=$! # unshare execs sh, which execs sfe: the same process
-    sleep 2.5
+    for _ in $(seq 50); do
+        [ -n "$(window_of "$P" largest)" ] && break
+        sleep 0.1
+    done
+    sleep 1.5
     main=$(window_of "$P" largest)
-    if clients | grep -q '"fullscreen": [12]'; then
-        dispatch "hl.dsp.window.fullscreen({ window = \"address:$main\" })"
-    fi
-    dispatch "hl.dsp.window.float({ action = \"enable\", window = \"address:$main\" })"
     dispatch "hl.dsp.window.resize({ x = $W, y = $H, exact = true, window = \"address:$main\" })"
-    dispatch "hl.dsp.window.center({ window = \"address:$main\" })"
+    start_pump
     sleep 0.8
 }
 
-shot() { # NAME [main|dialog]
-    target=$(window_of "$P" "$([ "${2:-main}" = dialog ] && echo smallest || echo largest)")
-    grim -g "$(geometry_of "$target")" "$OUT/$1.png"
+# Captures one window, hidden or not (the pump keeps its frames current).
+capture() { # main|dialog FILE
+    id=$(field_of "$P" "$(which_of "$1")" stableId)
+    sleep 0.3
+    grim -T "$id" "$2"
 }
 
-# Screenshot of a region of the screen relative to the main window.
+shot() { # NAME [main|dialog]
+    capture "${2:-main}" "$OUT/$1.png"
+}
+
+# A region of the main window.
 shot_region() { # NAME X Y WIDTH HEIGHT
+    capture main "$WORK/region.png"
+    python3 -c '
+import sys
+from PIL import Image
+x, y, w, h = map(int, sys.argv[3:7])
+Image.open(sys.argv[1]).crop((x, y, x + w, y + h)).save(sys.argv[2])' "$WORK/region.png" "$OUT/$1.png" "$2" "$3" "$4" "$5"
+}
+
+# A region of the main window with its popup menu open (SFE_GUIDE_MENU=1):
+# special:magic is shown on screen for the capture, then hidden again.
+shot_menu() { # NAME X Y WIDTH HEIGHT
+    if [ "${SFE_GUIDE_MENU:-0}" != 1 ]; then
+        echo "keeping $1.png (popup menus need SFE_GUIDE_MENU=1)"
+        return
+    fi
+    dispatch 'hl.dsp.workspace.toggle_special("magic")'
+    sleep 0.8
     geo=$(geometry_of "$(window_of "$P" largest)")
     x=${geo%%,*}
     rest=${geo#*,}
     y=${rest%% *}
     grim -g "$((x + $2)),$((y + $3)) ${4}x${5}" "$OUT/$1.png"
+    dispatch 'hl.dsp.workspace.toggle_special("magic")'
 }
+
+# Puts back what was in the clipboard and removes the work files.
+finish() {
+    stop_sfe
+    if [ -n "$CLIP_TYPE" ]; then
+        # (wl-copy stays in the background serving it: keep it off our output)
+        wl-copy --type "$CLIP_TYPE" <"$WORK/clipboard" >/dev/null 2>&1 || true
+    fi
+    rm -rf "$WORK"
+}
+trap finish EXIT
 
 # ---------------------------------------------------------------------------
 # The shots
@@ -148,17 +255,17 @@ shot overview
 shot_region sidebar 0 0 222 $H
 
 key CTRL 2
-goto Documents
+goto 1 Documents
 shot list-view
 key CTRL 1
 
 launch Projects
 key CTRL backslash
 sleep 0.6
-goto Projects/website
+goto 0 website
 key CTRL minus
 sleep 0.6
-goto Pictures/Holiday
+goto 2 Pictures/Holiday
 shot splits
 
 launch Downloads
@@ -166,14 +273,14 @@ key "" Home
 key "" Right
 key "" Menu
 sleep 0.6
-shot_region menu-files 220 0 $((W - 220)) $H
+shot_menu menu-files 220 0 $((W - 220)) $H
 key "" Escape
 key CTRL a
 sleep 0.2
 key "" Escape   # nothing selected: the folder menu
 key "" Menu
 sleep 0.6
-shot_region menu-folder 220 0 $((W - 220)) $H
+shot_menu menu-folder 220 0 $((W - 220)) $H
 key "" Escape
 
 launch Documents
@@ -190,7 +297,7 @@ key CTRL f
 type_text "manual"
 key "" Escape
 key CTRL c
-goto Documents
+goto 1 Documents
 key CTRL v
 sleep 1
 shot conflict dialog
@@ -254,7 +361,7 @@ for i in range(25000):
 launch Backup
 key "" Home
 key CTRL c
-goto Videos
+goto 1 Videos
 key CTRL v
 sleep 1.2
 shot progress
@@ -273,9 +380,8 @@ python3 - "$OUT" <<'EOF'
 import os, sys
 from PIL import Image
 for name in sorted(os.listdir(sys.argv[1])):
-    if name.endswith(".png"):
-        path = os.path.join(sys.argv[1], name)
+    path = os.path.join(sys.argv[1], name)
+    if name.endswith(".png"):  # kept ones are already reduced: unchanged
         Image.open(path).convert("RGB").quantize(256, dither=Image.Dither.NONE).save(path, optimize=True)
 EOF
-rm -rf "$WORK"
 echo "screenshots written to $OUT"
