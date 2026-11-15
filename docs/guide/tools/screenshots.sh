@@ -393,6 +393,24 @@ sleep 1.2
 shot progress
 sleep 6
 
+# Suggestions for a pending chord (Ctrl+W, then wait).
+launch Documents
+key CTRL w
+sleep 1
+shot_region chord-hints $((W - 420)) $((H - 150)) 420 150
+key "" Escape
+
+# The undo history after a few changes (in Documents, which no later shot shows).
+type_cmd() { key SHIFT semicolon; type_text "$1"; key "" Return; sleep 0.6; }
+type_cmd "mkdir Drafts"
+type_cmd "copy notes.md Drafts"
+type_cmd "rename todo.txt tasks.txt"
+key SHIFT semicolon
+type_text "undo "
+sleep 0.8
+shot_region undo 220 $((H - 150)) $((W - 220)) 150
+key "" Escape
+
 # The same window with a plain GTK theme (no gtk.css): colours follow the theme.
 mkdir -p "$WORK/light/sfe"
 cp "$DEMO/.config/sfe/config.toml" "$WORK/light/sfe/"

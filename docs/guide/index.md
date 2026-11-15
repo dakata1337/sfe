@@ -18,6 +18,7 @@ Wayland. This guide covers every feature and every shortcut.
 - [Search](#search)
 - [Working with files](#working-with-files)
 - [Renaming](#renaming)
+- [Undo](#undo)
 - [Properties](#properties)
 - [Drives](#drives)
 - [Vim-style keys and the command line](#vim-style-keys-and-the-command-line)
@@ -236,6 +237,29 @@ counts only those):
 The preview marks names that would collide. If renaming fails, every file
 keeps its old name.
 
+## Undo
+
+**Ctrl+Z**, `u`, or `:undo` takes back the last change to files. sfe keeps
+the last 100 changes, from all its windows:
+
+| Change | Undone by |
+|---|---|
+| copy, paste, new file or folder, link, extract, compress | moving what was made to the trash |
+| move, cut and paste | moving the files back (their folder is recreated if it went away) |
+| move to trash | bringing the files back from the trash |
+| rename, rename with a pattern | giving the files their old names back |
+
+Deleting permanently cannot be undone. A folder merged into one that was
+already there is undone file by file, so what was there before stays.
+
+`:undo ` then **Tab** lists the history, newest first, with what each step
+did and when; `:undo 2` undoes step 2 even if newer steps came after it.
+Typing words of a description (`:undo copy`) narrows the list, and Tab puts
+in that step's number. Files that changed since are skipped, and the bar
+says how many.
+
+![The undo history in the command line](images/undo.png)
+
 ## Properties
 
 ![Properties of a folder](images/properties.png)
@@ -277,8 +301,12 @@ and the shortcuts below keep working as before.
 ### Normal-mode keys
 
 `<C-w>v` means Ctrl+W, then V; `H` is Shift+H and `<C-H>` Ctrl+Shift+H.
-While a chord is unfinished its keys show in the bottom-right corner; one
-not finished within a second is dropped, and Esc drops it at once.
+While a chord is unfinished its keys show in the bottom-right corner. After
+half a second a list of the keys that can follow appears above them, with
+what each does; the chord then waits for your next key. Esc drops a chord at
+once; one left alone without the list is dropped after a second.
+
+![Ctrl+W, then a moment: the keys that can follow](images/chord-hints.png)
 
 | Keys | Command | Does |
 |---|---|---|
@@ -292,10 +320,11 @@ not finished within a second is dropped, and Esc drops it at once.
 | `yy` | `copy_clipboard` | copy the selection to the clipboard |
 | `dd` | `cut` | cut the selection |
 | `p` | `paste` | paste into this view |
+| `u` | `undo` | undo the last change to files ([Undo](#undo)) |
 | `x` / `X` | `trash` / `delete` | move to trash / delete permanently (asks) |
 | `r` / `R` | `rename` / `mass_rename` | rename / rename with a pattern |
 | `zh` | `hidden toggle` | show / hide hidden files |
-| `zz` | `center` | scroll the cursor to the middle of the view (in visual mode the first selected item) |
+| `zz` | `center` | scroll the cursor to the middle of the view (in visual mode the first selected item), and the list back to its left edge |
 | `v` | `visual` | visual mode, below |
 | `/` | `search` | the fuzzy search |
 | `:` | | the command line |
@@ -382,6 +411,7 @@ selection.
 | `select` | `toggle\|all` | toggle the item under the cursor / select all |
 | `visual` | `[off\|swap]` | visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end |
 | `center` | | scroll the cursor (in visual mode the first selected item) to the middle |
+| `undo` | `[<step>]` | undo the last change to files, or an older one ([Undo](#undo)) |
 | `command_line` |  | open the command line |
 | `q` (`quit`) | | close the active view |
 
@@ -496,6 +526,7 @@ Every shortcut in one place. The single-letter keys of normal mode are in
 | Ctrl+- | split top / bottom |
 | F6 | next view |
 | Ctrl+W Q | close the view |
+| Ctrl+Z | undo the last change to files |
 | Ctrl+P | preferences |
 | Ctrl+S | hide / show the sidebar |
 | Ctrl+N | new window |
