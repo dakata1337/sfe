@@ -59,6 +59,11 @@ program for an extension, see [Configuration](#configuration).
 - **Ctrl+1** grid view, **Ctrl+2** list view, or the toggle button.
 - In the list view, click a column header to sort by it; click again to
   reverse. Folders always stay on top.
+- When a view gets too narrow for the names, the list drops columns from the
+  right (Type, then Modified, then Size) and brings them back as it widens.
+  Name always stays.
+- There is always some empty space after the last file (half a view), so
+  you can right-click it for the folder's menu even in long folders.
 
 ### Thumbnails
 

@@ -6,6 +6,10 @@ new version.
 
 ## Unreleased
 
+- The views always end with half a view of empty space, to right-click
+  for the folder's menu in long folders.
+- In narrow views the list drops columns from the right (Type, then
+  Modified, then Size) to make room for the names.
 - The sidebar says "No devices" (or "No removable drives" with the
   removable-only setting) instead of showing an empty *Devices* heading.
 
