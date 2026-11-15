@@ -58,6 +58,10 @@ struct _SfePane {
     int cfg_thumbnails; /* the config value last applied, -1 at first */
     int thumb_size; /* SfeThumbSize in use, -1 at first */
 
+    /* Room after the files (half a view), to right-click empty space. */
+    double scroll_wanted[2]; /* per view (grid, list): where it was scrolled to */
+    bool padding; /* our own changes to the adjustments */
+
     /* Visual mode: the selection is `visual_base` (chunks already drawn,
      * as GFile*) plus the rows from `visual_anchor` to the cursor. */
     bool visual;
@@ -617,6 +621,69 @@ static void on_view_moved(GtkAdjustment* adjustment, gpointer data)
 {
     (void)adjustment;
     schedule_thumbnails(data);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Room after the files                                                      */
+/* ------------------------------------------------------------------------ */
+
+/* Where the last row ends, in the view's scrolled coordinates; 0 when empty. */
+static double content_bottom(SfePane* self, GtkWidget* view, GtkAdjustment* adjustment)
+{
+    int n = n_rows(self);
+    if (n == 0 || gtk_widget_get_parent(gtk_widget_get_parent(view)) == NULL)
+        return 0;
+    GtkTreePath* last = gtk_tree_path_new_from_indices(n - 1, -1);
+    GdkRectangle rect = { 0 };
+    double bottom = 0;
+    if (GTK_IS_ICON_VIEW(view)) {
+        /* in widget coordinates: shifted by how far the view is scrolled */
+        if (gtk_icon_view_get_cell_rect(GTK_ICON_VIEW(view), last, NULL, &rect))
+            bottom = rect.y + rect.height + gtk_adjustment_get_value(adjustment);
+    } else {
+        int tx = 0, ty = 0;
+        gtk_tree_view_get_background_area(GTK_TREE_VIEW(view), last, NULL, &rect);
+        gtk_tree_view_convert_bin_window_to_tree_coords(GTK_TREE_VIEW(view), rect.x, rect.y, &tx, &ty);
+        bottom = ty + rect.height;
+    }
+    gtk_tree_path_free(last);
+    return bottom;
+}
+
+/* The view sized its scroll range to the files: make it reach half a view
+ * further, so there is always empty space to right-click for the folder's
+ * menu. If the view just cut the scroll position back (it re-measured
+ * while scrolled into that space), put it back. */
+static void on_scroll_range(GtkAdjustment* adjustment, gpointer data)
+{
+    SfePane* self = data;
+    if (self->padding)
+        return;
+    int which = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(adjustment), "sfe-view-index"));
+    GtkWidget* view = which == 0 ? self->grid : self->list;
+    if (view != active_view(self))
+        return;
+    double page = gtk_adjustment_get_page_size(adjustment);
+    double upper = gtk_adjustment_get_upper(adjustment);
+    double bottom = content_bottom(self, view, adjustment);
+    double wanted_upper = bottom > 0 ? bottom + page / 2 : upper;
+
+    self->padding = true;
+    if (wanted_upper > upper + 0.5)
+        gtk_adjustment_set_upper(adjustment, wanted_upper);
+    double wanted = self->scroll_wanted[which];
+    if (wanted > gtk_adjustment_get_value(adjustment) && wanted <= gtk_adjustment_get_upper(adjustment) - page)
+        gtk_adjustment_set_value(adjustment, wanted);
+    self->padding = false;
+}
+
+static void on_scroll_value(GtkAdjustment* adjustment, gpointer data)
+{
+    SfePane* self = data;
+    if (self->padding)
+        return;
+    int which = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(adjustment), "sfe-view-index"));
+    self->scroll_wanted[which] = gtk_adjustment_get_value(adjustment);
 }
 
 static void on_files_changed(SfeDirModel* model, gpointer data)
@@ -1550,6 +1617,9 @@ static void sfe_pane_init(SfePane* self)
         GtkAdjustment* v = gtk_scrolled_window_get_vadjustment(sw);
         g_signal_connect(v, "value-changed", G_CALLBACK(on_view_moved), self);
         g_signal_connect(v, "changed", G_CALLBACK(on_view_moved), self);
+        g_object_set_data(G_OBJECT(v), "sfe-view-index", GINT_TO_POINTER((int)i));
+        g_signal_connect(v, "changed", G_CALLBACK(on_scroll_range), self);
+        g_signal_connect(v, "value-changed", G_CALLBACK(on_scroll_value), self);
     }
     gtk_stack_add_named(GTK_STACK(self->stack), self->message_box, "message");
 
