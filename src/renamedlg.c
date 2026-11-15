@@ -2,6 +2,7 @@
 
 #include "dialogs.h"
 #include "rename.h"
+#include "undo.h"
 #include <stdbool.h>
 
 #define TEMPLATE_HINT "{name} name   {ext} extension   {n} counter   {n:03} counter padded to 3 digits"
@@ -54,6 +55,7 @@ static bool perform(GtkWidget* parent, Request* req, GFile** files, char** names
         sfe_show_error(parent, "Renaming failed", error->message);
         return false;
     }
+    sfe_undo_record_renames(files, names, n);
     if (req->done != NULL) {
         g_autoptr(GPtrArray) list = g_ptr_array_new();
         for (int i = 0; i < n; i++)

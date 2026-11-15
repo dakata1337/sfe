@@ -26,5 +26,8 @@ bool sfe_command_bar_is_active(SfeCommandBar* self);
 /* Shows `message` in the error colour until sfe_command_bar_dismiss(). */
 void sfe_command_bar_show_error(SfeCommandBar* self, const char* message);
 
+/* The same in the normal colour ("undid: copy 3 items to ~/Backup"). */
+void sfe_command_bar_show_message(SfeCommandBar* self, const char* message);
+
 /* Hides an error message (the window calls this on the next key). */
 void sfe_command_bar_dismiss(SfeCommandBar* self);

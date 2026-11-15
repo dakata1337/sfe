@@ -51,3 +51,8 @@ test_cmdline = executable('test-cmdline', 'test_cmdline.c',
   dependencies: core_dep,
 )
 test('cmdline', test_cmdline)
+
+test_undo = executable('test-undo', 'test_undo.c',
+  dependencies: core_dep,
+)
+test('undo', test_undo)

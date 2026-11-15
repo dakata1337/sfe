@@ -132,3 +132,34 @@ GList* sfe_trash_everything(void)
     g_autoptr(GFile) info = g_file_get_child(trash, "info");
     return g_list_reverse(children(info, children(files, NULL)));
 }
+
+GFile* sfe_trash_find(GFile* original)
+{
+    g_autoptr(GFile) files = sfe_trash_files_dir();
+    g_autoptr(GFileEnumerator) en = g_file_enumerate_children(files, G_FILE_ATTRIBUTE_STANDARD_NAME,
+        G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, NULL);
+    GFile* best = NULL;
+    g_autofree char* best_date = NULL;
+    GFileInfo* info;
+
+    while (en != NULL && (info = g_file_enumerator_next_file(en, NULL, NULL)) != NULL) {
+        g_autoptr(GFile) item = g_file_get_child(files, g_file_info_get_name(info));
+        g_object_unref(info);
+        g_autoptr(GFile) from = sfe_trash_original_location(item, NULL);
+        if (from == NULL || !g_file_equal(from, original))
+            continue;
+        /* DeletionDate=YYYY-MM-DDThh:mm:ss compares as text */
+        g_autoptr(GFile) info_file = sfe_trash_info_file(item);
+        g_autofree char* path = g_file_get_path(info_file);
+        g_autoptr(GKeyFile) kf = g_key_file_new();
+        g_autofree char* date = g_key_file_load_from_file(kf, path, G_KEY_FILE_NONE, NULL)
+            ? g_key_file_get_string(kf, "Trash Info", "DeletionDate", NULL)
+            : NULL;
+        if (best == NULL || g_strcmp0(date, best_date) >= 0) {
+            g_set_object(&best, item);
+            g_free(best_date);
+            best_date = g_steal_pointer(&date);
+        }
+    }
+    return best;
+}

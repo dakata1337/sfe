@@ -23,6 +23,10 @@ SfePane* sfe_window_get_active_pane(SfeWindow* win);
 /* Shows progress for `op` in the window and starts it. */
 void sfe_window_run_op(SfeWindow* win, SfeFileOp* op);
 
+/* Undoes the history step `id` (0: the newest) and says so in the command
+ * bar; false (with the reason shown) if it could not. */
+bool sfe_window_undo(SfeWindow* win, guint id);
+
 /* Opens the ":" command line, with `text` typed in (or empty). */
 void sfe_window_show_command_line(SfeWindow* win, const char* text);
 

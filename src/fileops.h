@@ -52,6 +52,22 @@ void sfe_file_op_cancel(SfeFileOp* op);
  * the same kind get the same answer without asking. */
 void sfe_file_op_answer(SfeFileOp* op, SfeOpAnswer answer, bool apply_to_all);
 
+/* Copy / move: each source goes to the matching file of `dests` (GFile*)
+ * instead of into dest_dir (undo moves things back this way). */
+void sfe_file_op_set_destinations(SfeFileOp* op, GList* dests);
+
+/* What the job did, for undo; complete once "finished" was emitted:
+ *   copy, move   source -> the new file (after "keep both" renames; items
+ *                merged into an existing folder are listed one by one)
+ *   trash        source -> NULL
+ *   extract      archive -> the new folder
+ *   compress     NULL -> the archive */
+typedef struct {
+    GFile* source;
+    GFile* result;
+} SfeOpResult;
+GPtrArray* sfe_file_op_get_results(SfeFileOp* op); /* SfeOpResult*, owned by op */
+
 SfeOpKind sfe_file_op_get_kind(SfeFileOp* op);
 char* sfe_file_op_get_status(SfeFileOp* op); /* newly allocated */
 double sfe_file_op_get_fraction(SfeFileOp* op);

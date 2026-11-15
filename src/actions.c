@@ -13,6 +13,7 @@
 #include "renamedlg.h"
 #include "split.h"
 #include "trash.h"
+#include "undo.h"
 #include <gio/gdesktopappinfo.h>
 #include <string.h>
 
@@ -455,6 +456,12 @@ static void run_delete(const SfeActionTarget* t)
 static void run_select_all(const SfeActionTarget* t) { sfe_pane_select_all(t->pane); }
 static void run_search(const SfeActionTarget* t) { sfe_pane_start_search(t->pane); }
 static void run_preferences(const SfeActionTarget* t) { sfe_show_preferences(widget_of(t)); }
+/* Ctrl+Z in the path bar or a dialog's text field must not undo files. */
+static void run_undo(const SfeActionTarget* t)
+{
+    if (!GTK_IS_EDITABLE(gtk_window_get_focus(GTK_WINDOW(t->window))))
+        sfe_window_undo(t->window, 0);
+}
 static void run_toggle_sidebar(const SfeActionTarget* t) { sfe_window_toggle_sidebar(t->window); }
 static void run_toggle_tree(const SfeActionTarget* t) { sfe_window_toggle_tree(t->window); }
 
@@ -490,6 +497,7 @@ static void on_new_name(const char* name, gpointer data)
         sfe_show_error(GTK_WIDGET(req->pane), title, error->message);
         return;
     }
+    sfe_undo_record_one(SFE_UNDO_CREATE, NULL, file);
     sfe_pane_reveal(req->pane, name);
 }
 
@@ -604,6 +612,7 @@ static const SfeAction actions[] = {
     { "split-horizontal",   "Split Top and Bottom",       { "<Control>minus", NULL },       NONE,         0, NULL,                    run_split_horizontal },
     { "close-pane",         "Close View",                 { NULL },                         NONE,         0, NULL,                    run_close_pane },
     { "next-pane",          "Next View",                  { "F6", NULL },                   NONE,         0, NULL,                    run_next_pane },
+    { "undo",               "Undo",                       { "<Control>z", NULL },           NONE,         0, NULL,                    run_undo },
     { "toggle-sidebar",     "Hide / Show the Sidebar",    { "<Control>s", NULL },           NONE,         0, NULL,                    run_toggle_sidebar },
     { "toggle-tree",        "Folder Tree Fills the Sidebar", { NULL },                      NONE,         0, NULL,                    run_toggle_tree },
 };

@@ -33,6 +33,9 @@ GFile* sfe_trash_original_location(GFile* item, GError** error);
  * than replacing something. */
 bool sfe_trash_restore(GFile* item, GError** error);
 
+/* The newest trashed item that came from `original`, or NULL. */
+GFile* sfe_trash_find(GFile* original);
+
 /* Items (GFile*) to delete to empty the trash or to delete `items` from it:
  * the items plus their info files. */
 GList* sfe_trash_with_info(GList* items);

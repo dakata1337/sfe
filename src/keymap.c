@@ -20,6 +20,7 @@ static const SfeKeyBinding defaults[] = {
     { "yy", "copy_clipboard", "copy the selection to the clipboard" },
     { "dd", "cut", "cut the selection" },
     { "p", "paste", "paste into this view" },
+    { "u", "undo", "undo the last change to files" },
     { "x", "trash", "move to trash" },
     { "X", "delete", "delete permanently (asks)" },
     { "r", "rename", "rename" },

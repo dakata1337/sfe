@@ -14,6 +14,8 @@ struct _SfeFileOp {
     SfeOpKind kind;
     GList* sources; /* GFile* */
     GFile* dest_dir;
+    GList* dests; /* GFile*, one per source, instead of dest_dir (or NULL) */
+    GPtrArray* results; /* SfeOpResult*: what was done, for undo */
     GCancellable* cancel;
     GMainContext* context; /* where signals are emitted */
 
@@ -339,7 +341,18 @@ static void on_copy_progress(goffset current, goffset total, gpointer data)
     report(op, op->kind == SFE_OP_MOVE ? "Moving" : "Copying", NULL, current);
 }
 
-static bool copy_item(SfeFileOp* op, GFile* src, GFile* dest_in)
+/* Worker thread; read on the main thread only after "finished". */
+static void add_result(SfeFileOp* op, GFile* source, GFile* result)
+{
+    SfeOpResult* r = g_new0(SfeOpResult, 1);
+    r->source = source ? g_object_ref(source) : NULL;
+    r->result = result ? g_object_ref(result) : NULL;
+    g_ptr_array_add(op->results, r);
+}
+
+/* `record`: note the item in the results when it is created here (not when
+ * it merges into an existing folder: then its children are noted). */
+static bool copy_item(SfeFileOp* op, GFile* src, GFile* dest_in, bool record)
 {
     g_autoptr(GFile) dest = g_object_ref(dest_in);
     const char* verb = op->kind == SFE_OP_MOVE ? "Moving" : "Copying";
@@ -363,6 +376,8 @@ static bool copy_item(SfeFileOp* op, GFile* src, GFile* dest_in)
         }
         op->done_bytes += info ? g_file_info_get_size(info) : 0;
         op->done_items++;
+        if (record)
+            add_result(op, src, dest);
         return true;
     }
 
@@ -374,6 +389,9 @@ static bool copy_item(SfeFileOp* op, GFile* src, GFile* dest_in)
             if (!retry_after(op, dest, error))
                 return false;
         }
+        if (record)
+            add_result(op, src, dest);
+        record = false; /* the folder covers its contents */
     }
     g_autoptr(GPtrArray) children = list_children(op, src);
     if (children == NULL)
@@ -383,7 +401,7 @@ static bool copy_item(SfeFileOp* op, GFile* src, GFile* dest_in)
         GFile* child = g_ptr_array_index(children, i);
         g_autofree char* name = g_file_get_basename(child);
         g_autoptr(GFile) target = g_file_get_child(dest, name);
-        ok &= copy_item(op, child, target);
+        ok &= copy_item(op, child, target, record);
     }
     /* Permissions and times last, so a read-only folder can be filled. */
     g_file_copy_attributes(src, dest, G_FILE_COPY_NOFOLLOW_SYMLINKS | G_FILE_COPY_ALL_METADATA, NULL, NULL);
@@ -391,7 +409,7 @@ static bool copy_item(SfeFileOp* op, GFile* src, GFile* dest_in)
     return ok;
 }
 
-static bool move_item(SfeFileOp* op, GFile* src, GFile* dest_in)
+static bool move_item(SfeFileOp* op, GFile* src, GFile* dest_in, bool record)
 {
     g_autoptr(GFile) dest = g_object_ref(dest_in);
 
@@ -410,7 +428,7 @@ static bool move_item(SfeFileOp* op, GFile* src, GFile* dest_in)
             GFile* child = g_ptr_array_index(children, i);
             g_autofree char* name = g_file_get_basename(child);
             g_autoptr(GFile) target = g_file_get_child(dest, name);
-            ok &= move_item(op, child, target);
+            ok &= move_item(op, child, target, record);
         }
         if (ok)
             g_file_delete(src, NULL, NULL);
@@ -425,13 +443,18 @@ static bool move_item(SfeFileOp* op, GFile* src, GFile* dest_in)
         if (g_file_move(src, dest, G_FILE_COPY_NOFOLLOW_SYMLINKS | G_FILE_COPY_NO_FALLBACK_FOR_MOVE | G_FILE_COPY_ALL_METADATA,
                 op->cancel, NULL, NULL, &error)) {
             op->done_items++;
+            if (record)
+                add_result(op, src, dest);
             return true;
         }
         if (g_error_matches(error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED)
             || g_error_matches(error, G_IO_ERROR, G_IO_ERROR_WOULD_RECURSE))
         {
             scan(op, src); /* now there are bytes to show progress for */
-            return copy_item(op, src, dest) && delete_recursive(op, src, false);
+            bool ok = copy_item(op, src, dest, false) && delete_recursive(op, src, false);
+            if (ok && record)
+                add_result(op, src, dest);
+            return ok;
         }
         if (!retry_after(op, src, error))
             return false;
@@ -449,6 +472,7 @@ static void trash_item(SfeFileOp* op, GFile* file)
             return;
     }
     op->done_items++;
+    add_result(op, file, NULL);
 }
 
 /* Removes a folder tree without asking (cleanup after a failed extraction). */
@@ -534,6 +558,7 @@ static void extract_item(SfeFileOp* op, GFile* archive)
         }
         if (archive_path != NULL && run_extractor(op, archive_path, dest, &message)) {
             op->done_items++;
+            add_result(op, archive, folder);
             return;
         }
         remove_tree(folder); /* no half-extracted folders */
@@ -578,6 +603,7 @@ static void compress_all(SfeFileOp* op)
                                                              "(bsdtar, tar, zip or 7z).");
         else if (cwd != NULL && run_tool(op, argv, cwd, &message)) {
             op->done_items = op->total_items;
+            add_result(op, NULL, archive);
             return;
         }
         g_file_delete(archive, NULL, NULL); /* no half-written archives */
@@ -608,14 +634,22 @@ static void run_job(GTask* task, gpointer source, gpointer data, GCancellable* c
 
     if (op->kind == SFE_OP_COMPRESS)
         compress_all(op);
+    GList* d = op->dests;
     for (GList* l = op->sources; op->kind != SFE_OP_COMPRESS && l != NULL && !cancelled(op); l = l->next) {
         GFile* src = l->data;
         g_autofree char* name = g_file_get_basename(src);
-        g_autoptr(GFile) dest = op->dest_dir ? g_file_get_child(op->dest_dir, name) : NULL;
+        g_autoptr(GFile) dest = d != NULL ? g_object_ref(d->data)
+            : op->dest_dir ? g_file_get_child(op->dest_dir, name) : NULL;
+        if (d != NULL) { /* moving back: the folder it came from may be gone */
+            g_autoptr(GFile) parent = g_file_get_parent(dest);
+            if (parent != NULL)
+                g_file_make_directory_with_parents(parent, op->cancel, NULL);
+            d = d->next;
+        }
 
         switch (op->kind) {
-        case SFE_OP_COPY: copy_item(op, src, dest); break;
-        case SFE_OP_MOVE: move_item(op, src, dest); break;
+        case SFE_OP_COPY: copy_item(op, src, dest, true); break;
+        case SFE_OP_MOVE: move_item(op, src, dest, true); break;
         case SFE_OP_TRASH: trash_item(op, src); break;
         case SFE_OP_DELETE: delete_recursive(op, src, true); break;
         case SFE_OP_EXTRACT: extract_item(op, src); break;
@@ -699,12 +733,22 @@ double sfe_file_op_get_fraction(SfeFileOp* op)
 /* GObject                                                                   */
 /* ------------------------------------------------------------------------ */
 
+static void result_free(gpointer p)
+{
+    SfeOpResult* r = p;
+    g_clear_object(&r->source);
+    g_clear_object(&r->result);
+    g_free(r);
+}
+
 static void sfe_file_op_finalize(GObject* object)
 {
     SfeFileOp* op = SFE_FILE_OP(object);
 
     g_list_free_full(op->sources, g_object_unref);
     g_clear_object(&op->dest_dir);
+    g_list_free_full(op->dests, g_object_unref);
+    g_ptr_array_unref(op->results);
     g_clear_object(&op->cancel);
     g_main_context_unref(op->context);
     g_clear_object(&op->q_source);
@@ -737,6 +781,7 @@ static void sfe_file_op_init(SfeFileOp* op)
     op->cancel = g_cancellable_new();
     op->context = g_main_context_ref_thread_default();
     op->apply_to_all[0] = op->apply_to_all[1] = -1;
+    op->results = g_ptr_array_new_with_free_func(result_free);
 }
 
 static gpointer ref_copy(gconstpointer object, gpointer data)
@@ -753,4 +798,15 @@ SfeFileOp* sfe_file_op_new(SfeOpKind kind, GList* sources, GFile* dest_dir)
     op->sources = g_list_copy_deep(sources, ref_copy, NULL);
     op->dest_dir = dest_dir ? g_object_ref(dest_dir) : NULL;
     return op;
+}
+
+void sfe_file_op_set_destinations(SfeFileOp* op, GList* dests)
+{
+    g_list_free_full(op->dests, g_object_unref);
+    op->dests = g_list_copy_deep(dests, ref_copy, NULL);
+}
+
+GPtrArray* sfe_file_op_get_results(SfeFileOp* op)
+{
+    return op->results;
 }

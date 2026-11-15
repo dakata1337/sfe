@@ -52,6 +52,7 @@ static GtkWidget* candidate_row(const SfeCandidate* c)
     if (c->tag != NULL) {
         GtkWidget* tag = gtk_label_new(c->tag);
         gtk_style_context_add_class(gtk_widget_get_style_context(tag), "sfe-cmdbar-tag");
+        gtk_label_set_ellipsize(GTK_LABEL(tag), PANGO_ELLIPSIZE_MIDDLE); /* long undo descriptions */
         gtk_box_pack_end(GTK_BOX(box), tag, FALSE, FALSE, 0);
     }
     GtkWidget* row = gtk_list_box_row_new();
@@ -282,7 +283,7 @@ bool sfe_command_bar_is_active(SfeCommandBar* self)
     return self->active;
 }
 
-void sfe_command_bar_show_error(SfeCommandBar* self, const char* message)
+static void show_text(SfeCommandBar* self, const char* message, bool failed)
 {
     self->active = false;
     self->showing_error = true;
@@ -291,8 +292,21 @@ void sfe_command_bar_show_error(SfeCommandBar* self, const char* message)
     gtk_widget_hide(self->entry);
     gtk_widget_hide(self->list_scroll);
     gtk_widget_show(self->message);
-    gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(self)), "sfe-cmdbar-failed");
+    if (failed)
+        gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(self)), "sfe-cmdbar-failed");
+    else
+        gtk_style_context_remove_class(gtk_widget_get_style_context(GTK_WIDGET(self)), "sfe-cmdbar-failed");
     gtk_widget_show(GTK_WIDGET(self));
+}
+
+void sfe_command_bar_show_error(SfeCommandBar* self, const char* message)
+{
+    show_text(self, message, true);
+}
+
+void sfe_command_bar_show_message(SfeCommandBar* self, const char* message)
+{
+    show_text(self, message, false);
 }
 
 void sfe_command_bar_dismiss(SfeCommandBar* self)

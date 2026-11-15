@@ -7,6 +7,7 @@
 #include "opsbar.h"
 #include "sidebar.h"
 #include "split.h"
+#include "undo.h"
 #include "util.h"
 #include <string.h>
 
@@ -45,13 +46,50 @@ SfePane* sfe_window_get_active_pane(SfeWindow* win)
     return sfe_split_get_active(win->split);
 }
 
+/* Finished jobs go into the undo history (but not the undoing ones). */
+static void on_op_finished(SfeFileOp* op, GError* error, gpointer data)
+{
+    (void)error, (void)data;
+    if (g_object_get_data(G_OBJECT(op), "sfe-no-undo") == NULL)
+        sfe_undo_record_op(op);
+}
+
 void sfe_window_run_op(SfeWindow* win, SfeFileOp* op)
 {
     /* Pastes arrive asynchronously (clipboard), possibly after the window
      * was closed: its progress bar is gone, so the job is dropped. */
     if (win->ops_bar == NULL || gtk_widget_in_destruction(GTK_WIDGET(win)))
         return;
+    g_signal_connect(op, "finished", G_CALLBACK(on_op_finished), NULL);
     sfe_ops_bar_run(win->ops_bar, op);
+}
+
+bool sfe_window_undo(SfeWindow* win, guint id)
+{
+    SfeUndoEntry* entry = sfe_undo_find(id);
+    if (entry == NULL) {
+        g_autofree char* text = id == 0 ? g_strdup("nothing to undo") : g_strdup_printf("no undo step %u", id);
+        sfe_command_bar_show_error(win->cmdbar, text);
+        return false;
+    }
+    g_autofree char* what = sfe_undo_describe(entry);
+    g_autoptr(GError) error = NULL;
+    SfeFileOp* job = NULL;
+    guint missing = 0;
+    if (!sfe_undo_apply(entry, &job, &missing, &error)) { /* (entry may be freed) */
+        g_autofree char* text = g_strdup_printf("cannot undo %s: %s", what, error->message);
+        sfe_command_bar_show_error(win->cmdbar, text);
+        return false;
+    }
+    if (job != NULL) {
+        g_object_set_data(G_OBJECT(job), "sfe-no-undo", GINT_TO_POINTER(1));
+        sfe_window_run_op(win, job);
+        g_object_unref(job);
+    }
+    g_autofree char* text = missing == 0 ? g_strdup_printf("undid: %s", what)
+                                         : g_strdup_printf("undid: %s (%u no longer there)", what, missing);
+    sfe_command_bar_show_message(win->cmdbar, text);
+    return true;
 }
 
 /* ------------------------------------------------------------------------ */

@@ -7,6 +7,7 @@
 #include "dialogs.h"
 #include "fileops.h"
 #include "rename.h"
+#include "undo.h"
 #include "split.h"
 #include "util.h"
 #include <stdarg.h>
@@ -194,19 +195,24 @@ static bool run_symlink(Ctx* c, int argc, char** argv, GError** error)
     if (!into && argc > 3)
         return fail(error, "several targets need a destination folder");
 
-    for (int i = 1; i < argc - 1; i++) {
+    GPtrArray* made = g_ptr_array_new();
+    bool ok = true;
+    for (int i = 1; i < argc - 1 && ok; i++) {
         g_autoptr(GFile) target = resolve(c, argv[i]);
         g_autofree char* target_path = g_file_get_path(target);
         g_autofree char* base = g_file_get_basename(target);
         g_autoptr(GFile) link = into ? g_file_get_child(dest, base) : g_object_ref(dest);
         if (target_path == NULL || !g_file_query_exists(target, NULL)) {
             g_autofree char* name = display(target);
-            return fail(error, "%s does not exist", name);
+            ok = fail(error, "%s does not exist", name);
+        } else if (!g_file_make_symbolic_link(link, target_path, NULL, error)) {
+            ok = false;
+        } else {
+            g_ptr_array_add(made, sfe_undo_pair_new(NULL, link));
         }
-        if (!g_file_make_symbolic_link(link, target_path, NULL, error))
-            return false;
     }
-    return true;
+    sfe_undo_record(SFE_UNDO_LINK, made); /* the ones made, even after a failure */
+    return ok;
 }
 
 static bool run_rename(Ctx* c, int argc, char** argv, GError** error)
@@ -228,7 +234,10 @@ static bool run_rename(Ctx* c, int argc, char** argv, GError** error)
         return fail(error, "cannot rename to “%s”: %s", argv[2], sfe_rename_status_text(status));
     if (status == SFE_RENAME_UNCHANGED)
         return true;
-    return sfe_rename_files(files, names, 1, error);
+    if (!sfe_rename_files(files, names, 1, error))
+        return false;
+    sfe_undo_record_renames(files, names, 1);
+    return true;
 }
 
 static bool run_mass_rename(Ctx* c, int argc, char** argv, GError** error)
@@ -242,9 +251,10 @@ static bool run_new(Ctx* c, bool directory, int argc, char** argv, GError** erro
 {
     if (argc == 1)
         return run_action(c, directory ? "new-folder" : "new-file", NULL, error);
-    for (int i = 1; i < argc; i++) {
+    GPtrArray* made = g_ptr_array_new();
+    bool ok = true;
+    for (int i = 1; i < argc && ok; i++) {
         g_autoptr(GFile) file = resolve(c, argv[i]);
-        bool ok;
         if (directory) {
             ok = g_file_make_directory_with_parents(file, NULL, error);
         } else {
@@ -252,11 +262,13 @@ static bool run_new(Ctx* c, bool directory, int argc, char** argv, GError** erro
             ok = out != NULL;
         }
         if (!ok)
-            return false;
+            break;
+        g_ptr_array_add(made, sfe_undo_pair_new(NULL, file));
         if (argc == 2 && strchr(argv[1], '/') == NULL)
             sfe_pane_reveal(c->pane, argv[1]); /* select it once it shows up */
     }
-    return true;
+    sfe_undo_record(SFE_UNDO_CREATE, made);
+    return ok;
 }
 
 static bool run_new_file(Ctx* c, int argc, char** argv, GError** error)
@@ -551,6 +563,15 @@ static bool run_visual(Ctx* c, int argc, char** argv, GError** error)
     return true;
 }
 
+static bool run_undo(Ctx* c, int argc, char** argv, GError** error)
+{
+    guint64 id = 0;
+    if (argc > 2 || (argc == 2 && !g_ascii_string_to_unsigned(argv[1], 10, 1, G_MAXUINT, &id, NULL)))
+        return fail(error, "usage: undo [<step number>] (Tab lists them)");
+    sfe_window_undo(c->window, (guint)id); /* reports in the command bar itself */
+    return true;
+}
+
 static bool run_center(Ctx* c, int argc, char** argv, GError** error)
 {
     (void)argv;
@@ -800,6 +821,23 @@ WORDS_COMPLETER(complete_cursor, "down", "up", "first", "last", "previous", "nex
 WORDS_COMPLETER(complete_select, "toggle", "all")
 WORDS_COMPLETER(complete_visual, "off", "swap")
 
+/* The undo history, newest first: the step number, described in the tag. */
+static void complete_undo(Ctx* c, int argi, char** argv, const char* query, const char** rank, GPtrArray* out)
+{
+    (void)c, (void)argv, (void)query, (void)rank;
+    if (argi != 1)
+        return;
+    GPtrArray* all = sfe_undo_entries();
+    for (guint i = all->len; i-- > 0;) {
+        const SfeUndoEntry* e = g_ptr_array_index(all, i);
+        g_autofree char* id = g_strdup_printf("%u", e->id);
+        g_autofree char* what = sfe_undo_describe(e);
+        g_autofree char* when = g_date_time_format(e->time, "%H:%M");
+        g_autofree char* tag = g_strdup_printf("%s  %s", what, when);
+        add(out, id, what, tag, 0); /* typing "copy" finds the copies */
+    }
+}
+
 /* ------------------------------------------------------------------------ */
 /* The table                                                                 */
 /* ------------------------------------------------------------------------ */
@@ -830,6 +868,7 @@ static const Command commands[] = {
     { { "cursor", NULL, "down|up|first|last|previous|next", "move the cursor" }, complete_cursor, run_cursor },
     { { "select", NULL, "toggle|all", "toggle the item under the cursor / select all" }, complete_select, run_select },
     { { "visual", NULL, "[off|swap]", "visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end" }, complete_visual, run_visual },
+    { { "undo", NULL, "[<step>]", "undo the last change to files, or an older one (Tab lists them)" }, complete_undo, run_undo },
     { { "center", NULL, "", "scroll the cursor (in visual mode the first selected item) to the middle" }, NULL, run_center },
     { { "command_line", NULL, "", "open the command line" }, NULL, run_command_line },
 };
