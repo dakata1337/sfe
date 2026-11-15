@@ -25,3 +25,7 @@ void sfe_window_run_op(SfeWindow* win, SfeFileOp* op);
 
 /* Opens the ":" command line, with `text` typed in (or empty). */
 void sfe_window_show_command_line(SfeWindow* win, const char* text);
+
+/* Hides or shows the sidebar (Ctrl+S, the minimal look). */
+void sfe_window_toggle_sidebar(SfeWindow* win);
+

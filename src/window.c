@@ -261,6 +261,17 @@ static gboolean sfe_window_key_press(GtkWidget* widget, GdkEventKey* event)
     return GTK_WIDGET_CLASS(sfe_window_parent_class)->key_press_event(widget, event);
 }
 
+void sfe_window_toggle_sidebar(SfeWindow* win)
+{
+    GtkWidget* sidebar = GTK_WIDGET(win->sidebar);
+    bool hide = gtk_widget_get_visible(sidebar);
+    GtkWidget* focus = gtk_window_get_focus(GTK_WINDOW(win));
+
+    gtk_widget_set_visible(sidebar, !hide);
+    if (hide && focus != NULL && gtk_widget_is_ancestor(focus, sidebar))
+        sfe_pane_focus_view(sfe_window_get_active_pane(win));
+}
+
 void sfe_window_show_command_line(SfeWindow* win, const char* text)
 {
     sfe_command_bar_start(win->cmdbar, text);

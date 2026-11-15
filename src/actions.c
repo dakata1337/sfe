@@ -455,6 +455,7 @@ static void run_delete(const SfeActionTarget* t)
 static void run_select_all(const SfeActionTarget* t) { sfe_pane_select_all(t->pane); }
 static void run_search(const SfeActionTarget* t) { sfe_pane_start_search(t->pane); }
 static void run_preferences(const SfeActionTarget* t) { sfe_show_preferences(widget_of(t)); }
+static void run_toggle_sidebar(const SfeActionTarget* t) { sfe_window_toggle_sidebar(t->window); }
 
 typedef struct {
     SfePane* pane;
@@ -602,6 +603,7 @@ static const SfeAction actions[] = {
     { "split-horizontal",   "Split Top and Bottom",       { "<Control>minus", NULL },       NONE,         0, NULL,                    run_split_horizontal },
     { "close-pane",         "Close View",                 { NULL },                         NONE,         0, NULL,                    run_close_pane },
     { "next-pane",          "Next View",                  { "F6", NULL },                   NONE,         0, NULL,                    run_next_pane },
+    { "toggle-sidebar",     "Hide / Show the Sidebar",    { "<Control>s", NULL },           NONE,         0, NULL,                    run_toggle_sidebar },
 };
 
 const SfeAction* sfe_actions_get(size_t* n)
