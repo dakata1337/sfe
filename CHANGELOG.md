@@ -9,7 +9,9 @@ new version.
 - sfe can be the file dialog of other programs: *Settings → System → Use sfe
   for Open / Save dialogs* (through xdg-desktop-portal; Firefox and Zen
   also need `widget.use-xdg-desktop-portal.file-picker = 1`). Behind it,
-  `sfe --choose open|save|folder` and the `sfe-portal` backend.
+  `sfe --choose open|save|folder` and the `sfe-portal` backend. The dialog
+  shows the program's file type filters and extra options, previews the
+  selected file on the right and stays attached to the program's window.
 
 - Installed packages no longer print sfe's debug messages: debug logging
   now follows meson's `debug` option instead of "anything but a release

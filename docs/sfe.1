@@ -5,6 +5,10 @@ sfe \- Simple File Explorer, a small file manager for Wayland
 .B sfe
 [\fB\-v\fR]
 [\fIDIRECTORY\fR...]
+.br
+.B sfe \-\-choose
+\fBopen\fR|\fBsave\fR|\fBfolder\fR
+[\fIOPTION\fR...]
 .SH DESCRIPTION
 .B sfe
 is a minimal GTK3 file manager: a sidebar with places, bookmarks, drives
@@ -22,6 +26,36 @@ Print the version and exit.
 .TP
 .BR \-h ", " \-\-help
 Show the options, including the standard GTK and GApplication ones.
+.SS File dialog
+\fBsfe \-\-choose\fR opens a file dialog for another program (sfe-portal
+uses it to answer the desktop's Open / Save dialogs). It prints the chosen
+files as URIs, one per line, and exits with 0, or with 1 when cancelled.
+With \fB\-\-filters\fR or \fB\-\-choices\fR the URIs are preceded by
+\fB#filter\fR \fIN\fR and \fB#choice\fR \fIID VALUE\fR lines.
+.TP
+.BI \-\-choose " MODE"
+\fBopen\fR files, choose a name to \fBsave\fR as, or pick a \fBfolder\fR.
+.TP
+.B \-\-multiple
+Open: allow several files.
+.TP
+.BI \-\-title " TEXT" "\fR, \fP\-\-accept\-label " TEXT
+The window title and the text of the Open / Save button.
+.TP
+.BI \-\-folder " DIRECTORY" "\fR, \fP\-\-name " NAME
+Where to start, and the name to suggest when saving.
+.TP
+.BI \-\-parent " WINDOW"
+The asking program's window (\fBwayland:\fR\fIHANDLE\fR or
+\fBx11:\fR\fIXID\fR), to attach the dialog to.
+.TP
+.BI \-\-filters " FILTERS" "\fR, \fP\-\-current\-filter " N
+File type filters as GVariant text of type \fBa(sa(us))\fR (a name and
+rules: 0 a glob, 1 a MIME type), and the one to start with.
+.TP
+.BI \-\-choices " CHOICES"
+Extra options as GVariant text of type \fBa(ssa(ss)s)\fR (id, label,
+options, default; no options makes a check box).
 .SH KEYS
 In the file views single keys are commands (normal mode):
 \fBj\fR/\fBk\fR move, \fBh\fR goes to the parent folder, \fBl\fR opens,

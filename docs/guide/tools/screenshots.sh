@@ -168,15 +168,22 @@ goto() { # UPS PATH
 }
 
 # Starts sfe in DIR, with the demo home mounted at $FAKE. The real home is
-# mounted back in place so fonts and desktop settings still apply.
-launch() { # DIR [XDG_CONFIG_HOME]
+# mounted back in place so fonts and desktop settings still apply. With
+# more arguments sfe gets those instead of DIR (DIR is then $FAKE/DIR in
+# them, e.g. "--choose open --folder ...").
+launch() { # DIR [XDG_CONFIG_HOME] [SFE_ARGS...]
     stop_sfe
+    dir=$1
+    config=${2:-$FAKE/.config}
+    shift
+    [ $# -gt 0 ] && shift
+    [ $# -gt 0 ] || set -- "$FAKE/$dir"
     mkdir -p "$WORK/realhome"
     # Inside the namespace the user is uid 0; naming uid 0 "alex" makes the
     # properties dialog show "alex" as the owner instead of "root".
     sed 's/^root:[^:]*:0:0:[^:]*:[^:]*:/alex:x:0:0:Alex:\/home\/alex:/' /etc/passwd >"$WORK/passwd"
     sed 's/^root:/alex:/' /etc/group >"$WORK/group"
-    REAL_HOME=$HOME WORK=$WORK FAKE=$FAKE DEMO=$DEMO SFE=$SFE DIR=$1 CONFIG=${2:-$FAKE/.config} \
+    REAL_HOME=$HOME WORK=$WORK FAKE=$FAKE DEMO=$DEMO SFE=$SFE CONFIG=$config \
         unshare -rm sh -c '
         mount --bind "$WORK/passwd" /etc/passwd
         mount --bind "$WORK/group" /etc/group
@@ -187,8 +194,8 @@ launch() { # DIR [XDG_CONFIG_HOME]
         mount --bind "$DEMO" "$FAKE"
         exec env HOME="$FAKE" XDG_CONFIG_HOME="$CONFIG" XDG_DATA_HOME="$FAKE/.local/share" XDG_CACHE_HOME="$FAKE/.cache" \
             XDG_STATE_HOME="$FAKE/.local/state" \
-            DBUS_SESSION_BUS_ADDRESS=disabled: "$WORK/sfe-guide" "$FAKE/$DIR"
-    ' >/dev/null 2>&1 &
+            DBUS_SESSION_BUS_ADDRESS=disabled: "$WORK/sfe-guide" "$@"
+    ' sh "$@" >/dev/null 2>&1 &
     P=$! # unshare execs sh, which execs sfe: the same process
     for _ in $(seq 50); do
         [ -n "$(window_of "$P" largest)" ] && break
@@ -435,6 +442,16 @@ type_text "undo "
 sleep 0.8
 shot_region undo 220 $((H - 150)) $((W - 220)) 150
 key "" Escape
+
+# sfe as another program's Open dialog: a type filter, an extra option and
+# the preview of the selected picture.
+launch Pictures "" --choose open --title "Open Image" --folder "$FAKE/Pictures" \
+    --filters "[('Images', [(1, 'image/*')]), ('All files', [(0, '*')])]" \
+    --choices "[('size', 'Size', [('full', 'Full size'), ('web', 'For the web')], 'full')]"
+key "" j
+for _ in 1 2 3; do key "" Right; done
+sleep 1.5
+shot file-dialog
 
 # The same window with a plain GTK theme (no gtk.css): colours follow the theme.
 mkdir -p "$WORK/light/sfe"

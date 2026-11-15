@@ -543,13 +543,16 @@ are saved to `config.toml`.
 
 *Settings → System → Use sfe for Open / Save dialogs* makes programs that ask
 the desktop portal for a file dialog (Flatpak apps, browsers) open sfe
-instead. A bar at the bottom holds the name to save as, *Cancel* and *Open* /
-*Save*; Enter or a double-click on a file picks it, Ctrl+Enter is the
-*Open* / *Save* button. Firefox and Zen use the portal only with
+instead. A bar at the bottom holds the name to save as, the file types to
+show, the program's extra options (an encoding, say), *Cancel* and *Open* /
+*Save*; the selected file is previewed on the right. Enter or a
+double-click on a file picks it, Ctrl+Enter is the *Open* / *Save* button.
+Firefox and Zen use the portal only with
 `about:config` → `widget.use-xdg-desktop-portal.file-picker` set to `1`.
 The details, and how to set it up by hand, are in
-[file-chooser.md](../file-chooser.md). File type filters are not supported
-yet: every file is shown.
+[file-chooser.md](../file-chooser.md).
+
+![An Open dialog with an image type filter and the preview](images/file-dialog.png)
 
 ### Default file manager
 

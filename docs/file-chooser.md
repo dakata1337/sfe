@@ -18,20 +18,30 @@ says `default=hyprland;gtk`, and the Hyprland portal has no file chooser).
 sfe adds two pieces:
 
 - **`sfe --choose open|save|folder`**: a separate sfe window with a bar at
-  the bottom (a name field for saving, *Cancel*, *Open* / *Save* /
-  *Select*). Enter or a double-click on a file chooses it; Ctrl+Enter is the
-  *Open* / *Save* button. It prints the chosen files as URIs and exits with
-  0, or exits with 1 when cancelled. Try it on its own:
+  the bottom (a name field for saving, the file type filter, the program's
+  extra options, *Cancel*, *Open* / *Save* / *Select*) and a preview of the
+  selected file on the right. Enter or a double-click on a file chooses it;
+  Ctrl+Enter is the *Open* / *Save* button. It prints the chosen files as
+  URIs and exits with 0, or exits with 1 when cancelled. Try it on its own:
 
   ```sh
   sfe --choose open --multiple --folder ~/Downloads
   sfe --choose save --name report.pdf
+  sfe --choose open --filters "[('Images', [(1, 'image/*')]), ('Text', [(0, '*.txt')])]"
   ```
+
+  `--filters` takes the portal's filter list in GVariant text form
+  (`a(sa(us))`: a name and rules, 0 = glob, 1 = MIME type), `--current-filter N`
+  picks the one to start with, and `--choices` the extra options
+  (`a(ssa(ss)s)`: id, label, options, default; no options makes a check box,
+  `true` / `false`). The answer then starts with `#filter N` and one
+  `#choice ID VALUE` line per option before the URIs.
 
 - **`sfe-portal`** (installed to `/usr/lib/sfe-portal`, or the libexec
   folder of your prefix): a portal backend. For each Open / Save request it
   runs `sfe --choose` with the request's title, start folder, suggested
-  name and button label, and returns what was chosen.
+  name, button label, filters, extra options and parent window, and returns
+  what was chosen, the filter in use and the options' values.
 
 ## Setting it up
 
@@ -68,15 +78,23 @@ sfe adds two pieces:
 - SaveFiles (saving several files at once into a folder).
 - The request's title and button label; closing the request (the program
   gave up) closes sfe.
+- **File type filters** (`filters`, `current_filter`): a drop-down in the
+  bar; files that don't match are hidden (folders stay). Globs match
+  regardless of case; `image/*` matches every image type. The filter in
+  use is returned.
+- **Choices**: the extra options some dialogs show (an encoding, "open
+  read-only") as drop-downs and check boxes; their values are returned.
+- **The parent window** (`parent_window`): the dialog is attached to the
+  program that asked (`wayland:` handles through xdg-foreign, `x11:` window
+  ids), so the compositor can keep it above that window.
+- **Preview**: the selected file's thumbnail (images, and videos or
+  documents with a thumbnailer) or icon, with its type, size, date and an
+  image's dimensions.
 
 Tested through the real portal with Zen, and by calling the backend over a
 private D-Bus session bus.
 
 ## Not done yet
 
-- **File type filters** (`filters`, `current_filter`): sfe shows every file.
-- **Choices** (extra options some dialogs show, e.g. an encoding).
-- **The parent window** (`parent_window`): the dialog is not attached to the
-  program that asked (on Wayland this needs xdg-foreign), so it opens as an
-  ordinary window, and `modal` is ignored.
+- `modal` is ignored: the program that asked stays usable.
 - Each dialog starts a full sfe process; it takes a moment to appear.
