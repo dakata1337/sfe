@@ -5,6 +5,12 @@
 #include "cmdbar.h"
 #include "commands.h"
 #include "dialogs.h"
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+#endif
 #include "keymap.h"
 #include "opsbar.h"
 #include "sidebar.h"
@@ -682,12 +688,49 @@ static void on_cancel(GtkButton* button, gpointer data)
     g_application_quit(G_APPLICATION(sfe_app())); /* exit status stays 1 */
 }
 
+/* Attaches the dialog to the window of the program that asked (the portal
+ * passes "wayland:HANDLE", an xdg-foreign handle, or "x11:XID"), so the
+ * compositor treats it as that program's dialog. */
+static void attach_to_parent(GtkWidget* widget, gpointer data)
+{
+    (void)data;
+    SfeWindow* win = SFE_WINDOW(widget);
+    const char* parent = win->chooser ? win->chooser->parent : NULL;
+    GdkWindow* window = gtk_widget_get_window(widget);
+    if (parent == NULL || window == NULL)
+        return;
+#ifdef GDK_WINDOWING_WAYLAND
+    if (g_str_has_prefix(parent, "wayland:") && GDK_IS_WAYLAND_WINDOW(window)) {
+        if (!gdk_wayland_window_set_transient_for_exported(window, (char*)parent + strlen("wayland:")))
+            g_debug("chooser: cannot attach to %s", parent);
+        return;
+    }
+#endif
+#ifdef GDK_WINDOWING_X11
+    if (g_str_has_prefix(parent, "x11:") && GDK_IS_X11_WINDOW(window)) {
+        guint64 xid = g_ascii_strtoull(parent + strlen("x11:"), NULL, 16);
+        GdkWindow* foreign = gdk_x11_window_foreign_new_for_display(gdk_window_get_display(window), (Window)xid);
+        if (foreign != NULL) {
+            gdk_window_set_transient_for(window, foreign);
+            g_object_unref(foreign);
+        }
+    }
+#endif
+}
+
 void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
 {
     static const char* const titles[] = { "Open", "Save", "Select Folder" };
     static const char* const labels[] = { "Open", "Save", "Select" };
     win->chooser = chooser;
     gtk_window_set_title(GTK_WINDOW(win), chooser->title ? chooser->title : titles[chooser->mode]);
+    if (chooser->parent != NULL) {
+        gtk_window_set_type_hint(GTK_WINDOW(win), GDK_WINDOW_TYPE_HINT_DIALOG);
+        if (gtk_widget_get_realized(GTK_WIDGET(win)))
+            attach_to_parent(GTK_WIDGET(win), NULL);
+        else
+            g_signal_connect_after(win, "realize", G_CALLBACK(attach_to_parent), NULL); /* (the GdkWindow exists then) */
+    }
     gtk_window_set_default_size(GTK_WINDOW(win), 900, 600);
 
     GtkWidget* bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);

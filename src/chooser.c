@@ -11,6 +11,7 @@ void sfe_chooser_free(SfeChooser* chooser)
     g_free(chooser->folder);
     g_free(chooser->name);
     g_free(chooser->accept_label);
+    g_free(chooser->parent);
     g_free(chooser);
 }
 

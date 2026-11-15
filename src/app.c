@@ -324,6 +324,7 @@ static int sfe_application_handle_local_options(GApplication* gapp, GVariantDict
         g_variant_dict_lookup(options, "folder", "^ay", &c->folder);
         g_variant_dict_lookup(options, "name", "s", &c->name);
         g_variant_dict_lookup(options, "accept-label", "s", &c->accept_label);
+        g_variant_dict_lookup(options, "parent", "s", &c->parent);
         app->chooser = c;
         app->exit_status = 1; /* cancelled unless something is chosen */
         /* Standard output carries only the answer: a private copy of it is
@@ -371,6 +372,7 @@ static void sfe_application_init(SfeApplication* app)
         { "folder", 0, 0, G_OPTION_ARG_FILENAME, NULL, "With --choose: where to start", "DIR" },
         { "name", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose save: the suggested file name", "NAME" },
         { "accept-label", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose: the label of the Open / Save button", "LABEL" },
+        { "parent", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose: the asking program's window (wayland:HANDLE or x11:XID)", "WINDOW" },
         { NULL, 0, 0, 0, NULL, NULL, NULL },
     };
     g_application_add_main_option_entries(G_APPLICATION(app), entries);

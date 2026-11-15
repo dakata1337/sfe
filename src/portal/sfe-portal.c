@@ -217,6 +217,10 @@ static void on_method_call(GDBusConnection* connection, const char* sender, cons
         g_ptr_array_add(argv, g_strdup("--name"));
         g_ptr_array_add(argv, g_strdup(name));
     }
+    if (parent != NULL && *parent != '\0') { /* "wayland:HANDLE" / "x11:XID": sfe attaches to it */
+        g_ptr_array_add(argv, g_strdup("--parent"));
+        g_ptr_array_add(argv, g_strdup(parent));
+    }
     g_autofree char* accept = option_string(options, "accept_label");
     if (accept != NULL && *accept != '\0') {
         g_ptr_array_add(argv, g_strdup("--accept-label"));

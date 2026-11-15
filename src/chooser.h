@@ -5,6 +5,7 @@
  *   sfe --choose open   [--multiple] [--folder DIR] [--title T] [--accept-label L]
  *   sfe --choose folder [--folder DIR] ...
  *   sfe --choose save   [--name NAME] [--folder DIR] ...
+ *   ... [--parent wayland:HANDLE | x11:XID]  (attach to the asking program)
  *
  * A separate sfe instance opens one window with a bar at the bottom
  * ([name] Cancel / Open). What is chosen is printed to standard output as
@@ -26,6 +27,7 @@ typedef struct {
     char* folder; /* where to start, or NULL */
     char* name; /* save: the suggested file name, or NULL */
     char* accept_label; /* "Open", "Save", "Upload" ..., or NULL */
+    char* parent; /* the asking program's window: "wayland:HANDLE" / "x11:XID", or NULL */
 } SfeChooser;
 
 void sfe_chooser_free(SfeChooser* chooser);
