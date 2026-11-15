@@ -331,8 +331,8 @@ once; one left alone without the list is dropped after a second.
 | `<C-w>v` / `<C-w>s` | `split vertical` / `split horizontal` | split side by side / top and bottom (same rules as the buttons) |
 | `<C-w>q` | `split close` | close the view (the window if it is the last) |
 | `W` | `split next` | next view: left, right-top, right-bottom |
-| `H` `J` `K` `L` | `split left` / `down` / `up` / `right` | focus the view in that direction |
-| `<C-H>` `<C-J>` `<C-K>` `<C-L>` | `split move left` / … | swap the active view with the one in that direction |
+| `H` `J` `K` `L` | `split left` / `down` / `up` / `right` | focus the view in that direction; at the edge it wraps around to the far side |
+| `<C-H>` `<C-J>` `<C-K>` `<C-L>` | `split move left` / … | swap the active view with the one in that direction (wrapping around too) |
 
 ### Visual mode
 

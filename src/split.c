@@ -230,6 +230,8 @@ SfePane* sfe_split_neighbor(SfeSplit* self, SfePane* pane, SfeDirection directio
     GdkRectangle from = pane_rect(self, pane);
     SfePane* best = NULL;
     int best_distance = G_MAXINT;
+    SfePane* wrapped = NULL; /* the farthest the other way, for wrapping around */
+    int wrapped_distance = 0;
 
     /* Beside it in that direction (paned handles leave a small gap) and
      * overlapping it across; the nearest wins, the first pane on a tie. */
@@ -262,8 +264,12 @@ SfePane* sfe_split_neighbor(SfeSplit* self, SfePane* pane, SfeDirection directio
             best = other;
             best_distance = distance;
         }
+        if (across && distance <= -8 && (wrapped == NULL || distance < wrapped_distance)) {
+            wrapped = other;
+            wrapped_distance = distance;
+        }
     }
-    return best;
+    return best ? best : wrapped;
 }
 
 bool sfe_split_swap(SfeSplit* self, SfeDirection direction)

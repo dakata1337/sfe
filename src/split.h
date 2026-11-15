@@ -59,14 +59,17 @@ typedef enum {
 } SfeDirection;
 
 /* The pane next to `pane` in that direction on screen (so narrow, stacked
- * windows work too), or NULL. */
+ * windows work too). At the edge it wraps around to the farthest pane the
+ * other way (left from the left view: the right one). NULL when no other
+ * pane is on that line. */
 SfePane* sfe_split_neighbor(SfeSplit* self, SfePane* pane, SfeDirection direction);
 
 /* Makes `pane` active and focuses its view. */
 void sfe_split_focus(SfeSplit* self, SfePane* pane);
 
-/* Swaps the active pane with its neighbor in that direction; it stays
- * active. False if there is none. */
+/* Swaps the active pane with its neighbor in that direction (wrapping
+ * around like sfe_split_neighbor()); it stays active. False if there is
+ * none. */
 bool sfe_split_swap(SfeSplit* self, SfeDirection direction);
 
 /* The name of the pane at `index`: "left" with one pane; "left" / "right"

@@ -468,17 +468,17 @@ static bool run_split(Ctx* c, int argc, char** argv, GError** error)
     if (strcmp(sub, "close") == 0)
         return run_action(c, "close-pane", NULL, error);
     if (parse_direction(sub, &direction)) {
+        /* Wraps around at the edge; with no other view on that line there
+         * is simply nothing to do (no error: the keys are pressed blindly). */
         SfePane* other = sfe_split_neighbor(c->split, c->pane, direction);
-        if (other == NULL)
-            return fail(error, "no view %s", sub);
-        sfe_split_focus(c->split, other);
+        if (other != NULL)
+            sfe_split_focus(c->split, other);
         return true;
     }
     if (strcmp(sub, "move") == 0) {
         if (argc != 3 || !parse_direction(argv[2], &direction))
             return fail(error, "usage: split move left|right|up|down");
-        if (!sfe_split_swap(c->split, direction))
-            return fail(error, "no view %s to swap with", argv[2]);
+        sfe_split_swap(c->split, direction); /* (wraps; nothing to swap with is no error) */
         return true;
     }
     if (strcmp(sub, "absolute") == 0) {

@@ -179,7 +179,7 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 
 - Split rules (shared by the keys, the buttons and Ctrl+\\ / Ctrl+-): one view splits either way; two views side by side split top / bottom and two stacked views split side by side, and then the view being split becomes right-top, the new one right-bottom and the other one moves left. Three views do not split. Where a split is not allowed the chord does nothing (the command line says why).
 - `:split absolute left|right|right-top|right-bottom|top|bottom` focuses a position. Only positions that exist are offered: `left` / `right` side by side, `top` / `bottom` stacked, `left` / `right-top` / `right-bottom` with three views.
-- Directions (`H`/`J`/`K`/`L`, `split move …`) follow the views on screen, so they also work in a narrow window where the views stack.
+- Directions (`H`/`J`/`K`/`L`, `split move …`) follow the views on screen, so they also work in a narrow window where the views stack. At the edge they wrap around to the farthest view the other way (TODO, 2026-11-15); with no other view on that line they do nothing, without an error.
 - Ctrl+W becomes a chord prefix, so the old Ctrl+W (close view) moves to Ctrl+W `q`.
 
 ### Key bindings are data
