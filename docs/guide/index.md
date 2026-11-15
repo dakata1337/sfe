@@ -61,7 +61,8 @@ program for an extension, see [Configuration](#configuration).
   reverse. Folders always stay on top.
 - When a view gets too narrow for the names, the list drops columns from the
   right (Type, then Modified, then Size) and brings them back as it widens.
-  Name always stays.
+  Name always stays. Column widths follow their contents and can't be
+  dragged.
 - There is always some empty space after the last file (half a view), so
   you can right-click it for the folder's menu even in long folders.
 

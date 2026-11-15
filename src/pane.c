@@ -1457,7 +1457,8 @@ static GtkTreeViewColumn* add_text_column(SfePane* self, GtkWidget* list, const 
     GtkTreeViewColumn* column = gtk_tree_view_column_new_with_attributes(title, text, "text", text_col, NULL);
 
     g_object_set(text, "xalign", xalign, "ypad", ROW_PADDING, "xpad", 6, NULL);
-    gtk_tree_view_column_set_resizable(column, TRUE);
+    /* Not resizable by hand: a dragged width sticks and breaks fit_columns(). */
+    gtk_tree_view_column_set_resizable(column, FALSE);
     gtk_tree_view_column_set_clickable(column, TRUE);
     g_object_set_data(G_OBJECT(column), "sfe-sort-key", GINT_TO_POINTER(key));
     g_signal_connect(column, "clicked", G_CALLBACK(on_column_clicked), self);
