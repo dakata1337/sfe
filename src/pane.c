@@ -8,6 +8,7 @@
 #include "opener.h"
 #include "pathentry.h"
 #include "search.h"
+#include "thumbs.h"
 #include <math.h>
 
 #define LIST_ICON_SIZE 16
@@ -48,6 +49,12 @@ struct _SfePane {
     GtkCellRenderer* grid_text;
     GtkTreeViewColumn* columns[4]; /* indexed by SfeSortKey */
     gulong config_handler;
+
+    /* Thumbnails of the rows on screen (thumbs.c). */
+    GCancellable* thumb_cancel; /* the requests for what was on screen last */
+    guint thumb_source; /* a pending look at what is on screen */
+    int cfg_thumbnails; /* the config value last applied, -1 at first */
+    int thumb_size; /* SfeThumbSize in use, -1 at first */
 
     /* Visual mode: the selection is `visual_base` (chunks already drawn,
      * as GFile*) plus the rows from `visual_anchor` to the cursor. */
@@ -425,6 +432,8 @@ static gboolean on_overlay_position(GtkOverlay* overlay, GtkWidget* child, GdkRe
     return TRUE;
 }
 
+static void schedule_thumbnails(SfePane* self);
+
 static void on_loaded(SfeDirModel* model, gpointer data)
 {
     (void)model;
@@ -451,6 +460,7 @@ static void on_loaded(SfeDirModel* model, gpointer data)
     }
     if (had_focus)
         gtk_widget_grab_focus(view);
+    schedule_thumbnails(self);
 }
 
 static void on_load_error(SfeDirModel* model, GError* error, gpointer data)
@@ -494,9 +504,115 @@ static void apply_icon_sizes(SfePane* self)
     g_object_set(self->grid_text, "wrap-width", item_width, NULL);
 }
 
+/* ------------------------------------------------------------------------ */
+/* Thumbnails                                                                */
+/* ------------------------------------------------------------------------ */
+
+#define THUMB_DELAY_MS 80 /* scrolling settles before asking */
+#define THUMB_MARGIN 8 /* rows past the visible ones, for a little scrolling */
+
+static void on_thumbnail(GFile* file, GdkPixbuf* pixbuf, gpointer data)
+{
+    SfePane* self = data;
+    sfe_dir_model_set_thumbnail(self->model, file, pixbuf);
+}
+
+/* Asks for the thumbnails of the rows on screen (and a few around them),
+ * dropping the requests for rows that scrolled away. The queue serves the
+ * newest requests first, so they are made bottom to top. */
+static void request_thumbnails(SfePane* self)
+{
+    const SfeConfig* cfg = sfe_config();
+    if (self->thumb_cancel != NULL)
+        g_cancellable_cancel(self->thumb_cancel);
+    g_clear_object(&self->thumb_cancel);
+    if (!cfg->thumbnails || self->model == NULL)
+        return;
+
+    int pixels = (int)lround(cfg->icon_size * cfg->ui_scale) * gtk_widget_get_scale_factor(GTK_WIDGET(self));
+    SfeThumbSize size = sfe_thumb_size_for(pixels);
+    if ((int)size != self->thumb_size) { /* sharper ones needed: start over */
+        if (self->thumb_size >= 0)
+            sfe_dir_model_clear_thumbnails(self->model);
+        self->thumb_size = (int)size;
+    }
+
+    GtkTreePath* start = NULL;
+    GtkTreePath* end = NULL;
+    bool visible = self->view == SFE_VIEW_GRID
+        ? gtk_icon_view_get_visible_range(GTK_ICON_VIEW(self->grid), &start, &end)
+        : gtk_tree_view_get_visible_range(GTK_TREE_VIEW(self->list), &start, &end);
+    if (!visible)
+        return;
+    int first = MAX(0, gtk_tree_path_get_indices(start)[0] - THUMB_MARGIN);
+    int last = gtk_tree_path_get_indices(end)[0] + THUMB_MARGIN;
+    gtk_tree_path_free(start);
+    gtk_tree_path_free(end);
+    g_debug("thumbnails: rows %d - %d", first, last);
+
+    self->thumb_cancel = g_cancellable_new();
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    SfeThumbQueue* queue = sfe_thumb_queue_get_default();
+    guint64 max_bytes = (guint64)cfg->thumbnail_max_mb * 1024 * 1024;
+    for (int i = last; i >= first; i--) {
+        GtkTreeIter iter;
+        if (model == NULL || !gtk_tree_model_iter_nth_child(model, &iter, NULL, i))
+            continue;
+        g_autoptr(GFile) file = NULL;
+        g_autoptr(GFileInfo) info = NULL;
+        gboolean is_dir = FALSE;
+        gtk_tree_model_get(model, &iter, SFE_COL_FILE, &file, SFE_COL_INFO, &info, SFE_COL_IS_DIR, &is_dir, -1);
+        if (is_dir || file == NULL || !sfe_dir_model_wants_thumbnail(self->model, g_file_info_get_name(info)))
+            continue;
+        const char* type = g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE);
+        g_autofree char* path = g_file_get_path(file);
+        if (path == NULL || (guint64)g_file_info_get_size(info) > max_bytes || sfe_thumb_in_cache_dir(file)
+            || !sfe_thumb_queue_supports(queue, type)) {
+            sfe_dir_model_set_thumbnail(self->model, file, NULL); /* none to be had: not asked again */
+            continue;
+        }
+        gint64 mtime = (gint64)g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+        sfe_thumb_queue_request(queue, file, type, mtime, size, self->thumb_cancel, on_thumbnail, self);
+    }
+}
+
+static gboolean on_thumb_timeout(gpointer data)
+{
+    SfePane* self = data;
+    self->thumb_source = 0;
+    request_thumbnails(self);
+    return G_SOURCE_REMOVE;
+}
+
+/* After scrolling, resizing, loading or a change of files. */
+static void schedule_thumbnails(SfePane* self)
+{
+    if (self->thumb_source == 0)
+        self->thumb_source = g_timeout_add(THUMB_DELAY_MS, on_thumb_timeout, self);
+}
+
+static void on_view_moved(GtkAdjustment* adjustment, gpointer data)
+{
+    (void)adjustment;
+    schedule_thumbnails(data);
+}
+
+static void on_files_changed(SfeDirModel* model, gpointer data)
+{
+    (void)model;
+    schedule_thumbnails(data);
+}
+
 static void apply_config(SfePane* self)
 {
     const SfeConfig* cfg = sfe_config();
+
+    if ((int)cfg->thumbnails != self->cfg_thumbnails) {
+        if (self->cfg_thumbnails >= 0 && !cfg->thumbnails)
+            sfe_dir_model_clear_thumbnails(self->model); /* icons again */
+        self->cfg_thumbnails = cfg->thumbnails;
+        schedule_thumbnails(self);
+    }
 
     sfe_dir_model_set_show_hidden(self->model, cfg->show_hidden);
     if (cfg->sort_by != self->cfg_sort_by || cfg->dirs_first != self->cfg_dirs_first) {
@@ -536,6 +652,7 @@ void sfe_pane_set_view(SfePane* self, SfeViewMode mode)
     if (gtk_stack_get_visible_child(GTK_STACK(self->stack)) != self->message)
         gtk_stack_set_visible_child(GTK_STACK(self->stack), gtk_widget_get_parent(active_view(self)));
     update_buttons(self);
+    schedule_thumbnails(self);
 
     /* Keep the first selected file selected across the switch. */
     if (selected != NULL) {
@@ -1291,6 +1408,10 @@ static void sfe_pane_dispose(GObject* object)
         g_signal_handler_disconnect(sfe_app(), self->config_handler);
         self->config_handler = 0;
     }
+    if (self->thumb_cancel != NULL) /* before `self` goes: results would land here */
+        g_cancellable_cancel(self->thumb_cancel);
+    g_clear_object(&self->thumb_cancel);
+    g_clear_handle_id(&self->thumb_source, g_source_remove);
     if (self->model != NULL) {
         g_signal_handlers_disconnect_by_data(self->model, self);
         g_clear_object(&self->model);
@@ -1335,6 +1456,9 @@ static void sfe_pane_init(SfePane* self)
     g_signal_connect(self->model, "error", G_CALLBACK(on_load_error), self);
     g_signal_connect(self->model, "gone", G_CALLBACK(on_gone), self);
     g_signal_connect(self->model, "file-added", G_CALLBACK(on_file_added), self);
+    g_signal_connect(self->model, "files-changed", G_CALLBACK(on_files_changed), self);
+    self->cfg_thumbnails = -1;
+    self->thumb_size = -1;
 
     self->grid = build_grid(self);
     self->list = build_list(self);
@@ -1346,6 +1470,13 @@ static void sfe_pane_init(SfePane* self)
     self->stack = gtk_stack_new();
     gtk_stack_add_named(GTK_STACK(self->stack), scrolled(self->grid), "grid");
     gtk_stack_add_named(GTK_STACK(self->stack), scrolled(self->list), "list");
+    GtkWidget* views[] = { self->grid, self->list };
+    for (size_t i = 0; i < G_N_ELEMENTS(views); i++) { /* what is on screen changes: thumbnails */
+        GtkScrolledWindow* sw = GTK_SCROLLED_WINDOW(gtk_widget_get_parent(views[i]));
+        GtkAdjustment* v = gtk_scrolled_window_get_vadjustment(sw);
+        g_signal_connect(v, "value-changed", G_CALLBACK(on_view_moved), self);
+        g_signal_connect(v, "changed", G_CALLBACK(on_view_moved), self);
+    }
     gtk_stack_add_named(GTK_STACK(self->stack), self->message, "message");
 
     gtk_box_pack_start(GTK_BOX(self), build_top_bar(self), FALSE, FALSE, 0);

@@ -56,3 +56,8 @@ test_undo = executable('test-undo', 'test_undo.c',
   dependencies: core_dep,
 )
 test('undo', test_undo)
+
+test_thumbs = executable('test-thumbs', 'test_thumbs.c',
+  dependencies: core_dep,
+)
+test('thumbs', test_thumbs)

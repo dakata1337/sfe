@@ -16,6 +16,7 @@ struct _SfeDirModel {
     GtkListStore* store;
     GHashTable* rows; /* file name -> GtkTreeIter* into store (shown files) */
     GHashTable* infos; /* file name -> GFileInfo*, every file incl. hidden */
+    GHashTable* thumbs; /* file name -> GdkPixbuf*, or NO_THUMB (none to be had) */
     bool building; /* filling a fresh store, not reacting to changes */
     char* query; /* search filter, NULL when not searching */
     GFileMonitor* monitor;
@@ -35,9 +36,19 @@ enum {
     SIGNAL_ERROR,
     SIGNAL_GONE,
     SIGNAL_FILE_ADDED,
+    SIGNAL_FILES_CHANGED,
     N_SIGNALS,
 };
 static guint signals[N_SIGNALS];
+
+static char no_thumb_marker;
+#define NO_THUMB ((gpointer)&no_thumb_marker)
+
+static void thumb_unref(gpointer value)
+{
+    if (value != NO_THUMB)
+        g_object_unref(value);
+}
 
 /* ------------------------------------------------------------------------ */
 /* Row contents                                                              */
@@ -76,10 +87,31 @@ static char* format_mtime(GFileInfo* info)
     return g_date_time_format(local, "%Y-%m-%d %H:%M");
 }
 
+/* A thumbnail fitted into a `size` square, for `scale`. */
+static cairo_surface_t* thumb_surface(GdkPixbuf* pixbuf, int size, int scale)
+{
+    int box = size * scale;
+    int w = gdk_pixbuf_get_width(pixbuf), h = gdk_pixbuf_get_height(pixbuf);
+    double k = MIN(1.0, MIN((double)box / w, (double)box / h));
+    g_autoptr(GdkPixbuf) fitted = k < 1.0
+        ? gdk_pixbuf_scale_simple(pixbuf, MAX(1, (int)(w * k + 0.5)), MAX(1, (int)(h * k + 0.5)), GDK_INTERP_BILINEAR)
+        : g_object_ref(pixbuf);
+    return gdk_cairo_surface_create_from_pixbuf(fitted, scale, NULL);
+}
+
+/* The row's picture: its thumbnail if it has one, else the theme icon. */
+static cairo_surface_t* icon_for(SfeDirModel* self, GFileInfo* info, int size)
+{
+    gpointer thumb = self->thumbs ? g_hash_table_lookup(self->thumbs, g_file_info_get_name(info)) : NULL;
+    if (thumb != NULL && thumb != NO_THUMB)
+        return thumb_surface(thumb, size, self->scale);
+    return sfe_icon_for_info(info, size, self->scale);
+}
+
 static void set_icons(SfeDirModel* self, GtkListStore* store, GtkTreeIter* iter, GFileInfo* info)
 {
-    cairo_surface_t* big = sfe_icon_for_info(info, self->grid_size, self->scale);
-    cairo_surface_t* small = sfe_icon_for_info(info, self->list_size, self->scale);
+    cairo_surface_t* big = icon_for(self, info, self->grid_size);
+    cairo_surface_t* small = icon_for(self, info, self->list_size);
 
     gtk_list_store_set(store, iter, SFE_COL_ICON, big, SFE_COL_ICON_SMALL, small, -1);
     cairo_surface_destroy(big);
@@ -95,8 +127,8 @@ static void store_row(SfeDirModel* self, GtkListStore* store, GtkTreeIter* iter,
     g_autofree char* size = is_dir ? g_strdup("") : g_format_size(g_file_info_get_size(info));
     g_autofree char* mtime = format_mtime(info);
     g_autofree char* collate = g_utf8_collate_key_for_filename(g_file_info_get_display_name(info), -1);
-    cairo_surface_t* big = sfe_icon_for_info(info, self->grid_size, self->scale);
-    cairo_surface_t* small = sfe_icon_for_info(info, self->list_size, self->scale);
+    cairo_surface_t* big = icon_for(self, info, self->grid_size);
+    cairo_surface_t* small = icon_for(self, info, self->list_size);
 
     g_file_info_set_attribute_string(info, COLLATE_KEY_ATTR, collate);
 
@@ -160,6 +192,10 @@ static void add_or_update(SfeDirModel* self, GFileInfo* info)
     GtkTreeIter* iter = g_hash_table_lookup(self->rows, name);
 
     g_hash_table_replace(self->infos, g_strdup(name), g_object_ref(info));
+    if (!self->building) {
+        g_hash_table_remove(self->thumbs, name); /* changed on disk: a new thumbnail */
+        g_signal_emit(self, signals[SIGNAL_FILES_CHANGED], 0);
+    }
     if (!is_shown(self, info)) {
         remove_row(self, name);
         return;
@@ -180,6 +216,7 @@ static void forget_file(SfeDirModel* self, const char* name)
 {
     remove_row(self, name);
     g_hash_table_remove(self->infos, name);
+    g_hash_table_remove(self->thumbs, name);
 }
 
 static void refresh_icons(SfeDirModel* self)
@@ -380,6 +417,7 @@ static void clear_contents(SfeDirModel* self)
     g_clear_object(&self->store);
     g_clear_pointer(&self->rows, g_hash_table_unref);
     g_clear_pointer(&self->infos, g_hash_table_unref);
+    g_clear_pointer(&self->thumbs, g_hash_table_unref);
 }
 
 /* Builds the whole store at once, then sorts it once: much faster than
@@ -398,6 +436,7 @@ static void finish_load(LoadJob* job)
     self->store = new_store();
     self->rows = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
     self->infos = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
+    self->thumbs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, thumb_unref);
     self->building = true;
     for (guint i = 0; i < job->infos->len; i++)
         add_or_update(self, g_ptr_array_index(job->infos, i));
@@ -593,6 +632,32 @@ void sfe_dir_model_set_icon_sizes(SfeDirModel* self, int grid, int list, int sca
     refresh_icons(self);
 }
 
+bool sfe_dir_model_wants_thumbnail(SfeDirModel* self, const char* name)
+{
+    return self->thumbs != NULL && !g_hash_table_contains(self->thumbs, name);
+}
+
+void sfe_dir_model_set_thumbnail(SfeDirModel* self, GFile* file, GdkPixbuf* pixbuf)
+{
+    g_autoptr(GFile) parent = g_file_get_parent(file);
+    if (self->thumbs == NULL || self->dir == NULL || parent == NULL || !g_file_equal(parent, self->dir))
+        return; /* from a folder no longer shown */
+    g_autofree char* name = g_file_get_basename(file);
+    g_hash_table_replace(self->thumbs, g_strdup(name), pixbuf ? g_object_ref(pixbuf) : NO_THUMB);
+    GtkTreeIter* iter = g_hash_table_lookup(self->rows, name);
+    GFileInfo* info = g_hash_table_lookup(self->infos, name);
+    if (iter != NULL && info != NULL && pixbuf != NULL)
+        set_icons(self, self->store, iter, info);
+}
+
+void sfe_dir_model_clear_thumbnails(SfeDirModel* self)
+{
+    if (self->thumbs == NULL)
+        return;
+    g_hash_table_remove_all(self->thumbs);
+    refresh_icons(self);
+}
+
 GtkTreePath* sfe_dir_model_find(SfeDirModel* self, const char* name)
 {
     GtkTreeIter* iter = self->rows ? g_hash_table_lookup(self->rows, name) : NULL;
@@ -655,6 +720,9 @@ static void sfe_dir_model_class_init(SfeDirModelClass* klass)
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
     signals[SIGNAL_FILE_ADDED] = g_signal_new("file-added", G_TYPE_FROM_CLASS(klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_STRING);
+    /* A file appeared or changed after loading (thumbnails are due). */
+    signals[SIGNAL_FILES_CHANGED] = g_signal_new("files-changed", G_TYPE_FROM_CLASS(klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
 static void sfe_dir_model_init(SfeDirModel* self)

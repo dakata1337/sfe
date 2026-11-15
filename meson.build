@@ -24,6 +24,7 @@ add_project_arguments('-DG_LOG_DOMAIN="sfe"', language: 'c')
 glib_dep = dependency('glib-2.0', version: '>= 2.70', include_type: 'system')
 gio_dep  = dependency('gio-unix-2.0', include_type: 'system')
 gtk_dep  = dependency('gtk+-3.0', version: '>= 3.24', include_type: 'system')
+pixbuf_dep = dependency('gdk-pixbuf-2.0', include_type: 'system')
 m_dep    = cc.find_library('m', required: false)
 
 # Vendored TOML parser, built with its own (relaxed) warning level.
@@ -58,17 +59,18 @@ core_src = files(
   'src/keymap.c',
   'src/opener.c',
   'src/rename.c',
+  'src/thumbs.c',
   'src/trash.c',
   'src/undo.c',
   'src/util.c',
 )
 core_lib = static_library('sfe-core', core_src,
-  dependencies: [glib_dep, gio_dep, tomlc17_dep],
+  dependencies: [glib_dep, gio_dep, pixbuf_dep, tomlc17_dep],
 )
 core_dep = declare_dependency(
   link_with: core_lib,
   include_directories: include_directories('src'),
-  dependencies: [glib_dep, gio_dep, tomlc17_dep],
+  dependencies: [glib_dep, gio_dep, pixbuf_dep, tomlc17_dep],
 )
 
 ui_src = files(

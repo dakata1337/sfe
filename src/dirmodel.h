@@ -70,6 +70,16 @@ void sfe_dir_model_get_sort(SfeDirModel* self, SfeSortKey* key, GtkSortType* ord
 /* Icon sizes in logical pixels, and the widget scale factor. */
 void sfe_dir_model_set_icon_sizes(SfeDirModel* self, int grid, int list, int scale);
 
+/* Thumbnails (thumbs.c fills them in for the rows on screen): whether the
+ * file `name` still needs one; the thumbnail of `file`, or NULL when there
+ * is none to be had (not asked again until the file changes); forgetting
+ * them all (thumbnails switched off). Rows show their thumbnail instead of
+ * the icon, at both sizes. "files-changed" says that new or changed files
+ * may need one. */
+bool sfe_dir_model_wants_thumbnail(SfeDirModel* self, const char* name);
+void sfe_dir_model_set_thumbnail(SfeDirModel* self, GFile* file, GdkPixbuf* pixbuf);
+void sfe_dir_model_clear_thumbnails(SfeDirModel* self);
+
 /* Finds the row of the file named `name` in the displayed model.
  * Returns NULL if it is absent or hidden. Free with gtk_tree_path_free(). */
 GtkTreePath* sfe_dir_model_find(SfeDirModel* self, const char* name);
