@@ -550,9 +550,11 @@ the program asked for several files, one item is selected at a time
 (Select All and visual mode are off). Enter or a
 double-click on a file picks it, Ctrl+Enter is the *Open* / *Save* button.
 Firefox and Zen use the portal only with
-`about:config` → `widget.use-xdg-desktop-portal.file-picker` set to `1`.
-The details, and how to set it up by hand, are in
-[file-chooser.md](../file-chooser.md).
+`about:config` → `widget.use-xdg-desktop-portal.file-picker` set to `1`;
+Chromium and Electron apps only when they can reach the session bus
+(without systemd, `DBUS_SESSION_BUS_ADDRESS` may need to be set for the
+session). The details, troubleshooting, and how to set it up by hand are
+in [file-chooser.md](../file-chooser.md).
 
 ![An Open dialog with an image type filter and the preview](images/file-dialog.png)
 

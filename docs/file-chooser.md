@@ -9,7 +9,9 @@ what that does and how to set it up by hand.
 Many programs don't draw their own Open / Save dialogs; they ask
 **xdg-desktop-portal**. Firefox and Zen do this when
 `widget.use-xdg-desktop-portal.file-picker` is `1` in `about:config`, as do
-every Flatpak app and GTK apps run with `GTK_USE_PORTAL=1`. The portal
+Chromium and Electron apps (Claude Desktop, VS Code, …) when they can reach
+the session bus (see [Troubleshooting](#troubleshooting)), every Flatpak
+app and GTK apps run with `GTK_USE_PORTAL=1`. The portal
 forwards the request to whichever **backend** is configured for
 `org.freedesktop.impl.portal.FileChooser`. On a stock Hyprland setup that is
 `xdg-desktop-portal-gtk` (`/usr/share/xdg-desktop-portal/hyprland-portals.conf`
@@ -74,6 +76,53 @@ sfe adds two pieces:
 
 4. Optional: make the dialogs float in Hyprland. They use the app id
    `sfe-chooser`; normal sfe windows stay `sfe`.
+
+## Troubleshooting
+
+**Chromium or an Electron app still shows the GNOME-style dialog.** These
+programs ask the portal only if they are connected to the D-Bus session
+bus when they start; otherwise they fall back to their built-in GTK
+dialog. They connect only when `DBUS_SESSION_BUS_ADDRESS` is set, and
+unlike GTK programs (Firefox, Zen) they don't fall back to the bus's
+default socket, `$XDG_RUNTIME_DIR/bus`. On setups without systemd (Artix
+and similar) the session bus often runs there without the variable being
+passed to the compositor, so nothing started from it has the variable.
+
+Check a running program (replace `chromium` with its process name):
+
+```sh
+tr '\0' '\n' < /proc/$(pgrep -o -x chromium)/environ | grep DBUS_SESSION_BUS_ADDRESS
+```
+
+No output means it can't use sfe. Set the variable for the whole session,
+before anything is started. With Hyprland's Lua config
+(`~/.config/hypr/hyprland.lua`), next to the other `hl.env` lines:
+
+```lua
+-- Programs started from Hyprland don't get the session bus address, so
+-- Chromium / Electron apps can't reach the desktop portal (file dialogs).
+local runtime_dir = os.getenv("XDG_RUNTIME_DIR")
+if runtime_dir and not os.getenv("DBUS_SESSION_BUS_ADDRESS") then
+    hl.env("DBUS_SESSION_BUS_ADDRESS", "unix:path=" .. runtime_dir .. "/bus")
+end
+```
+
+Other setups can export it where the session starts, e.g. in `~/.zprofile`
+before the compositor is launched:
+
+```sh
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+```
+
+Programs that are already running keep their old environment, and so do
+the ones a bar or launcher started at login opens for you: restart the
+session (or quit the program and start it through the compositor, e.g.
+`hyprctl dispatch 'hl.dsp.exec_cmd("chromium")'`).
+
+**sfe still behaves like an older version after an update.** The old
+`sfe-portal` may still be answering: it exits after two minutes without an
+open dialog (versions before 1.4.0 ran until logout). `pkill -x sfe-portal`
+makes the next dialog start the installed one.
 
 ## What works
 
