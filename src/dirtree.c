@@ -495,6 +495,18 @@ static void select_iter(SfeDirTree* self, GtkTreeIter* iter)
     self->selecting = false;
 }
 
+void sfe_dir_tree_center(SfeDirTree* self)
+{
+    GtkTreeModel* model = NULL;
+    GtkTreeIter iter;
+    GtkTreeSelection* selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(self));
+    if (!gtk_tree_selection_get_selected(selection, &model, &iter))
+        return;
+    GtkTreePath* path = gtk_tree_model_get_path(model, &iter);
+    gtk_tree_view_scroll_to_cell(GTK_TREE_VIEW(self), path, NULL, TRUE, 0.5, 0);
+    gtk_tree_path_free(path);
+}
+
 /* Walks from the root towards `location`, loading and expanding on the way.
  * Called again whenever a load finishes, until the target is reached. */
 static void reveal(SfeDirTree* self)

@@ -30,6 +30,9 @@ GtkWidget* sfe_dir_tree_new(void);
 /* Expands the tree down to `dir` and highlights it. */
 void sfe_dir_tree_set_location(SfeDirTree* self, GFile* dir);
 
+/* Scrolls the highlighted folder to the middle (after the tree changed size). */
+void sfe_dir_tree_center(SfeDirTree* self);
+
 void sfe_dir_tree_set_show_hidden(SfeDirTree* self, bool show);
 
 /* The highlighted row, in the tree's window coordinates (to anchor a menu

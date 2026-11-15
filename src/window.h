@@ -29,3 +29,6 @@ void sfe_window_show_command_line(SfeWindow* win, const char* text);
 /* Hides or shows the sidebar (Ctrl+S, the minimal look). */
 void sfe_window_toggle_sidebar(SfeWindow* win);
 
+/* Lets the folder tree fill the sidebar, or gives the places their part
+ * back (the button above the tree). Shows the sidebar if it was hidden. */
+void sfe_window_toggle_tree(SfeWindow* win);

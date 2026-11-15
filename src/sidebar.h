@@ -14,3 +14,7 @@ GtkWidget* sfe_sidebar_new(void);
 
 /* The active pane's directory: highlighted in the list and the tree. */
 void sfe_sidebar_set_location(SfeSidebar* self, GFile* dir);
+
+/* Lets the folder tree fill the sidebar, or brings the places back with the
+ * divider where it was (the button in the tree's top bar). */
+void sfe_sidebar_toggle_tree(SfeSidebar* self);

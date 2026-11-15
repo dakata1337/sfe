@@ -39,7 +39,11 @@ struct _SfeSidebar {
     GFileMonitor* gtk_bookmarks; /* ~/.config/gtk-3.0/bookmarks */
     GFileMonitor* trash; /* the trash folder: empty / full icon */
     guint rebuild_source;
-    bool positioned; /* divider placed at 50% once */
+    bool positioned; /* divider placed at 2/3 once */
+    GtkWidget* list_sw; /* the places' scrolled window, hidden while the tree fills the sidebar */
+    GtkWidget* tree_button; /* in the tree's top bar */
+    int divider; /* divider position before the tree filled the sidebar */
+    bool center_tree; /* re-center the tree at the next allocation */
 };
 
 G_DEFINE_TYPE(SfeSidebar, sfe_sidebar, GTK_TYPE_PANED)
@@ -607,6 +611,58 @@ static void on_size_allocate(GtkWidget* widget, GdkRectangle* alloc, gpointer da
         self->positioned = true;
         gtk_paned_set_position(GTK_PANED(self), alloc->height * 2 / 3);
     }
+    if (self->center_tree) { /* the children have their new sizes by now */
+        self->center_tree = false;
+        sfe_dir_tree_center(self->tree);
+    }
+}
+
+static void update_tree_button(SfeSidebar* self)
+{
+    bool full = !gtk_widget_get_visible(self->list_sw);
+    gtk_button_set_image(GTK_BUTTON(self->tree_button),
+        gtk_image_new_from_icon_name(full ? "view-restore-symbolic" : "view-fullscreen-symbolic", GTK_ICON_SIZE_MENU));
+    gtk_widget_set_tooltip_text(self->tree_button, full ? "Show the places again" : "Let the folder tree fill the sidebar");
+}
+
+void sfe_sidebar_toggle_tree(SfeSidebar* self)
+{
+    if (gtk_widget_get_visible(self->list_sw)) {
+        self->divider = gtk_paned_get_position(GTK_PANED(self));
+        gtk_widget_hide(self->list_sw);
+    } else {
+        gtk_widget_show(self->list_sw);
+        int height = gtk_widget_get_allocated_height(GTK_WIDGET(self));
+        /* where the user left it */
+        gtk_paned_set_position(GTK_PANED(self), self->divider > 0 ? self->divider : height * 2 / 3);
+    }
+    update_tree_button(self);
+    self->center_tree = true; /* once the tree has its new height */
+}
+
+static void on_tree_button(GtkButton* button, gpointer data)
+{
+    (void)button;
+    sfe_sidebar_toggle_tree(data);
+}
+
+/* "Folders  [⤢]" above the tree. */
+static GtkWidget* tree_top_bar(SfeSidebar* self)
+{
+    GtkWidget* bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_style_context_add_class(gtk_widget_get_style_context(bar), "sfe-tree-bar");
+
+    GtkWidget* title = gtk_label_new("Folders");
+    gtk_style_context_add_class(gtk_widget_get_style_context(title), "sfe-sidebar-title");
+    gtk_label_set_xalign(GTK_LABEL(title), 0);
+    gtk_box_pack_start(GTK_BOX(bar), title, TRUE, TRUE, 0);
+
+    self->tree_button = gtk_button_new();
+    gtk_widget_set_can_focus(self->tree_button, FALSE);
+    gtk_widget_set_valign(self->tree_button, GTK_ALIGN_CENTER);
+    g_signal_connect(self->tree_button, "clicked", G_CALLBACK(on_tree_button), self);
+    gtk_box_pack_end(GTK_BOX(bar), self->tree_button, FALSE, FALSE, 0);
+    return bar;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -669,8 +725,15 @@ static void sfe_sidebar_init(SfeSidebar* self)
 
     GtkWidget* tree_sw = scrolled(GTK_WIDGET(self->tree));
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(tree_sw), GTK_POLICY_AUTOMATIC, GTK_POLICY_AUTOMATIC);
-    gtk_paned_pack1(GTK_PANED(self), scrolled(self->list), TRUE, FALSE);
-    gtk_paned_pack2(GTK_PANED(self), tree_sw, TRUE, FALSE);
+    GtkWidget* tree_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_box_pack_start(GTK_BOX(tree_box), tree_top_bar(self), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(tree_box), tree_sw, TRUE, TRUE, 0);
+    self->list_sw = scrolled(self->list);
+    gtk_widget_show_all(self->list_sw);
+    gtk_widget_set_no_show_all(self->list_sw, TRUE); /* show_all must not undo the toggle */
+    gtk_paned_pack1(GTK_PANED(self), self->list_sw, TRUE, FALSE);
+    gtk_paned_pack2(GTK_PANED(self), tree_box, TRUE, FALSE);
+    update_tree_button(self);
     g_signal_connect(self, "size-allocate", G_CALLBACK(on_size_allocate), NULL);
 
     self->config_handler = g_signal_connect(sfe_app(), "config-changed", G_CALLBACK(on_config_changed), self);

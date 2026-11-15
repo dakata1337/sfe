@@ -272,6 +272,12 @@ void sfe_window_toggle_sidebar(SfeWindow* win)
         sfe_pane_focus_view(sfe_window_get_active_pane(win));
 }
 
+void sfe_window_toggle_tree(SfeWindow* win)
+{
+    gtk_widget_show(GTK_WIDGET(win->sidebar));
+    sfe_sidebar_toggle_tree(win->sidebar);
+}
+
 void sfe_window_show_command_line(SfeWindow* win, const char* text)
 {
     sfe_command_bar_start(win->cmdbar, text);

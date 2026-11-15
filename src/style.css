@@ -153,6 +153,23 @@
     color: alpha(@sfe_fg, 0.45);
 }
 
+/* The tree's top bar: a title like the list's, with a small button. */
+.sfe-tree-bar {
+    padding-right: 8px;
+    border-top: 1px solid alpha(@sfe_fg, 0.06);
+}
+
+.sfe-tree-bar .sfe-sidebar-title {
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+.sfe-window .sfe-tree-bar button {
+    min-width: 20px;
+    min-height: 20px;
+    padding: 0;
+}
+
 /* The eject button only needs to be a small icon. */
 .sfe-sidebar button.sfe-eject {
     min-width: 20px;
