@@ -138,6 +138,7 @@ void sfe_compress_ask(GtkWidget* parent, GList* files, GFile* dir, SfeCompressFu
     }
     if (last_ext == NULL || !gtk_combo_box_set_active_id(GTK_COMBO_BOX(c->format), last_ext))
         gtk_combo_box_set_active(GTK_COMBO_BOX(c->format), 0);
+    sfe_style_combo_box(c->format);
 
     g_autofree char* initial = default_name(files, dir);
     gtk_entry_set_text(GTK_ENTRY(c->entry), initial);

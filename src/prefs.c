@@ -122,6 +122,7 @@ static GtkWidget* widget_for(const SfeOption* opt)
         for (int i = 0; opt->choices[i] != NULL; i++)
             gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(w), opt->choices[i]);
         gtk_combo_box_set_active(GTK_COMBO_BOX(w), *(const int*)field);
+        sfe_style_combo_box(w);
         gtk_widget_set_halign(w, GTK_ALIGN_END);
         g_signal_connect(w, "changed", G_CALLBACK(on_combo), NULL);
         break;

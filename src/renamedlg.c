@@ -401,6 +401,7 @@ void sfe_rename_many(GtkWidget* parent, GList* files, bool include_switch, SfeRe
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->case_mode), "UPPERCASE");
     gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(m->case_mode), "Title Case");
     gtk_combo_box_set_active(GTK_COMBO_BOX(m->case_mode), SFE_CASE_KEEP);
+    sfe_style_combo_box(m->case_mode);
     labeled(GTK_GRID(grid), row++, "Case", m->case_mode);
 
     GtkWidget* counter = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);

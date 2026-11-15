@@ -9,6 +9,10 @@
 /* A dialog transient for the window that contains `widget`, styled for sfe. */
 GtkWidget* sfe_dialog_new(GtkWidget* widget, const char* title);
 
+/* Gives a combo box's drop-down list the sfe menu style (it is a popup
+ * window of its own, outside the dialog). */
+void sfe_style_combo_box(GtkWidget* combo);
+
 /* Error message attached to the window that contains `widget`. */
 void sfe_show_error(GtkWidget* widget, const char* title, const char* detail);
 

@@ -15,6 +15,14 @@ static void style_dialog(GtkWidget* dialog)
     gtk_style_context_add_class(style, "sfe-dialog");
 }
 
+void sfe_style_combo_box(GtkWidget* combo)
+{
+    AtkObject* popup = gtk_combo_box_get_popup_accessible(GTK_COMBO_BOX(combo));
+    GtkWidget* menu = popup ? gtk_accessible_get_widget(GTK_ACCESSIBLE(popup)) : NULL;
+    if (menu != NULL)
+        gtk_style_context_add_class(gtk_widget_get_style_context(menu), "sfe-menu");
+}
+
 GtkWidget* sfe_dialog_new(GtkWidget* widget, const char* title)
 {
     GtkWidget* dialog = gtk_dialog_new();
