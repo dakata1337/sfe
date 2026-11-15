@@ -271,7 +271,9 @@
 }
 
 .sfe-window .rubberband,
-.sfe-window rubberband {
+.sfe-window rubberband,
+.sfe-window iconview.rubberband, /* the part sfe draws below the files */
+.sfe-window treeview.view.rubberband {
     background-color: alpha(@sfe_accent, 0.15);
     border: 1px solid alpha(@sfe_accent, 0.6);
     border-radius: 4px;

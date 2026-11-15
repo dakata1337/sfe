@@ -58,9 +58,14 @@ struct _SfePane {
     int cfg_thumbnails; /* the config value last applied, -1 at first */
     int thumb_size; /* SfeThumbSize in use, -1 at first */
 
-    /* Room after the files (half a view), to right-click empty space. */
-    double scroll_wanted[2]; /* per view (grid, list): where it was scrolled to */
+    /* Room after the files, to right-click empty space. Per view (grid, list): */
+    double scroll_wanted[2]; /* where it was scrolled to */
+    double content_end[2]; /* where its last row ends */
     bool padding; /* our own changes to the adjustments */
+    /* A drag-select (rubber band) in progress, in content coordinates: GTK
+     * draws it only over the files, sfe draws the rest. */
+    bool band_pressed, band_active;
+    double band_x1, band_y1, band_x2, band_y2;
 
     /* List columns that make way for the names in a narrow view. */
     int name_width; /* widest name in pixels (capped), -1 to measure again */
@@ -176,10 +181,13 @@ static void attach_model(SfePane* self)
 
 /* Shows `dir` without touching the history. */
 /* Shows `dir` without touching the history or the search. */
+static void forget_scroll(SfePane* self);
+
 static void show_dir(SfePane* self, GFile* dir)
 {
     g_debug("pane: show %s", g_file_peek_path(dir));
     sfe_pane_visual_end(self);
+    forget_scroll(self);
     g_set_object(&self->dir, dir);
     sfe_path_entry_set_dir(self->entry, dir);
     update_buttons(self);
@@ -635,9 +643,11 @@ static void on_view_moved(GtkAdjustment* adjustment, gpointer data)
 /* Room after the files                                                      */
 /* ------------------------------------------------------------------------ */
 
-/* Where the last row ends, in the view's scrolled coordinates; 0 when empty. */
-static double content_bottom(SfePane* self, GtkWidget* view, GtkAdjustment* adjustment)
+/* Where the last row ends, in the view's scrolled coordinates (0 when
+ * empty), and how tall a row is. */
+static double content_bottom(SfePane* self, GtkWidget* view, GtkAdjustment* adjustment, double* row_height)
 {
+    *row_height = 0;
     int n = n_rows(self);
     if (n == 0 || gtk_widget_get_parent(gtk_widget_get_parent(view)) == NULL)
         return 0;
@@ -646,22 +656,29 @@ static double content_bottom(SfePane* self, GtkWidget* view, GtkAdjustment* adju
     double bottom = 0;
     if (GTK_IS_ICON_VIEW(view)) {
         /* in widget coordinates: shifted by how far the view is scrolled */
-        if (gtk_icon_view_get_cell_rect(GTK_ICON_VIEW(view), last, NULL, &rect))
+        if (gtk_icon_view_get_cell_rect(GTK_ICON_VIEW(view), last, NULL, &rect)) {
             bottom = rect.y + rect.height + gtk_adjustment_get_value(adjustment);
+            *row_height = rect.height + gtk_icon_view_get_row_spacing(GTK_ICON_VIEW(view));
+        }
     } else {
         int tx = 0, ty = 0;
         gtk_tree_view_get_background_area(GTK_TREE_VIEW(view), last, NULL, &rect);
         gtk_tree_view_convert_bin_window_to_tree_coords(GTK_TREE_VIEW(view), rect.x, rect.y, &tx, &ty);
         bottom = ty + rect.height;
+        *row_height = rect.height;
     }
     gtk_tree_path_free(last);
     return bottom;
 }
 
-/* The view sized its scroll range to the files: make it reach half a view
- * further, so there is always empty space to right-click for the folder's
- * menu. If the view just cut the scroll position back (it re-measured
- * while scrolled into that space), put it back. */
+#define PADDING_SHARE 3 /* a third of the view after the last row ... */
+#define PADDING_ROWS_LIST 6 /* ... but at least this many rows */
+#define PADDING_ROWS_GRID 1
+
+/* The view sized its scroll range to the files: make it reach further, so
+ * there is always empty space to right-click for the folder's menu. If the
+ * view just cut the scroll position back (it re-measured while scrolled
+ * into that space), put it back. */
 static void on_scroll_range(GtkAdjustment* adjustment, gpointer data)
 {
     SfePane* self = data;
@@ -673,14 +690,17 @@ static void on_scroll_range(GtkAdjustment* adjustment, gpointer data)
         return;
     double page = gtk_adjustment_get_page_size(adjustment);
     double upper = gtk_adjustment_get_upper(adjustment);
-    double bottom = content_bottom(self, view, adjustment);
-    double wanted_upper = bottom > 0 ? bottom + page / 2 : upper;
+    double row = 0;
+    double bottom = content_bottom(self, view, adjustment, &row);
+    double extra = MAX(page / PADDING_SHARE, row * (which == 0 ? PADDING_ROWS_GRID : PADDING_ROWS_LIST));
+    double wanted_upper = bottom > 0 ? bottom + extra : upper;
+    self->content_end[which] = bottom;
 
     self->padding = true;
     if (wanted_upper > upper + 0.5)
         gtk_adjustment_set_upper(adjustment, wanted_upper);
-    double wanted = self->scroll_wanted[which];
-    if (wanted > gtk_adjustment_get_value(adjustment) && wanted <= gtk_adjustment_get_upper(adjustment) - page)
+    double wanted = MIN(self->scroll_wanted[which], gtk_adjustment_get_upper(adjustment) - page);
+    if (wanted > gtk_adjustment_get_value(adjustment)) /* as far as it still goes */
         gtk_adjustment_set_value(adjustment, wanted);
     self->padding = false;
 }
@@ -784,13 +804,156 @@ static void names_changed(SfePane* self)
     schedule_fit_columns(self);
 }
 
+/* Whether the event being handled is the user's (scrolling, a key, the
+ * mouse) rather than the window being resized or focused. */
+static bool user_input(void)
+{
+    GdkEvent* event = gtk_get_current_event();
+    GdkEventType type = event ? event->type : GDK_NOTHING;
+    if (event != NULL)
+        gdk_event_free(event);
+    switch (type) {
+    case GDK_SCROLL:
+    case GDK_KEY_PRESS:
+    case GDK_KEY_RELEASE:
+    case GDK_BUTTON_PRESS:
+    case GDK_2BUTTON_PRESS:
+    case GDK_3BUTTON_PRESS:
+    case GDK_BUTTON_RELEASE:
+    case GDK_MOTION_NOTIFY:
+    case GDK_TOUCH_BEGIN:
+    case GDK_TOUCH_UPDATE:
+    case GDK_TOUCH_END:
+    case GDK_TOUCHPAD_SWIPE:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/* Remembers where the user scrolled to. A view pulls itself back from the
+ * empty space after the files when it re-measures (the window resized,
+ * lost or got the focus: it keeps the last row in view); with no input
+ * from the user that is undone. */
 static void on_scroll_value(GtkAdjustment* adjustment, gpointer data)
 {
     SfePane* self = data;
     if (self->padding)
         return;
     int which = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(adjustment), "sfe-view-index"));
-    self->scroll_wanted[which] = gtk_adjustment_get_value(adjustment);
+    double value = gtk_adjustment_get_value(adjustment);
+    double wanted = self->scroll_wanted[which];
+    double page = gtk_adjustment_get_page_size(adjustment);
+    bool was_in_space = self->content_end[which] > 0 && wanted > self->content_end[which] - page;
+    if (was_in_space && value < wanted && !user_input()) {
+        self->padding = true;
+        gtk_adjustment_set_value(adjustment, MIN(wanted, gtk_adjustment_get_upper(adjustment) - page));
+        self->padding = false;
+        return;
+    }
+    self->scroll_wanted[which] = value;
+}
+
+/* ------------------------------------------------------------------------ */
+/* The drag-select rectangle in the empty space                              */
+/* ------------------------------------------------------------------------ */
+
+/* Event coordinates (relative to the view's bin window, also while the
+ * pointer is outside it) to content coordinates. */
+static void event_to_content(GtkWidget* view, double x, double y, double* cx, double* cy)
+{
+    if (GTK_IS_ICON_VIEW(view)) { /* the bin window is the content */
+        *cx = x;
+        *cy = y;
+        return;
+    }
+    int tx = 0, ty = 0;
+    gtk_tree_view_convert_bin_window_to_tree_coords(GTK_TREE_VIEW(view), (int)x, (int)y, &tx, &ty);
+    *cx = tx;
+    *cy = ty;
+}
+
+static void band_press(SfePane* self, GtkWidget* view, GdkEventButton* event)
+{
+    if (event->button != GDK_BUTTON_PRIMARY || event->type != GDK_BUTTON_PRESS)
+        return;
+    self->band_pressed = true;
+    self->band_active = false;
+    event_to_content(view, event->x, event->y, &self->band_x1, &self->band_y1);
+    self->band_x2 = self->band_x1;
+    self->band_y2 = self->band_y1;
+    /* The grid starts a band only on empty space (on a file it drags). */
+    if (GTK_IS_ICON_VIEW(view)) {
+        GtkTreePath* path = gtk_icon_view_get_path_at_pos(GTK_ICON_VIEW(view), (int)event->x, (int)event->y);
+        self->band_pressed = path == NULL;
+        gtk_tree_path_free(path);
+    }
+}
+
+static gboolean on_view_motion(GtkWidget* view, GdkEventMotion* event, gpointer data)
+{
+    SfePane* self = data;
+    if (!self->band_pressed || !(event->state & GDK_BUTTON1_MASK))
+        return FALSE;
+    event_to_content(view, event->x, event->y, &self->band_x2, &self->band_y2);
+    self->band_active = GTK_IS_ICON_VIEW(view) || gtk_tree_view_is_rubber_banding_active(GTK_TREE_VIEW(view));
+    if (self->band_active)
+        gtk_widget_queue_draw(view);
+    return FALSE;
+}
+
+static gboolean on_view_release(GtkWidget* view, GdkEventButton* event, gpointer data)
+{
+    (void)event;
+    SfePane* self = data;
+    if (self->band_active)
+        gtk_widget_queue_draw(view);
+    self->band_pressed = self->band_active = false;
+    return FALSE;
+}
+
+/* After the view drew itself: the part of the band below the last row. */
+static gboolean on_view_draw_after(GtkWidget* view, cairo_t* cr, gpointer data)
+{
+    SfePane* self = data;
+    int which = view == self->grid ? 0 : 1;
+    if (!self->band_active || view != active_view(self) || !gtk_cairo_should_draw_window(cr, gtk_widget_get_window(view)))
+        return FALSE;
+    double x1 = MIN(self->band_x1, self->band_x2), x2 = MAX(self->band_x1, self->band_x2);
+    double y1 = MIN(self->band_y1, self->band_y2), y2 = MAX(self->band_y1, self->band_y2);
+    double end = self->content_end[which];
+    if (y2 <= end)
+        return FALSE; /* all over the files: GTK drew it */
+
+    /* content -> widget coordinates */
+    double dx = 0, dy = 0;
+    if (GTK_IS_ICON_VIEW(view)) {
+        dx = -gtk_adjustment_get_value(gtk_scrollable_get_hadjustment(GTK_SCROLLABLE(view)));
+        dy = -gtk_adjustment_get_value(gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(view)));
+    } else {
+        int wx = 0, wy = 0;
+        gtk_tree_view_convert_tree_to_widget_coords(GTK_TREE_VIEW(view), 0, 0, &wx, &wy);
+        dx = wx;
+        dy = wy;
+    }
+    cairo_save(cr);
+    cairo_rectangle(cr, 0, end + dy, gtk_widget_get_allocated_width(view), gtk_widget_get_allocated_height(view));
+    cairo_clip(cr); /* only where GTK could not draw */
+    GtkStyleContext* style = gtk_widget_get_style_context(view);
+    gtk_style_context_save(style);
+    gtk_style_context_add_class(style, GTK_STYLE_CLASS_RUBBERBAND);
+    gtk_render_background(style, cr, x1 + dx, y1 + dy, x2 - x1, y2 - y1);
+    gtk_render_frame(style, cr, x1 + dx, y1 + dy, x2 - x1, y2 - y1);
+    gtk_style_context_restore(style);
+    cairo_restore(cr);
+    return FALSE;
+}
+
+/* Another folder: it starts at the top, not where the last one was. */
+static void forget_scroll(SfePane* self)
+{
+    self->scroll_wanted[0] = self->scroll_wanted[1] = 0;
+    self->content_end[0] = self->content_end[1] = 0;
 }
 
 static void on_files_changed(SfeDirModel* model, gpointer data)
@@ -1326,6 +1489,7 @@ static gboolean on_view_button_press(GtkWidget* view, GdkEventButton* event, gpo
     SfePane* self = data;
 
     sfe_pane_visual_end(self); /* the mouse takes over the selection */
+    band_press(self, view, event);
     if (event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY)
         return FALSE;
     if (GTK_IS_TREE_VIEW(view) && event->window != gtk_tree_view_get_bin_window(GTK_TREE_VIEW(view)))
@@ -1446,6 +1610,9 @@ static GtkWidget* build_grid(SfePane* self)
     g_signal_connect(grid, "item-activated", G_CALLBACK(on_grid_activated), self);
     g_signal_connect(grid, "key-press-event", G_CALLBACK(on_view_key_press), self);
     g_signal_connect(grid, "button-press-event", G_CALLBACK(on_view_button_press), self);
+    g_signal_connect(grid, "motion-notify-event", G_CALLBACK(on_view_motion), self);
+    g_signal_connect(grid, "button-release-event", G_CALLBACK(on_view_release), self);
+    g_signal_connect_after(grid, "draw", G_CALLBACK(on_view_draw_after), self);
     g_signal_connect(grid, "popup-menu", G_CALLBACK(on_view_popup_menu), self);
     return grid;
 }
@@ -1495,6 +1662,9 @@ static GtkWidget* build_list(SfePane* self)
     g_signal_connect(list, "row-activated", G_CALLBACK(on_list_activated), self);
     g_signal_connect(list, "key-press-event", G_CALLBACK(on_view_key_press), self);
     g_signal_connect(list, "button-press-event", G_CALLBACK(on_view_button_press), self);
+    g_signal_connect(list, "motion-notify-event", G_CALLBACK(on_view_motion), self);
+    g_signal_connect(list, "button-release-event", G_CALLBACK(on_view_release), self);
+    g_signal_connect_after(list, "draw", G_CALLBACK(on_view_draw_after), self);
     g_signal_connect(list, "popup-menu", G_CALLBACK(on_view_popup_menu), self);
     g_signal_connect(list, "size-allocate", G_CALLBACK(on_list_allocated), self);
     return list;
@@ -1766,3 +1936,4 @@ SfePane* sfe_pane_new(GFile* dir)
     go_to(self, dir);
     return self;
 }
+
