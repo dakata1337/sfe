@@ -365,10 +365,29 @@ static void add_usage_bar(GtkWidget* row, RowData* d)
     gtk_box_reorder_child(GTK_BOX(box), column, 1);
 }
 
+/* Removable drives first (flash drives, SD cards), then the mounted disks
+ * (the system disk), then the disks that can be mounted; by name within. */
+static int device_group(const SfeDevice* dev)
+{
+    return dev->removable ? 0 : dev->mount_path != NULL ? 1 : 2;
+}
+
+static int compare_devices(gconstpointer a, gconstpointer b)
+{
+    const SfeDevice* x = *(SfeDevice* const*)a;
+    const SfeDevice* y = *(SfeDevice* const*)b;
+    int gx = device_group(x), gy = device_group(y);
+    return gx != gy ? gx - gy : g_utf8_collate(x->name, y->name);
+}
+
 static void add_devices(SfeSidebar* self)
 {
-    GPtrArray* devices = sfe_devices_get_list(sfe_devices_get_default());
+    GPtrArray* all = sfe_devices_get_list(sfe_devices_get_default());
     bool removable_only = sfe_config()->devices == SFE_DEVICES_REMOVABLE;
+    g_autoptr(GPtrArray) devices = g_ptr_array_new(); /* (borrowed) */
+    for (guint i = 0; i < all->len; i++)
+        g_ptr_array_add(devices, g_ptr_array_index(all, i));
+    g_ptr_array_sort(devices, compare_devices);
 
     for (guint i = 0; i < devices->len; i++) {
         SfeDevice* dev = g_ptr_array_index(devices, i);

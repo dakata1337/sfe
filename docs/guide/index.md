@@ -294,7 +294,9 @@ boxes can be changed directly.
 ## Drives
 
 Drives appear in the sidebar under *Devices*, named by their label or else
-by the drive's vendor and model. Mounted drives, the system disk included,
+by the drive's vendor and model: removable drives (flash drives, SD cards)
+first, then mounted disks such as the system disk, then disks that can be
+mounted. Mounted drives, the system disk included,
 have a thin bar under the name showing how full they are (red above 90%);
 hover for the numbers ("94.1 GB used of 2.0 TB (5%) · 1.9 TB free") as well
 as the size, filesystem and device.
