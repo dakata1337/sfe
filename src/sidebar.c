@@ -625,6 +625,17 @@ static void update_tree_button(SfeSidebar* self)
     gtk_widget_set_tooltip_text(self->tree_button, full ? "Show the places again" : "Let the folder tree fill the sidebar");
 }
 
+bool sfe_sidebar_get_tree_full(SfeSidebar* self)
+{
+    return !gtk_widget_get_visible(self->list_sw);
+}
+
+void sfe_sidebar_set_tree_full(SfeSidebar* self, bool full)
+{
+    if (full != sfe_sidebar_get_tree_full(self))
+        sfe_sidebar_toggle_tree(self);
+}
+
 void sfe_sidebar_toggle_tree(SfeSidebar* self)
 {
     if (gtk_widget_get_visible(self->list_sw)) {

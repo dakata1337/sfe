@@ -279,6 +279,16 @@ static void paste_into(SfeWindow* window, GFile* dest)
 
 static void run_paste(const SfeActionTarget* t) { paste_into(t->window, t->dir); }
 
+void sfe_actions_paste_into(SfeWindow* window, GFile* dest)
+{
+    paste_into(window, dest);
+}
+
+void sfe_actions_open_with(SfeWindow* window, GAppInfo* app, GList* files)
+{
+    launch_app(app, files, GTK_WIDGET(window));
+}
+
 static void run_paste_into(const SfeActionTarget* t)
 {
     if (single_dir(t))

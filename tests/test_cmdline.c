@@ -105,6 +105,30 @@ static void test_rank(void)
     g_assert_cmpuint(none->len, ==, 0);
 }
 
+/* One row for a command and its aliases: the best-matching name is the
+ * one inserted. */
+static void test_names(void)
+{
+    GPtrArray* c = g_ptr_array_new_with_free_func(sfe_candidate_free);
+    const char* mkdir[] = { "mkdir", "new_directory", "new_folder", NULL };
+    const char* cp[] = { "cp", "copy", NULL };
+    g_ptr_array_add(c, sfe_candidate_new_names(mkdir, "create folders", 0));
+    g_ptr_array_add(c, sfe_candidate_new_names(cp, "copy into a folder", 0));
+    SfeCandidate* first = g_ptr_array_index(c, 0);
+    g_assert_cmpstr(first->label, ==, "mkdir | new_directory | new_folder");
+    g_assert_cmpstr(first->insert, ==, "mkdir");
+
+    g_autoptr(GPtrArray) ranked = sfe_cmdline_rank(c, "new_f");
+    g_assert_cmpuint(ranked->len, ==, 1);
+    g_assert_cmpstr(insert_at(ranked, 0), ==, "new_folder");
+
+    GPtrArray* again = g_ptr_array_new_with_free_func(sfe_candidate_free);
+    g_ptr_array_add(again, sfe_candidate_new_names(cp, NULL, 0));
+    g_autoptr(GPtrArray) copy = sfe_cmdline_rank(again, "copy");
+    g_assert_cmpstr(insert_at(copy, 0), ==, "copy");
+    g_assert_cmpstr(((SfeCandidate*)g_ptr_array_index(copy, 0))->label, ==, "cp | copy");
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -112,5 +136,6 @@ int main(int argc, char** argv)
     g_test_add_func("/cmdline/tokenize", test_tokenize_positions);
     g_test_add_func("/cmdline/quote", test_quote_round_trip);
     g_test_add_func("/cmdline/rank", test_rank);
+    g_test_add_func("/cmdline/names", test_names);
     return g_test_run();
 }

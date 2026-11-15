@@ -622,6 +622,15 @@ menu.sfe-menu {
     color: @sfe_accent_fg;
 }
 
+.sfe-window .sfe-cmdbar-args {
+    color: alpha(currentColor, 0.5);
+}
+
+/* Commands meant for key bindings (cursor, select, ...). */
+.sfe-window .sfe-cmdbar-list row.sfe-cmdbar-dim {
+    opacity: 0.6;
+}
+
 .sfe-window .sfe-cmdbar-tag {
     color: alpha(currentColor, 0.55);
     font-size: 0.9em;

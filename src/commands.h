@@ -13,8 +13,8 @@
 
 /* A command, for the user guide and the completion list. */
 typedef struct {
-    const char* name;
-    const char* alias; /* or NULL */
+    const char* name; /* the main (short) name */
+    const char* aliases[3]; /* other names, NULL-terminated */
     const char* usage; /* the arguments, "" for none */
     const char* help;
 } SfeCommandInfo;
@@ -28,5 +28,6 @@ bool sfe_command_run(SfeWindow* window, const char* line, GError** error);
 
 /* Completion of the argument the cursor (a byte offset) is in: ranked
  * candidates (SfeCandidate*), and the byte range of `line` that the chosen
- * one replaces (quoted with sfe_cmdline_quote()). */
-GPtrArray* sfe_command_complete(SfeWindow* window, const char* line, int cursor, int* start, int* end);
+ * one replaces (quoted with sfe_cmdline_quote()). `rank` receives the text
+ * the candidates were matched against (for highlighting; free it). */
+GPtrArray* sfe_command_complete(SfeWindow* window, const char* line, int cursor, int* start, int* end, char** rank);

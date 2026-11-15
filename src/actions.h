@@ -57,6 +57,12 @@ unsigned sfe_action_target_kinds(const SfeActionTarget* target);
 /* The custom command `name` for `kind`, or NULL. */
 const SfeUserAction* sfe_find_user_action(const char* name, unsigned kind);
 
+/* Pastes the clipboard's files into `dest`. */
+void sfe_actions_paste_into(SfeWindow* window, GFile* dest);
+
+/* Opens `files` (GFile*) with `app`; errors are shown in a dialog. */
+void sfe_actions_open_with(SfeWindow* window, GAppInfo* app, GList* files);
+
 /* Builds the target for `window`'s active pane (free with the function below). */
 SfeActionTarget sfe_action_target_for(SfeWindow* window);
 void sfe_action_target_clear(SfeActionTarget* target);

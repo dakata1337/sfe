@@ -105,6 +105,14 @@ SfeCandidate* sfe_candidate_new(const char* insert, const char* match, const cha
     return c;
 }
 
+SfeCandidate* sfe_candidate_new_names(const char* const* names, const char* tag, int group)
+{
+    SfeCandidate* c = sfe_candidate_new(names[0], NULL, tag, group);
+    c->names = g_strdupv((char**)names);
+    c->label = g_strjoinv(" | ", c->names);
+    return c;
+}
+
 void sfe_candidate_free(gpointer candidate)
 {
     SfeCandidate* c = candidate;
@@ -113,6 +121,9 @@ void sfe_candidate_free(gpointer candidate)
     g_free(c->insert);
     g_free(c->match);
     g_free(c->tag);
+    g_free(c->label);
+    g_free(c->args);
+    g_strfreev(c->names);
     g_free(c);
 }
 
@@ -136,6 +147,16 @@ GPtrArray* sfe_cmdline_rank(GPtrArray* candidates, const char* query)
         SfeCandidate* c = g_ptr_array_index(candidates, i);
         c->order = (int)i;
         c->score = sfe_fuzzy_score(query ? query : "", c->match);
+        for (int k = 1; c->names != NULL && c->names[k] != NULL; k++) { /* the best name wins */
+            int score = sfe_fuzzy_score(query ? query : "", c->names[k]);
+            if (score > c->score) {
+                c->score = score;
+                g_free(c->insert);
+                g_free(c->match);
+                c->insert = g_strdup(c->names[k]);
+                c->match = g_strdup(c->names[k]);
+            }
+        }
     }
     /* Taken over one by one: sorted first so that a duplicate keeps its
      * best place, then the matching ones move to `out`. */

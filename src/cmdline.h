@@ -37,12 +37,21 @@ typedef struct {
     char* insert; /* what replaces the argument (unquoted) */
     char* match; /* what the typed text is matched against (a file name) */
     char* tag; /* where it comes from: "left", "right-top", "bookmark", ... */
+    char* label; /* shown instead of `insert` ("cp | copy"), or NULL */
+    char* args; /* shown dimmed after it ("<file>… <destination>"), or NULL */
+    char** names; /* alternatives (a command and its aliases), or NULL */
+    bool dim; /* shown dimmed (commands meant for key bindings) */
     int group; /* lower groups come first: the active view is group 0 */
     int score; /* filled in by sfe_cmdline_rank() */
     int order; /* insertion order, the last tie-breaker */
 } SfeCandidate;
 
 SfeCandidate* sfe_candidate_new(const char* insert, const char* match, const char* tag, int group);
+
+/* One row for several names (a command and its aliases), labelled
+ * "mkdir | new_directory | new_folder". Ranking scores every name and makes
+ * the best-matching one the `insert` and the `match`. */
+SfeCandidate* sfe_candidate_new_names(const char* const* names, const char* tag, int group);
 void sfe_candidate_free(gpointer candidate);
 
 /* Keeps the candidates that fuzzy-match `query` and orders them: by group,

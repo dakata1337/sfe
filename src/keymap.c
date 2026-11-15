@@ -17,7 +17,7 @@ static const SfeKeyBinding defaults[] = {
     { "<C-o>", "back", "back in history" },
     { "<C-i>", "forward", "forward in history" },
     { "<Space>", "select toggle", "select / unselect the item and move down" },
-    { "yy", "copy_clipboard", "copy the selection to the clipboard" },
+    { "yy", "yank", "copy the selection to the clipboard" },
     { "dd", "cut", "cut the selection" },
     { "p", "paste", "paste into this view" },
     { "u", "undo", "undo the last change to files" },
@@ -51,7 +51,7 @@ static const SfeKeyBinding visual_defaults[] = {
     { "h", "cursor previous", "the item before (in a grid: to the left)" },
     { "l", "cursor next", "the item after (in a grid: to the right)" },
     { "<Esc>", "visual off", "leave visual mode (the selection stays)" },
-    { "y", "copy_clipboard", "copy the selection to the clipboard" },
+    { "y", "yank", "copy the selection to the clipboard" },
     { "d", "cut", "cut the selection" },
 };
 

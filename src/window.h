@@ -5,6 +5,7 @@
 #include "app.h"
 #include "fileops.h"
 #include <gtk/gtk.h>
+#include <stdbool.h>
 
 typedef struct _SfeSplit SfeSplit;
 typedef struct _SfePane SfePane;
@@ -32,7 +33,15 @@ void sfe_window_show_command_line(SfeWindow* win, const char* text);
 
 /* Hides or shows the sidebar (Ctrl+S, the minimal look). */
 void sfe_window_toggle_sidebar(SfeWindow* win);
+void sfe_window_set_sidebar_visible(SfeWindow* win, bool visible);
+bool sfe_window_get_sidebar_visible(SfeWindow* win);
 
 /* Lets the folder tree fill the sidebar, or gives the places their part
  * back (the button above the tree). Shows the sidebar if it was hidden. */
 void sfe_window_toggle_tree(SfeWindow* win);
+void sfe_window_set_tree_full(SfeWindow* win, bool full);
+bool sfe_window_get_tree_full(SfeWindow* win);
+
+/* A line in the command bar until the next key: a note, or in the error
+ * colour. */
+void sfe_window_show_message(SfeWindow* win, const char* text, bool error);

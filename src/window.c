@@ -387,21 +387,48 @@ static gboolean sfe_window_key_press(GtkWidget* widget, GdkEventKey* event)
     return GTK_WIDGET_CLASS(sfe_window_parent_class)->key_press_event(widget, event);
 }
 
-void sfe_window_toggle_sidebar(SfeWindow* win)
+bool sfe_window_get_sidebar_visible(SfeWindow* win)
+{
+    return gtk_widget_get_visible(GTK_WIDGET(win->sidebar));
+}
+
+void sfe_window_set_sidebar_visible(SfeWindow* win, bool visible)
 {
     GtkWidget* sidebar = GTK_WIDGET(win->sidebar);
-    bool hide = gtk_widget_get_visible(sidebar);
     GtkWidget* focus = gtk_window_get_focus(GTK_WINDOW(win));
 
-    gtk_widget_set_visible(sidebar, !hide);
-    if (hide && focus != NULL && gtk_widget_is_ancestor(focus, sidebar))
+    gtk_widget_set_visible(sidebar, visible);
+    if (!visible && focus != NULL && gtk_widget_is_ancestor(focus, sidebar))
         sfe_pane_focus_view(sfe_window_get_active_pane(win));
+}
+
+void sfe_window_toggle_sidebar(SfeWindow* win)
+{
+    sfe_window_set_sidebar_visible(win, !sfe_window_get_sidebar_visible(win));
+}
+
+bool sfe_window_get_tree_full(SfeWindow* win)
+{
+    return sfe_sidebar_get_tree_full(win->sidebar);
+}
+
+void sfe_window_set_tree_full(SfeWindow* win, bool full)
+{
+    gtk_widget_show(GTK_WIDGET(win->sidebar));
+    sfe_sidebar_set_tree_full(win->sidebar, full);
 }
 
 void sfe_window_toggle_tree(SfeWindow* win)
 {
-    gtk_widget_show(GTK_WIDGET(win->sidebar));
-    sfe_sidebar_toggle_tree(win->sidebar);
+    sfe_window_set_tree_full(win, !sfe_window_get_tree_full(win));
+}
+
+void sfe_window_show_message(SfeWindow* win, const char* text, bool error)
+{
+    if (error)
+        sfe_command_bar_show_error(win->cmdbar, text);
+    else
+        sfe_command_bar_show_message(win->cmdbar, text);
 }
 
 void sfe_window_show_command_line(SfeWindow* win, const char* text)

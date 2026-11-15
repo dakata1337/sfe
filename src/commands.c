@@ -10,6 +10,7 @@
 #include "undo.h"
 #include "split.h"
 #include "util.h"
+#include <gio/gdesktopappinfo.h>
 #include <stdarg.h>
 #include <string.h>
 
@@ -33,6 +34,7 @@ typedef struct {
     SfeCommandInfo info;
     CompleteFunc complete;
     RunFunc run;
+    bool helper; /* meant for key bindings: listed last, dimmed */
 } Command;
 
 static G_GNUC_PRINTF(2, 3) bool fail(GError** error, const char* format, ...)
@@ -301,6 +303,56 @@ static bool run_cut(Ctx* c, int argc, char** argv, GError** error)
     return run_on_files(c, "cut", argc, argv, error);
 }
 
+/* Into this view's folder, or into the folder given. */
+static bool run_paste(Ctx* c, int argc, char** argv, GError** error)
+{
+    if (argc > 2)
+        return fail(error, "usage: paste [<folder>]");
+    g_autoptr(GFile) dest = argc == 2 ? resolve(c, argv[1]) : g_object_ref(c->dir);
+    if (!is_dir(dest)) {
+        g_autofree char* name = display(dest);
+        return fail(error, "%s is not a folder", name);
+    }
+    sfe_actions_paste_into(c->window, dest);
+    return true;
+}
+
+/* An installed application by its name ("Firefox") or desktop id
+ * ("firefox", "firefox.desktop"). */
+static GAppInfo* find_app(const char* name)
+{
+    g_autofree char* id = g_str_has_suffix(name, ".desktop") ? g_strdup(name) : g_strconcat(name, ".desktop", NULL);
+    GDesktopAppInfo* desktop = g_desktop_app_info_new(id);
+    if (desktop != NULL)
+        return G_APP_INFO(desktop);
+    GList* all = g_app_info_get_all();
+    GAppInfo* found = NULL;
+    for (GList* l = all; l != NULL && found == NULL; l = l->next) {
+        if (g_ascii_strcasecmp(g_app_info_get_name(l->data), name) == 0)
+            found = g_object_ref(l->data);
+    }
+    g_list_free_full(all, g_object_unref);
+    return found;
+}
+
+/* No application: the chooser dialog. Files: the arguments or the selection. */
+static bool run_open_with(Ctx* c, int argc, char** argv, GError** error)
+{
+    if (argc == 1)
+        return run_action(c, "open-with-other", NULL, error);
+    g_autoptr(GAppInfo) app = find_app(argv[1]);
+    if (app == NULL)
+        return fail(error, "no application “%s”", argv[1]);
+    GList* files = argc > 2 ? resolve_all(c, argc - 2, argv + 2) : sfe_pane_get_selected_files(c->pane);
+    bool ok = all_exist(files, error);
+    if (ok && files == NULL)
+        ok = fail(error, "nothing selected to open");
+    if (ok)
+        sfe_actions_open_with(c->window, app, files);
+    g_list_free_full(files, g_object_unref);
+    return ok;
+}
+
 /* ---- Devices ------------------------------------------------------------ */
 
 static const SfeDevice* find_device(const char* name)
@@ -441,57 +493,161 @@ static bool run_split(Ctx* c, int argc, char** argv, GError** error)
 
 /* ---- Bookmarks ---------------------------------------------------------- */
 
-static bool run_bookmark(Ctx* c, int argc, char** argv, GError** error)
+/* The selected folders, when the selection was made on purpose: in visual
+ * mode or with several items (the cursor's item alone does not count, since
+ * j / k select whatever they land on). */
+static GList* chosen_folders(Ctx* c)
 {
-    g_autoptr(GFile) dir = argc > 1 ? resolve(c, argv[1]) : g_object_ref(c->dir);
-    if (!is_dir(dir)) {
-        g_autofree char* name = display(dir);
-        return fail(error, "%s is not a folder", name);
-    }
-    if (sfe_bookmarks_find(sfe_config(), dir) >= 0)
-        return true;
-    SfeConfig* cfg = sfe_application_dup_config(sfe_app());
-    sfe_bookmarks_add(cfg, dir);
-    sfe_application_set_config(sfe_app(), cfg);
-    return true;
-}
-
-/* A bookmark by path or by its label. */
-static bool run_unbookmark(Ctx* c, int argc, char** argv, GError** error)
-{
-    g_autoptr(GFile) dir = argc > 1 ? resolve(c, argv[1]) : g_object_ref(c->dir);
-    int index = sfe_bookmarks_find(sfe_config(), dir);
-    if (index < 0 && argc > 1) {
-        g_autoptr(GPtrArray) list = sfe_bookmarks_list(sfe_config(), NULL);
-        for (guint i = 0; i < list->len; i++) {
-            const SfeBookmark* b = g_ptr_array_index(list, i);
-            if (b->config_index >= 0 && g_strcmp0(b->label, argv[1]) == 0)
-                index = b->config_index;
+    GList* selected = sfe_pane_get_selected_files(c->pane);
+    GList* folders = NULL;
+    if (sfe_pane_in_visual(c->pane) || g_list_length(selected) > 1) {
+        for (GList* l = selected; l != NULL; l = l->next) {
+            if (is_dir(l->data))
+                folders = g_list_prepend(folders, g_object_ref(l->data));
         }
     }
-    if (index < 0)
-        return fail(error, "not one of sfe's bookmarks (GTK bookmarks are edited elsewhere)");
+    g_list_free_full(selected, g_object_unref);
+    return g_list_reverse(folders);
+}
+
+/* The arguments, else the chosen folders, else the current folder. */
+static GList* bookmark_targets(Ctx* c, int argc, char** argv)
+{
+    if (argc > 1)
+        return resolve_all(c, argc - 1, argv + 1);
+    GList* folders = chosen_folders(c);
+    return folders ? folders : g_list_append(NULL, g_object_ref(c->dir));
+}
+
+static char* count_text(guint n, const char* one, const char* many)
+{
+    return n == 1 ? g_strdup(one) : g_strdup_printf("%u %s", n, many);
+}
+
+static bool run_bookmark(Ctx* c, int argc, char** argv, GError** error)
+{
+    GList* dirs = bookmark_targets(c, argc, argv);
     SfeConfig* cfg = sfe_application_dup_config(sfe_app());
-    sfe_bookmarks_remove(cfg, index);
+    guint added = 0, already = 0;
+    bool ok = true;
+
+    for (GList* l = dirs; l != NULL && ok; l = l->next) {
+        if (!is_dir(l->data)) {
+            g_autofree char* name = display(l->data);
+            ok = fail(error, "%s is not a folder", name);
+        } else if (sfe_bookmarks_find(cfg, l->data) >= 0) {
+            already++;
+        } else {
+            sfe_bookmarks_add(cfg, l->data);
+            added++;
+        }
+    }
+    g_list_free_full(dirs, g_object_unref);
+    if (ok && added > 0)
+        sfe_application_set_config(sfe_app(), cfg); /* takes cfg */
+    else
+        sfe_config_free(cfg);
+    if (ok && added == 0) {
+        g_autofree char* what = count_text(already, "this folder is", "folders are");
+        g_autofree char* text = g_strdup_printf("nothing to do: %s already bookmarked", what);
+        sfe_window_show_message(c->window, text, false);
+    }
+    return ok;
+}
+
+/* sfe's bookmark for `arg`: a path, or a bookmark's label; -1 if none. */
+static int find_bookmark(const SfeConfig* cfg, GFile* dir, const char* label)
+{
+    int index = sfe_bookmarks_find(cfg, dir);
+    if (index >= 0 || label == NULL)
+        return index;
+    g_autoptr(GPtrArray) list = sfe_bookmarks_list(cfg, NULL);
+    for (guint i = 0; i < list->len; i++) {
+        const SfeBookmark* b = g_ptr_array_index(list, i);
+        if (b->config_index >= 0 && g_strcmp0(b->label, label) == 0)
+            return b->config_index;
+    }
+    return -1;
+}
+
+static int compare_desc(gconstpointer a, gconstpointer b)
+{
+    return GPOINTER_TO_INT(b) - GPOINTER_TO_INT(a);
+}
+
+static bool run_unbookmark(Ctx* c, int argc, char** argv, GError** error)
+{
+    (void)error;
+    GList* dirs = bookmark_targets(c, argc, argv);
+    SfeConfig* cfg = sfe_application_dup_config(sfe_app());
+    GList* indices = NULL;
+    int arg = 1;
+
+    for (GList* l = dirs; l != NULL; l = l->next, arg++) {
+        int index = find_bookmark(cfg, l->data, argc > 1 ? argv[arg] : NULL);
+        if (index >= 0 && g_list_find(indices, GINT_TO_POINTER(index)) == NULL)
+            indices = g_list_prepend(indices, GINT_TO_POINTER(index));
+    }
+    guint n = g_list_length(dirs);
+    g_list_free_full(dirs, g_object_unref);
+    if (indices == NULL) {
+        sfe_config_free(cfg);
+        g_autofree char* what = count_text(n, "this folder is", "folders are");
+        g_autofree char* text = g_strdup_printf("nothing to do: %s not one of sfe's bookmarks "
+                                                "(GTK bookmarks are edited elsewhere)", what);
+        sfe_window_show_message(c->window, text, false);
+        return true;
+    }
+    indices = g_list_sort(indices, compare_desc); /* last first, so the others keep their index */
+    for (GList* l = indices; l != NULL; l = l->next)
+        sfe_bookmarks_remove(cfg, GPOINTER_TO_INT(l->data));
+    g_list_free(indices);
     sfe_application_set_config(sfe_app(), cfg);
     return true;
 }
 
 /* ---- Small settings ------------------------------------------------------ */
 
+/* "<on>|<off>|toggle" (toggle without an argument) against `current`. */
+static bool parse_switch(int argc, char** argv, const char* on, const char* off, bool current, bool* value,
+    GError** error)
+{
+    const char* how = argc > 1 ? argv[1] : "toggle";
+    if (argc <= 2 && strcmp(how, on) == 0)
+        *value = true;
+    else if (argc <= 2 && strcmp(how, off) == 0)
+        *value = false;
+    else if (argc <= 2 && strcmp(how, "toggle") == 0)
+        *value = !current;
+    else
+        return fail(error, "usage: %s %s|%s|toggle", argv[0], on, off);
+    return true;
+}
+
+static bool run_sidebar(Ctx* c, int argc, char** argv, GError** error)
+{
+    bool show;
+    if (!parse_switch(argc, argv, "on", "off", sfe_window_get_sidebar_visible(c->window), &show, error))
+        return false;
+    sfe_window_set_sidebar_visible(c->window, show);
+    return true;
+}
+
+static bool run_tree(Ctx* c, int argc, char** argv, GError** error)
+{
+    bool full;
+    if (!parse_switch(argc, argv, "full", "normal", sfe_window_get_tree_full(c->window), &full, error))
+        return false;
+    sfe_window_set_tree_full(c->window, full);
+    return true;
+}
+
 static bool run_hidden(Ctx* c, int argc, char** argv, GError** error)
 {
     (void)c;
-    const char* how = argc > 1 ? argv[1] : "toggle";
     bool show;
-    if (strcmp(how, "on") == 0)
-        show = true;
-    else if (strcmp(how, "off") == 0)
-        show = false;
-    else if (strcmp(how, "toggle") == 0)
-        show = !sfe_config()->show_hidden;
-    else
-        return fail(error, "usage: hidden on|off|toggle");
+    if (!parse_switch(argc, argv, "on", "off", sfe_config()->show_hidden, &show, error))
+        return false;
     if (show != sfe_config()->show_hidden) {
         SfeConfig* cfg = sfe_application_dup_config(sfe_app());
         cfg->show_hidden = show;
@@ -782,9 +938,42 @@ static void complete_devices(Ctx* c, int argi, char** argv, const char* query, c
 
 static void complete_unbookmark(Ctx* c, int argi, char** argv, const char* query, const char** rank, GPtrArray* out)
 {
-    (void)c, (void)argv, (void)query, (void)rank;
-    if (argi == 1)
-        add_bookmarks(out, true, 0);
+    (void)c, (void)argv, (void)query, (void)rank, (void)argi;
+    add_bookmarks(out, true, 0);
+}
+
+/* Folders for every argument (several can be bookmarked at once). */
+static void complete_folders(Ctx* c, int argi, char** argv, const char* query, const char** rank, GPtrArray* out)
+{
+    (void)argi;
+    complete_dirs(c, 1, argv, query, rank, out);
+}
+
+/* The application: the ones for the selected file's type first, then the
+ * others; then files. */
+static void complete_open_with(Ctx* c, int argi, char** argv, const char* query, const char** rank, GPtrArray* out)
+{
+    (void)argv;
+    if (argi > 1) {
+        add_files(c, query, false, rank, out, 0);
+        return;
+    }
+    GList* selected = sfe_pane_get_selected_files(c->pane);
+    g_autoptr(GFileInfo) info = selected ? g_file_query_info(selected->data, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
+                                               G_FILE_QUERY_INFO_NONE, NULL, NULL)
+                                         : NULL;
+    const char* type = info ? g_file_info_get_content_type(info) : NULL;
+    GList* recommended = type ? g_app_info_get_recommended_for_type(type) : NULL;
+    GList* all = g_app_info_get_all();
+    for (GList* l = recommended; l != NULL; l = l->next)
+        add(out, g_app_info_get_name(l->data), NULL, g_app_info_get_id(l->data), 0);
+    for (GList* l = all; l != NULL; l = l->next) {
+        if (g_app_info_should_show(l->data))
+            add(out, g_app_info_get_name(l->data), NULL, g_app_info_get_id(l->data), 1); /* (duplicates dropped) */
+    }
+    g_list_free_full(recommended, g_object_unref);
+    g_list_free_full(all, g_object_unref);
+    g_list_free_full(selected, g_object_unref);
 }
 
 static void complete_split(Ctx* c, int argi, char** argv, const char* query, const char** rank, GPtrArray* out)
@@ -816,6 +1005,7 @@ static void complete_split(Ctx* c, int argi, char** argv, const char* query, con
     }
 
 WORDS_COMPLETER(complete_on_off, "toggle", "on", "off")
+WORDS_COMPLETER(complete_tree, "toggle", "full", "normal")
 WORDS_COMPLETER(complete_view, "grid", "list")
 WORDS_COMPLETER(complete_cursor, "down", "up", "first", "last", "previous", "next")
 WORDS_COMPLETER(complete_select, "toggle", "all")
@@ -842,36 +1032,77 @@ static void complete_undo(Ctx* c, int argi, char** argv, const char* query, cons
 /* The table                                                                 */
 /* ------------------------------------------------------------------------ */
 
+#define NO_ALIAS { NULL }
+
 static const Command commands[] = {
-    { { "cd", NULL, "[<folder>]", "go to a folder (home without one)" }, complete_dirs, run_cd },
-    { { "open", NULL, "[<file>…]", "open files and folders (the selection without any)" }, complete_files, run_open },
-    { { "copy", "cp", "<file>… <destination>", "copy into a folder" }, complete_transfer, run_copy },
-    { { "move", "mv", "<file>… <destination>", "move into a folder" }, complete_transfer, run_move },
-    { { "symlink", "ln", "<target>… <folder or link name>", "make symbolic links" }, complete_transfer, run_symlink },
-    { { "rename", NULL, "[<file> <new name>]", "rename (the dialog without arguments)" }, complete_rename, run_rename },
-    { { "mass_rename", NULL, "[<file>…]", "rename with a pattern" }, complete_files, run_mass_rename },
-    { { "new_file", "touch", "[<name>…]", "create empty files (the dialog without a name)" }, NULL, run_new_file },
-    { { "new_directory", "mkdir", "[<name>…]", "create folders (the dialog without a name)" }, NULL, run_new_directory },
-    { { "trash", NULL, "[<file>…]", "move to the trash" }, complete_files, run_trash },
-    { { "delete", NULL, "[<file>…]", "delete permanently (asks)" }, complete_files, run_delete },
-    { { "copy_clipboard", "yank", "[<file>…]", "copy to the clipboard" }, complete_files, run_copy_clipboard },
-    { { "cut", NULL, "[<file>…]", "cut to the clipboard" }, complete_files, run_cut },
-    { { "mount", NULL, "<device>", "mount a drive and open it" }, complete_devices, run_mount },
-    { { "unmount", NULL, "<device>", "unmount a drive" }, complete_devices, run_unmount },
-    { { "eject", NULL, "<device>", "unmount and power off a removable drive" }, complete_devices, run_eject },
-    { { "split", NULL, "<sub-command>", "move|next|vertical|horizontal|left|right|up|down|absolute|close" }, complete_split, run_split },
-    { { "bookmark", NULL, "[<folder>]", "bookmark a folder (this one without an argument)" }, complete_dirs, run_bookmark },
-    { { "unbookmark", NULL, "[<bookmark>]", "remove a bookmark" }, complete_unbookmark, run_unbookmark },
-    { { "hidden", NULL, "on|off|toggle", "show or hide hidden files" }, complete_on_off, run_hidden },
-    { { "view", NULL, "grid|list", "the active view's layout" }, complete_view, run_view },
-    { { "q", "quit", "", "close the active view (the window if it is the last)" }, NULL, run_q },
-    { { "cursor", NULL, "down|up|first|last|previous|next", "move the cursor" }, complete_cursor, run_cursor },
-    { { "select", NULL, "toggle|all", "toggle the item under the cursor / select all" }, complete_select, run_select },
-    { { "visual", NULL, "[off|swap]", "visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end" }, complete_visual, run_visual },
-    { { "undo", NULL, "[<step>]", "undo the last change to files, or an older one (Tab lists them)" }, complete_undo, run_undo },
-    { { "center", NULL, "", "scroll the cursor (in visual mode the first selected item) to the middle" }, NULL, run_center },
-    { { "command_line", NULL, "", "open the command line" }, NULL, run_command_line },
+    { { "cd", NO_ALIAS, "[<folder>]", "go to a folder (home without one)" }, complete_dirs, run_cd, false },
+    { { "open", NO_ALIAS, "[<file>…]", "open files and folders (the selection without any)" }, complete_files, run_open, false },
+    { { "open_with", NO_ALIAS, "[<application> [<file>…]]", "open with a chosen application (the chooser without one)" }, complete_open_with, run_open_with, false },
+    { { "cp", { "copy", NULL }, "<file>… <destination>", "copy into a folder" }, complete_transfer, run_copy, false },
+    { { "mv", { "move", NULL }, "<file>… <destination>", "move into a folder" }, complete_transfer, run_move, false },
+    { { "ln", { "symlink", NULL }, "<target>… <folder or link name>", "make symbolic links" }, complete_transfer, run_symlink, false },
+    { { "rename", NO_ALIAS, "[<file> <new name>]", "rename (the dialog without arguments)" }, complete_rename, run_rename, false },
+    { { "mass_rename", NO_ALIAS, "[<file>…]", "rename with a pattern" }, complete_files, run_mass_rename, false },
+    { { "touch", { "new_file", NULL }, "[<name>…]", "create empty files (the dialog without a name)" }, NULL, run_new_file, false },
+    { { "mkdir", { "new_directory", "new_folder" }, "[<name>…]", "create folders (the dialog without a name)" }, NULL, run_new_directory, false },
+    { { "trash", NO_ALIAS, "[<file>…]", "move to the trash" }, complete_files, run_trash, false },
+    { { "delete", NO_ALIAS, "[<file>…]", "delete permanently (asks)" }, complete_files, run_delete, false },
+    { { "yank", { "copy_clipboard", NULL }, "[<file>…]", "copy to the clipboard" }, complete_files, run_copy_clipboard, false },
+    { { "cut", NO_ALIAS, "[<file>…]", "cut to the clipboard" }, complete_files, run_cut, false },
+    { { "paste", NO_ALIAS, "[<folder>]", "paste the clipboard here, or into a folder" }, complete_dirs, run_paste, false },
+    { { "undo", NO_ALIAS, "[<step>]", "undo the last change to files, or an older one (Tab lists them)" }, complete_undo, run_undo, false },
+    { { "mount", NO_ALIAS, "<device>", "mount a drive and open it" }, complete_devices, run_mount, false },
+    { { "unmount", NO_ALIAS, "<device>", "unmount a drive" }, complete_devices, run_unmount, false },
+    { { "eject", NO_ALIAS, "<device>", "unmount and power off a removable drive" }, complete_devices, run_eject, false },
+    { { "split", NO_ALIAS, "<sub-command>", "move|next|vertical|horizontal|left|right|up|down|absolute|close" }, complete_split, run_split, false },
+    { { "q", { "quit", NULL }, "", "close the active view, like split close (the window if it is the last)" }, NULL, run_q, false },
+    { { "bookmark", NO_ALIAS, "[<folder>…]", "bookmark folders (the selected ones, else this one)" }, complete_folders, run_bookmark, false },
+    { { "unbookmark", NO_ALIAS, "[<bookmark>…]", "remove bookmarks (the selected folders, else this one)" }, complete_unbookmark, run_unbookmark, false },
+    { { "hidden", NO_ALIAS, "on|off|toggle", "show or hide hidden files" }, complete_on_off, run_hidden, false },
+    { { "sidebar", NO_ALIAS, "on|off|toggle", "show or hide the sidebar (Ctrl+S)" }, complete_on_off, run_sidebar, false },
+    { { "tree", NO_ALIAS, "full|normal|toggle", "let the folder tree fill the sidebar, or not" }, complete_tree, run_tree, false },
+    { { "view", NO_ALIAS, "grid|list", "the active view's layout" }, complete_view, run_view, false },
+    { { "cursor", NO_ALIAS, "down|up|first|last|previous|next", "move the cursor" }, complete_cursor, run_cursor, true },
+    { { "select", NO_ALIAS, "toggle|all", "toggle the item under the cursor / select all" }, complete_select, run_select, true },
+    { { "visual", NO_ALIAS, "[off|swap]", "visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end" }, complete_visual, run_visual, true },
+    { { "center", NO_ALIAS, "", "scroll the cursor (in visual mode the first selected item) to the middle" }, NULL, run_center, true },
+    { { "command_line", NO_ALIAS, "", "open the command line" }, NULL, run_command_line, true },
 };
+
+/* Old names, still run (with a note) so key bindings in config files keep
+ * working. TODO: remove them in a later release (deprecated 2026-11-15),
+ * together with deprecated() and its use in sfe_command_run(). */
+static const struct {
+    const char* old;
+    const char* now;
+} deprecated_names[] = {
+    { "toggle_hidden", "hidden toggle" },
+    { "view_grid", "view grid" },
+    { "view_list", "view list" },
+    { "split_vertical", "split vertical" },
+    { "split_horizontal", "split horizontal" },
+    { "close_pane", "split close" },
+    { "next_pane", "split next" },
+    { "select_all", "select all" },
+    { "paste_into", "paste <folder>" },
+    { "bookmark_folder", "bookmark" },
+    { "bookmark_selection", "bookmark" },
+    { "unbookmark_folder", "unbookmark" },
+    { "unbookmark_selection", "unbookmark" },
+    { "open_with_other", "open_with" },
+    { "toggle_sidebar", "sidebar toggle" },
+    { "toggle_tree", "tree toggle" },
+};
+
+/* The replacement for an old command name, or NULL. */
+static const char* deprecated(const char* name)
+{
+    for (size_t i = 0; i < G_N_ELEMENTS(deprecated_names); i++) {
+        if (strcmp(deprecated_names[i].old, name) == 0)
+            return deprecated_names[i].now;
+    }
+    return NULL;
+}
 
 static SfeCommandInfo infos[G_N_ELEMENTS(commands)];
 
@@ -896,8 +1127,12 @@ static bool stays_visual(const Command* cmd)
 static const Command* find_command(const char* name)
 {
     for (size_t i = 0; i < G_N_ELEMENTS(commands); i++) {
-        if (strcmp(commands[i].info.name, name) == 0 || g_strcmp0(commands[i].info.alias, name) == 0)
+        if (strcmp(commands[i].info.name, name) == 0)
             return &commands[i];
+        for (int k = 0; commands[i].info.aliases[k] != NULL; k++) {
+            if (strcmp(commands[i].info.aliases[k], name) == 0)
+                return &commands[i];
+        }
     }
     return NULL;
 }
@@ -929,6 +1164,11 @@ bool sfe_command_run(SfeWindow* window, const char* line, GError** error)
         if (argc > 1)
             return fail(error, "%s takes no arguments", argv[0]);
         ok = run_action(&c, argv[0], NULL, error);
+        const char* now = deprecated(argv[0]);
+        if (ok && now != NULL) {
+            g_autofree char* text = g_strdup_printf("“%s” is an old name and will go away: use :%s", argv[0], now);
+            sfe_window_show_message(window, text, false);
+        }
     } else {
         return fail(error, "unknown command: %s", argv[0]);
     }
@@ -939,28 +1179,43 @@ bool sfe_command_run(SfeWindow* window, const char* line, GError** error)
     return ok;
 }
 
-/* Command names: the ones above, then the actions not covered by them. */
+/* "Compress…" -> "compress" as a description. */
+static char* action_help(const char* label)
+{
+    g_autofree char* plain = g_strdup(label);
+    char* dots = strstr(plain, "…");
+    if (dots != NULL)
+        *dots = '\0';
+    return g_ascii_strdown(plain, -1);
+}
+
+/* Command names, one row per command with its aliases ("mkdir |
+ * new_directory | new_folder"), the arguments and what it does; then the
+ * actions that no command covers; the key-binding helpers last, dimmed.
+ * Old names (deprecated()) still run but are not offered. */
 static void add_command_names(GPtrArray* out)
 {
     for (size_t i = 0; i < G_N_ELEMENTS(commands); i++) {
         const SfeCommandInfo* info = &commands[i].info;
-        add(out, info->name, NULL, info->usage[0] ? info->usage : NULL, 0);
+        const char* names[4] = { info->name, info->aliases[0], info->aliases[0] ? info->aliases[1] : NULL, NULL };
+        SfeCandidate* c = sfe_candidate_new_names(names, info->help, commands[i].helper ? 1 : 0);
+        c->args = info->usage[0] ? g_strdup(info->usage) : NULL;
+        c->dim = commands[i].helper;
+        g_ptr_array_add(out, c);
     }
     size_t n = 0;
     const SfeAction* table = sfe_actions_get(&n);
     for (size_t i = 0; i < n; i++) {
         g_autofree char* name = g_strdup(table[i].name);
         g_strdelimit(name, "-", '_');
-        if (find_command(name) == NULL && strcmp(name, "copy") != 0) /* "copy" is the clipboard one */
-            add(out, name, NULL, NULL, 0);
-    }
-    for (size_t i = 0; i < G_N_ELEMENTS(commands); i++) {
-        if (commands[i].info.alias != NULL)
-            add(out, commands[i].info.alias, NULL, commands[i].info.name, 1);
+        if (find_command(name) == NULL && deprecated(name) == NULL) {
+            g_autofree char* help = action_help(table[i].label);
+            add(out, name, NULL, help, 0);
+        }
     }
 }
 
-GPtrArray* sfe_command_complete(SfeWindow* window, const char* line, int cursor, int* start, int* end)
+GPtrArray* sfe_command_complete(SfeWindow* window, const char* line, int cursor, int* start, int* end, char** rank_out)
 {
     g_autoptr(GPtrArray) args = sfe_cmdline_tokenize(line);
     GPtrArray* out = g_ptr_array_new_with_free_func(sfe_candidate_free);
@@ -996,6 +1251,11 @@ GPtrArray* sfe_command_complete(SfeWindow* window, const char* line, int cursor,
             cmd->complete(&c, argi, argv, query, &rank, out);
         }
     }
-    g_autofree char* rank_copy = g_strdup(rank); /* `rank` may point into the arguments */
-    return sfe_cmdline_rank(out, rank_copy);
+    char* rank_copy = g_strdup(rank); /* `rank` may point into the arguments */
+    GPtrArray* ranked = sfe_cmdline_rank(out, rank_copy);
+    if (rank_out != NULL)
+        *rank_out = rank_copy;
+    else
+        g_free(rank_copy);
+    return ranked;
 }

@@ -127,7 +127,7 @@ static void test_defaults(void)
     bool prefix = true;
     char* y[] = { "y" };
     g_assert_cmpint(sfe_keymap_lookup(visual, y, 1, &command, &prefix), ==, SFE_KEYS_MATCH);
-    g_assert_cmpstr(command, ==, "copy_clipboard");
+    g_assert_cmpstr(command, ==, "yank");
     g_assert_false(prefix);
     char* esc[] = { "Esc" };
     g_assert_cmpint(sfe_keymap_lookup(visual, esc, 1, &command, &prefix), ==, SFE_KEYS_MATCH);

@@ -72,7 +72,7 @@ def main():
     with open(os.path.join(root, "src", "keymap.c"), encoding="utf-8") as f:
         keys = re.findall(r'\{ "([^"]+)", "[^"]*", "[^"]*" \}', f.read())
     with open(os.path.join(root, "src", "commands.c"), encoding="utf-8") as f:
-        commands = re.findall(r'\{ \{ "([a-z_]+)", (?:NULL|"[a-z]+"),', f.read())
+        commands = re.findall(r'\{ \{ "([a-z_]+)", (?:NO_ALIAS|\{)', f.read())
     if not keys or not commands:
         sys.exit("found no keys in src/keymap.c or no commands in src/commands.c: has the format changed?")
     for key in keys:
