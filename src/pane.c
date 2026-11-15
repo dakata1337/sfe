@@ -66,6 +66,9 @@ struct _SfePane {
      * draws it only over the files, sfe draws the rest. */
     bool band_pressed, band_active;
     double band_x1, band_y1, band_x2, band_y2;
+    /* Grid: where a Shift-selection starts (the last item picked without
+     * Shift), or NULL for the cursor. */
+    GtkTreeRowReference* grid_anchor;
 
     /* List columns that make way for the names in a narrow view. */
     int name_width; /* widest name in pixels (capped), -1 to measure again */
@@ -153,8 +156,14 @@ static void update_sort_indicators(SfePane* self)
 }
 
 /* Selects and reveals one row of the active view. */
+static void forget_anchor(SfePane* self)
+{
+    g_clear_pointer(&self->grid_anchor, gtk_tree_row_reference_free);
+}
+
 static void select_path(SfePane* self, GtkTreePath* path)
 {
+    forget_anchor(self);
     if (self->view == SFE_VIEW_GRID) {
         gtk_icon_view_unselect_all(GTK_ICON_VIEW(self->grid));
         gtk_icon_view_set_cursor(GTK_ICON_VIEW(self->grid), path, NULL, FALSE);
@@ -188,6 +197,7 @@ static void show_dir(SfePane* self, GFile* dir)
     g_debug("pane: show %s", g_file_peek_path(dir));
     sfe_pane_visual_end(self);
     forget_scroll(self);
+    forget_anchor(self);
     g_set_object(&self->dir, dir);
     sfe_path_entry_set_dir(self->entry, dir);
     update_buttons(self);
@@ -482,6 +492,7 @@ static void on_loaded(SfeDirModel* model, gpointer data)
     GtkWidget* view = active_view(self);
     bool had_focus = gtk_widget_has_focus(view) || gtk_widget_has_focus(self->message_box);
 
+    forget_anchor(self); /* a new listing: the old rows are gone */
     attach_model(self);
     gtk_stack_set_visible_child(GTK_STACK(self->stack), gtk_widget_get_parent(view));
     update_sort_indicators(self);
@@ -1155,6 +1166,8 @@ void sfe_pane_move_cursor(SfePane* self, SfeCursorMove move)
 {
     /* In visual mode the cursor moves alone; the selection follows it. */
     bool visual = self->visual;
+    if (!visual)
+        forget_anchor(self); /* a Shift-selection starts from the new cursor */
     switch (move) {
     case SFE_CURSOR_DOWN: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, 1, visual); break;
     case SFE_CURSOR_UP: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, -1, visual); break;
@@ -1268,6 +1281,7 @@ static void apply_visual(SfePane* self)
 
     if (lo < 0) {
         g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
+    forget_anchor(self);
     } else if (cursor != NULL) {
         int c = gtk_tree_path_get_indices(cursor)[0];
         lo = MIN(lo, c);
@@ -1484,12 +1498,122 @@ static void show_menu(SfePane* self, GtkWidget* view, const GdkEvent* event)
         sfe_context_menu_popup(SFE_WINDOW(window), view, event);
 }
 
+/* ------------------------------------------------------------------------ */
+/* Grid: Shift-selection in reading order                                    */
+/* ------------------------------------------------------------------------ */
+
+/* GtkIconView selects the rectangle between two items; a file list reads
+ * like text, so Shift selects from the anchor to the item in reading order:
+ * the rest of the first row, the rows between, the start of the last one. */
+
+static GtkTreePath* anchor_path(SfePane* self)
+{
+    GtkTreePath* path = self->grid_anchor ? gtk_tree_row_reference_get_path(self->grid_anchor) : NULL;
+    return path ? path : highlighted(self);
+}
+
+static void set_anchor(SfePane* self, GtkTreePath* path)
+{
+    forget_anchor(self);
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    if (model != NULL && path != NULL)
+        self->grid_anchor = gtk_tree_row_reference_new(model, path);
+}
+
+/* Selects every item from `a` to `b` (and keeps the rest with `keep`). */
+static void select_run(SfePane* self, GtkTreePath* a, GtkTreePath* b, bool keep)
+{
+    GtkIconView* grid = GTK_ICON_VIEW(self->grid);
+    int ia = gtk_tree_path_get_indices(a)[0], ib = gtk_tree_path_get_indices(b)[0];
+    if (!keep)
+        gtk_icon_view_unselect_all(grid);
+    for (int i = MIN(ia, ib); i <= MAX(ia, ib); i++) {
+        GtkTreePath* path = gtk_tree_path_new_from_indices(i, -1);
+        gtk_icon_view_select_path(grid, path);
+        gtk_tree_path_free(path);
+    }
+}
+
+/* Shift+click selects the run from the anchor; a plain click (or Ctrl+click)
+ * moves the anchor and is left to GTK. True when handled. */
+static bool grid_click(SfePane* self, GdkEventButton* event)
+{
+    GtkIconView* grid = GTK_ICON_VIEW(self->grid);
+    GtkTreePath* path = gtk_icon_view_get_path_at_pos(grid, (int)event->x, (int)event->y);
+    if (path == NULL)
+        return false;
+    if (!(event->state & GDK_SHIFT_MASK)) {
+        set_anchor(self, path);
+        gtk_tree_path_free(path);
+        return false;
+    }
+    GtkTreePath* anchor = anchor_path(self);
+    if (anchor != NULL) {
+        if (self->grid_anchor == NULL)
+            set_anchor(self, anchor);
+        select_run(self, anchor, path, event->state & GDK_CONTROL_MASK);
+        gtk_icon_view_set_cursor(grid, path, NULL, FALSE); /* (does not touch the selection) */
+        gtk_widget_grab_focus(self->grid);
+        gtk_tree_path_free(anchor);
+    }
+    gtk_tree_path_free(path);
+    return anchor != NULL;
+}
+
+/* Shift+arrows, Home, End, Page Up / Down extend the run from the anchor;
+ * the same keys without Shift move the anchor. True when handled. */
+static bool grid_key(SfePane* self, GdkEventKey* event)
+{
+    GtkMovementStep step;
+    int count;
+    switch (event->keyval) {
+    case GDK_KEY_Left: case GDK_KEY_KP_Left: step = GTK_MOVEMENT_VISUAL_POSITIONS; count = -1; break;
+    case GDK_KEY_Right: case GDK_KEY_KP_Right: step = GTK_MOVEMENT_VISUAL_POSITIONS; count = 1; break;
+    case GDK_KEY_Up: case GDK_KEY_KP_Up: step = GTK_MOVEMENT_DISPLAY_LINES; count = -1; break;
+    case GDK_KEY_Down: case GDK_KEY_KP_Down: step = GTK_MOVEMENT_DISPLAY_LINES; count = 1; break;
+    case GDK_KEY_Home: case GDK_KEY_KP_Home: step = GTK_MOVEMENT_BUFFER_ENDS; count = -1; break;
+    case GDK_KEY_End: case GDK_KEY_KP_End: step = GTK_MOVEMENT_BUFFER_ENDS; count = 1; break;
+    case GDK_KEY_Page_Up: case GDK_KEY_KP_Page_Up: step = GTK_MOVEMENT_PAGES; count = -1; break;
+    case GDK_KEY_Page_Down: case GDK_KEY_KP_Page_Down: step = GTK_MOVEMENT_PAGES; count = 1; break;
+    default: return false;
+    }
+    if (!(event->state & GDK_SHIFT_MASK)) {
+        forget_anchor(self); /* GTK moves; the new cursor is the next anchor */
+        return false;
+    }
+    GtkTreePath* anchor = anchor_path(self);
+    if (anchor == NULL)
+        return false;
+    if (self->grid_anchor == NULL)
+        set_anchor(self, anchor);
+    if (step == GTK_MOVEMENT_VISUAL_POSITIONS) { /* in reading order: across row ends too */
+        GtkTreePath* at = highlighted(self);
+        int index = at ? CLAMP(gtk_tree_path_get_indices(at)[0] + count, 0, n_rows(self) - 1) : 0;
+        GtkTreePath* next = gtk_tree_path_new_from_indices(index, -1);
+        gtk_icon_view_set_cursor(GTK_ICON_VIEW(self->grid), next, NULL, FALSE);
+        gtk_icon_view_scroll_to_path(GTK_ICON_VIEW(self->grid), next, FALSE, 0, 0);
+        gtk_tree_path_free(next);
+        gtk_tree_path_free(at);
+    } else {
+        move_cursor(self, step, count, true);
+    }
+    GtkTreePath* cursor = highlighted(self);
+    if (cursor != NULL)
+        select_run(self, anchor, cursor, event->state & GDK_CONTROL_MASK);
+    gtk_tree_path_free(cursor);
+    gtk_tree_path_free(anchor);
+    return true;
+}
+
 static gboolean on_view_button_press(GtkWidget* view, GdkEventButton* event, gpointer data)
 {
     SfePane* self = data;
 
     sfe_pane_visual_end(self); /* the mouse takes over the selection */
     band_press(self, view, event);
+    if (GTK_IS_ICON_VIEW(view) && event->type == GDK_BUTTON_PRESS && event->button == GDK_BUTTON_PRIMARY
+        && grid_click(self, event))
+        return TRUE;
     if (event->type != GDK_BUTTON_PRESS || event->button != GDK_BUTTON_SECONDARY)
         return FALSE;
     if (GTK_IS_TREE_VIEW(view) && event->window != gtk_tree_view_get_bin_window(GTK_TREE_VIEW(view)))
@@ -1536,8 +1660,10 @@ static void on_column_clicked(GtkTreeViewColumn* column, gpointer data)
 
 static gboolean on_view_key_press(GtkWidget* view, GdkEventKey* event, gpointer data)
 {
-    (void)view;
     guint mods = event->state & gtk_accelerator_get_default_mod_mask();
+
+    if (GTK_IS_ICON_VIEW(view) && grid_key(SFE_PANE(data), event))
+        return TRUE;
 
     if (event->keyval == GDK_KEY_Escape && mods == 0) {
         if (searching(SFE_PANE(data)))
