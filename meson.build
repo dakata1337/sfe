@@ -124,6 +124,26 @@ install_data('data/sfe.desktop',
   install_dir: get_option('datadir') / 'applications',
 )
 
+# The file dialog backend for xdg-desktop-portal (src/portal/sfe-portal.c).
+# Installed, it is only used when portals.conf names it for FileChooser.
+executable('sfe-portal', 'src/portal/sfe-portal.c',
+  dependencies: [glib_dep, gio_dep],
+  c_args: ['-DSFE_BINDIR="@0@"'.format(get_option('prefix') / get_option('bindir'))],
+  install: true,
+  install_dir: get_option('libexecdir'),
+)
+install_data('data/portal/sfe.portal',
+  install_dir: get_option('datadir') / 'xdg-desktop-portal' / 'portals',
+)
+portal_service = configuration_data()
+portal_service.set('libexecdir', get_option('prefix') / get_option('libexecdir'))
+configure_file(
+  input: 'data/portal/org.freedesktop.impl.portal.desktop.sfe.service.in',
+  output: 'org.freedesktop.impl.portal.desktop.sfe.service',
+  configuration: portal_service,
+  install_dir: get_option('datadir') / 'dbus-1' / 'services',
+)
+
 # Software centers / package tools.
 install_data('data/org.sfe.SimpleFileExplorer.metainfo.xml',
   install_dir: get_option('datadir') / 'metainfo',

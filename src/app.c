@@ -335,6 +335,11 @@ static int sfe_application_handle_local_options(GApplication* gapp, GVariantDict
         /* Its own process: the answer must come from this one, not from an
          * sfe that is already running. */
         g_application_set_flags(gapp, g_application_get_flags(gapp) | G_APPLICATION_NON_UNIQUE);
+        /* Its own Wayland app id, so compositors can treat file dialogs
+         * apart (e.g. a Hyprland rule making them float); not when run
+         * under another name (the guide's screenshots, tests). */
+        if (g_strcmp0(g_get_prgname(), "sfe") == 0)
+            g_set_prgname("sfe-chooser");
     }
     return -1; /* go on */
 }
