@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata: software centers and package tools read this. -->
+<component type="desktop-application">
+  <id>org.sfe.SimpleFileExplorer</id>
+  <name>Simple File Explorer</name>
+  <summary>A small, fast file manager for Wayland</summary>
+  <developer id="io.github.dakata1337">
+    <name>dakata1337</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <launchable type="desktop-id">sfe.desktop</launchable>
+  <description>
+    <p>
+      Simple File Explorer (sfe) is a minimal file manager written in C with GTK3. It covers what a
+      daily file manager needs while staying small and readable.
+    </p>
+    <ul>
+      <li>A sidebar with places, bookmarks, drives and a folder tree</li>
+      <li>Up to three split views, grid or list</li>
+      <li>Fuzzy search, thumbnails and batch rename</li>
+      <li>Vim-style keys, a command line and undo</li>
+      <li>Follows the GTK theme and reloads generated colour schemes instantly</li>
+    </ul>
+  </description>
+  <categories>
+    <category>System</category>
+    <category>FileManager</category>
+  </categories>
+  <keywords>
+    <keyword>folder</keyword>
+    <keyword>files</keyword>
+    <keyword>explorer</keyword>
+  </keywords>
+  <url type="homepage">https://github.com/dakata1337/sfe</url>
+  <url type="bugtracker">https://github.com/dakata1337/sfe/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Folders, a sidebar with drives and the folder tree</caption>
+      <image>https://raw.githubusercontent.com/dakata1337/sfe/main/docs/guide/images/overview.png</image>
+    </screenshot>
+  </screenshots>
+  <provides>
+    <binary>sfe</binary>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-15"/>
+  </releases>
+</component>

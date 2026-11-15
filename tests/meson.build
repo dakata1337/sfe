@@ -61,3 +61,13 @@ test_thumbs = executable('test-thumbs', 'test_thumbs.c',
   dependencies: core_dep,
 )
 test('thumbs', test_thumbs)
+
+# The data files are valid (when the validators are installed).
+desktop_validate = find_program('desktop-file-validate', required: false)
+if desktop_validate.found()
+  test('desktop-file', desktop_validate, args: [meson.project_source_root() / 'data' / 'sfe.desktop'])
+endif
+appstreamcli = find_program('appstreamcli', required: false)
+if appstreamcli.found()
+  test('metainfo', appstreamcli, args: ['validate', '--no-net', meson.project_source_root() / 'data' / 'org.sfe.SimpleFileExplorer.metainfo.xml'])
+endif

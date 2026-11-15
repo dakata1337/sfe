@@ -283,6 +283,17 @@ static void sfe_application_finalize(GObject* object)
     G_OBJECT_CLASS(sfe_application_parent_class)->finalize(object);
 }
 
+/* --version is answered here, without starting the UI. */
+static int sfe_application_handle_local_options(GApplication* gapp, GVariantDict* options)
+{
+    (void)gapp;
+    if (g_variant_dict_contains(options, "version")) {
+        g_print("sfe %s\n", SFE_VERSION);
+        return 0;
+    }
+    return -1; /* go on */
+}
+
 static void sfe_application_class_init(SfeApplicationClass* klass)
 {
     GApplicationClass* app_class = G_APPLICATION_CLASS(klass);
@@ -291,6 +302,7 @@ static void sfe_application_class_init(SfeApplicationClass* klass)
     app_class->activate = sfe_application_activate;
     app_class->open = sfe_application_open;
     app_class->shutdown = sfe_application_shutdown;
+    app_class->handle_local_options = sfe_application_handle_local_options;
     G_OBJECT_CLASS(klass)->finalize = sfe_application_finalize;
 
     /* Emitted after the configuration was replaced (edited or reloaded). */
@@ -301,7 +313,14 @@ static void sfe_application_class_init(SfeApplicationClass* klass)
 
 static void sfe_application_init(SfeApplication* app)
 {
-    (void)app;
+    static const GOptionEntry entries[] = {
+        { "version", 'v', 0, G_OPTION_ARG_NONE, NULL, "Show the version and quit", NULL },
+        { NULL, 0, 0, 0, NULL, NULL, NULL },
+    };
+    g_application_add_main_option_entries(G_APPLICATION(app), entries);
+    g_application_set_option_context_parameter_string(G_APPLICATION(app), "[DIRECTORY…]");
+    g_application_set_option_context_summary(G_APPLICATION(app),
+        "Simple File Explorer: opens a window for each DIRECTORY (the start folder without one).");
 }
 
 SfeApplication* sfe_application_new(void)

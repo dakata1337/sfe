@@ -42,6 +42,8 @@ optdepends=(
   'dosfstools: FAT drive support'
 )
 makedepends=('meson' 'ninja')
+# check(): desktop-file-validate (desktop-file-utils) and appstreamcli (appstream)
+# validate the data files when they are installed.
 checkdepends=()
 
 source=()
@@ -65,6 +67,7 @@ check() {
 
 package() {
   meson install -C build --destdir "${pkgdir}"
+  install -Dm644 "${_root}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
   install -Dm644 "${_root}/thirdparty/tomlc17/LICENSE" \
     "${pkgdir}/usr/share/licenses/${pkgname}/tomlc17-LICENSE"
 }

@@ -111,6 +111,19 @@ install_data('data/sfe.desktop',
   install_dir: get_option('datadir') / 'applications',
 )
 
+# Software centers / package tools.
+install_data('data/org.sfe.SimpleFileExplorer.metainfo.xml',
+  install_dir: get_option('datadir') / 'metainfo',
+)
+
+install_man('docs/sfe.1')
+
+# The user guide, readable offline (its screenshot tools stay out).
+install_subdir('docs/guide',
+  install_dir: get_option('datadir') / 'doc' / meson.project_name(),
+  exclude_directories: ['tools'],
+)
+
 # The logo: icons/hicolor/{scalable,symbolic}/apps/sfe[-symbolic].svg
 install_subdir('data/icons/hicolor',
   install_dir: get_option('datadir') / 'icons',

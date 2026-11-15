@@ -1,0 +1,68 @@
+.TH SFE 1 2026-11-15 "sfe 0.1.0" "User Commands"
+.SH NAME
+sfe \- Simple File Explorer, a small file manager for Wayland
+.SH SYNOPSIS
+.B sfe
+[\fB\-v\fR]
+[\fIDIRECTORY\fR...]
+.SH DESCRIPTION
+.B sfe
+is a minimal GTK3 file manager: a sidebar with places, bookmarks, drives
+and a folder tree; up to three split views in a grid or a list; fuzzy
+search; thumbnails; copy, move, trash, undo and batch rename; custom
+commands; and vim-style keys with a command line.
+.PP
+Each \fIDIRECTORY\fR opens in a window of its own; without one, a window
+opens on the configured start folder. A second \fBsfe\fR hands its
+windows to the one already running.
+.SH OPTIONS
+.TP
+.BR \-v ", " \-\-version
+Print the version and exit.
+.TP
+.BR \-h ", " \-\-help
+Show the options, including the standard GTK and GApplication ones.
+.SH KEYS
+In the file views single keys are commands (normal mode):
+\fBj\fR/\fBk\fR move, \fBh\fR goes to the parent folder, \fBl\fR opens,
+\fBv\fR selects with the keyboard, \fByy\fR/\fBdd\fR/\fBp\fR copy, cut and
+paste, \fBu\fR undoes, \fB/\fR searches and \fB:\fR opens the command line.
+Ctrl+W followed by \fBv\fR, \fBs\fR or \fBq\fR splits and closes views.
+After half a second in a key chord, sfe lists the keys that can follow.
+.PP
+The usual shortcuts work too: Ctrl+C, Ctrl+X, Ctrl+V, Ctrl+Z, Delete, F2,
+Ctrl+F, Ctrl+H (hidden files), Ctrl+S (sidebar), Ctrl+P (settings).
+Every key is listed in the user guide and can be changed in the settings.
+.SH FILES
+.TP
+.I ~/.config/sfe/config.toml
+Settings, keys, custom commands and programs per file type. Created with
+comments on first start; reloaded whenever it changes. Errors are reported
+as desktop notifications.
+.TP
+.I ~/.config/gtk-3.0/gtk.css
+The GTK user stylesheet; sfe reloads it (and the colour files it imports)
+when it changes.
+.TP
+.I ~/.config/gtk-3.0/bookmarks
+GTK bookmarks, shown in the sidebar.
+.TP
+.I ~/.cache/thumbnails
+Thumbnails, shared with other file managers (freedesktop.org thumbnail
+specification).
+.TP
+.I ~/.local/share/Trash
+The trash.
+.TP
+.I /usr/share/doc/sfe/guide/index.md
+The user guide.
+.SH ENVIRONMENT
+.TP
+.B G_MESSAGES_DEBUG=sfe
+Log what sfe does to standard error.
+.SH SEE ALSO
+.BR xdg-open (1),
+.BR udisksctl (1)
+.PP
+The user guide: \fI/usr/share/doc/sfe/guide/index.md\fR, or
+https://github.com/dakata1337/sfe/blob/main/docs/guide/index.md
