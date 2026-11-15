@@ -11,3 +11,7 @@
  * rendered for `scale` (the widget's scale factor), so icons stay sharp on
  * HiDPI outputs. Never returns NULL. */
 cairo_surface_t* sfe_icon_for_info(GFileInfo* info, int size, int scale);
+
+/* Drops the cached icons and makes the views fetch them again: the
+ * theme's colours or [general] file_icons changed. */
+void sfe_icons_reset(void);

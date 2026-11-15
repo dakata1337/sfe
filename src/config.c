@@ -19,6 +19,7 @@ G_DEFINE_QUARK(sfe-config-error-quark, sfe_config_error)
 
 static const char* const view_names[] = { "grid", "list", NULL };
 static const char* const sort_names[] = { "name", "size", "modified", "type", NULL };
+static const char* const file_icon_names[] = { "system", "tinted", "symbolic", NULL };
 
 #define FIELD(f) offsetof(SfeConfig, f)
 
@@ -28,6 +29,7 @@ static const SfeOption options[] = {
     { "general", "ui_scale", SFE_OPT_DOUBLE, FIELD(ui_scale), "Scale factor for text and icons (0.5 - 3.0)", .min = 0.5, .max = 3.0, .label = "Scale" },
     { "general", "view", SFE_OPT_ENUM, FIELD(view), "Default view: grid | list", .choices = view_names, .label = "Default view" },
     { "general", "icon_size", SFE_OPT_INT, FIELD(icon_size), "Icon size in the grid view, in pixels (16 - 256)", .min = 16, .max = 256, .label = "Icon size" },
+    { "general", "file_icons", SFE_OPT_ENUM, FIELD(file_icons), "File icons: system (the icon theme as it is) | tinted (folders in the theme's accent colour) | symbolic (one-colour icons in the theme's colours)", .choices = file_icon_names, .label = "File icons" },
     { "general", "sort_by", SFE_OPT_ENUM, FIELD(sort_by), "Sort order: name | size | modified | type", .choices = sort_names, .label = "Sort by" },
     { "general", "dirs_first", SFE_OPT_BOOL, FIELD(dirs_first), "List directories before files", .label = "Folders first" },
     { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },

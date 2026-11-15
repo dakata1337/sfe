@@ -2,6 +2,7 @@
 
 #include "actions.h"
 #include "defaultfm.h"
+#include "icons.h"
 
 #include "sfe-build.h"
 #include "theme.h"
@@ -45,7 +46,11 @@ SfeConfig* sfe_application_dup_config(SfeApplication* app)
 /* Settings that are global rather than per window. */
 static void apply_global_config(SfeApplication* app)
 {
+    static int file_icons = -1;
     sfe_theme_set_scale(app->config->ui_scale);
+    if (file_icons >= 0 && file_icons != app->config->file_icons)
+        sfe_icons_reset();
+    file_icons = app->config->file_icons;
 }
 
 static void replace_config(SfeApplication* app, SfeConfig* cfg)

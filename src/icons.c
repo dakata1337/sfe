@@ -1,6 +1,11 @@
 #include "icons.h"
 
-static GHashTable* cache; /* "icon-string@size@scale" -> cairo_surface_t* */
+#include "app.h"
+#include <math.h>
+#include <stdbool.h>
+#include <string.h>
+
+static GHashTable* cache; /* "style@icon-string@size@scale" -> cairo_surface_t* */
 
 static void on_theme_changed(GtkIconTheme* theme, gpointer data)
 {
@@ -17,8 +22,130 @@ static void ensure_cache(void)
     g_signal_connect(gtk_icon_theme_get_default(), "changed", G_CALLBACK(on_theme_changed), NULL);
 }
 
+/* A colour of sfe's palette (theme.c defines @sfe_accent, @sfe_fg ...). */
+static GdkRGBA palette_color(const char* name, const char* fallback)
+{
+    GdkRGBA color;
+    GtkStyleContext* ctx = gtk_style_context_new();
+    gtk_style_context_set_screen(ctx, gdk_screen_get_default());
+    if (!gtk_style_context_lookup_color(ctx, name, &color))
+        gdk_rgba_parse(&color, fallback);
+    g_object_unref(ctx);
+    return color;
+}
+
+static bool is_folder(GIcon* icon)
+{
+    if (!G_IS_THEMED_ICON(icon))
+        return false;
+    const char* const* names = g_themed_icon_get_names(G_THEMED_ICON(icon));
+    return names != NULL && names[0] != NULL
+        && (strstr(names[0], "folder") != NULL || g_str_has_prefix(names[0], "inode-directory"));
+}
+
+static void rgb_to_hsl(double r, double g, double b, double* h, double* s, double* l)
+{
+    double max = MAX(r, MAX(g, b)), min = MIN(r, MIN(g, b));
+    *l = (max + min) / 2;
+    if (max == min) {
+        *h = *s = 0;
+        return;
+    }
+    double d = max - min;
+    *s = *l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max == r)
+        *h = (g - b) / d + (g < b ? 6 : 0);
+    else if (max == g)
+        *h = (b - r) / d + 2;
+    else
+        *h = (r - g) / d + 4;
+    *h /= 6;
+}
+
+static double hue_to_rgb(double p, double q, double t)
+{
+    t = t < 0 ? t + 1 : t > 1 ? t - 1 : t;
+    if (t < 1.0 / 6)
+        return p + (q - p) * 6 * t;
+    if (t < 0.5)
+        return q;
+    if (t < 2.0 / 3)
+        return p + (q - p) * (2.0 / 3 - t) * 6;
+    return p;
+}
+
+static void hsl_to_rgb(double h, double s, double l, double* r, double* g, double* b)
+{
+    if (s == 0) {
+        *r = *g = *b = l;
+        return;
+    }
+    double q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    double p = 2 * l - q;
+    *r = hue_to_rgb(p, q, h + 1.0 / 3);
+    *g = hue_to_rgb(p, q, h);
+    *b = hue_to_rgb(p, q, h - 1.0 / 3);
+}
+
+/* Recolours the coloured parts of a full-colour icon (a folder's body) to
+ * `accent`, keeping their shading; greys and whites stay. */
+static void tint(GdkPixbuf* pixbuf, const GdkRGBA* accent)
+{
+    double ah, as, al;
+    rgb_to_hsl(accent->red, accent->green, accent->blue, &ah, &as, &al);
+    /* Shades of the icon are moved around the accent's lightness. Folder
+     * icons are drawn around mid lightness; a very light or dark accent is
+     * kept in a band where the folder still reads as a folder. */
+    double shift = CLAMP(al, 0.35, 0.60) - 0.55;
+    int n = gdk_pixbuf_get_n_channels(pixbuf), stride = gdk_pixbuf_get_rowstride(pixbuf);
+    int w = gdk_pixbuf_get_width(pixbuf), h = gdk_pixbuf_get_height(pixbuf);
+    guchar* pixels = gdk_pixbuf_get_pixels(pixbuf);
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            guchar* p = pixels + y * stride + x * n;
+            double ph, ps, pl;
+            rgb_to_hsl(p[0] / 255.0, p[1] / 255.0, p[2] / 255.0, &ph, &ps, &pl);
+            if (ps < 0.15) /* grey, white, black: the paper, outlines */
+                continue;
+            double r, g, b;
+            hsl_to_rgb(ah, MIN(1.0, as * (0.6 + 0.4 * ps)), CLAMP(pl + shift, 0.0, 1.0), &r, &g, &b);
+            p[0] = (guchar)lround(r * 255);
+            p[1] = (guchar)lround(g * 255);
+            p[2] = (guchar)lround(b * 255);
+        }
+    }
+}
+
+/* A one-colour (symbolic) version: folders in the accent, the rest in the
+ * text colour. NULL when the theme has no symbolic icon for it. */
+static GdkPixbuf* load_symbolic(GIcon* icon, int size, int scale)
+{
+    GtkIconTheme* theme = gtk_icon_theme_get_default();
+    GtkIconLookupFlags flags = GTK_ICON_LOOKUP_FORCE_SIZE | GTK_ICON_LOOKUP_FORCE_SYMBOLIC;
+    GtkIconInfo* info = icon ? gtk_icon_theme_lookup_by_gicon_for_scale(theme, icon, size, scale, flags) : NULL;
+    if (info != NULL && !gtk_icon_info_is_symbolic(info)) /* only a colour one: the generic page */
+        g_clear_object(&info);
+    if (info == NULL)
+        info = gtk_icon_theme_lookup_icon_for_scale(theme, "text-x-generic-symbolic", size, scale, flags);
+    if (info == NULL)
+        return NULL;
+    GdkRGBA fg = palette_color("sfe_view_fg", "#2e3436");
+    GdkRGBA accent = palette_color("sfe_accent", "#3584e4");
+    fg.alpha = 0.75;
+    GdkPixbuf* pixbuf = gtk_icon_info_load_symbolic(info, is_folder(icon) ? &accent : &fg, NULL, NULL, NULL, NULL, NULL);
+    g_object_unref(info);
+    return pixbuf;
+}
+
 static GdkPixbuf* load_pixbuf(GIcon* icon, int size, int scale)
 {
+    int style = sfe_config()->file_icons;
+    if (style == SFE_FILE_ICONS_SYMBOLIC) {
+        GdkPixbuf* symbolic = load_symbolic(icon, size, scale);
+        if (symbolic != NULL)
+            return symbolic;
+    }
+
     GtkIconTheme* theme = gtk_icon_theme_get_default();
     /* No GENERIC_FALLBACK: themed GIcons already list their fallback names. */
     GtkIconLookupFlags flags = GTK_ICON_LOOKUP_FORCE_SIZE;
@@ -33,6 +160,13 @@ static GdkPixbuf* load_pixbuf(GIcon* icon, int size, int scale)
         pixbuf = gtk_icon_info_load_icon(info, NULL);
         g_object_unref(info);
     }
+    if (pixbuf != NULL && style == SFE_FILE_ICONS_TINTED && is_folder(icon)) {
+        GdkPixbuf* own = gdk_pixbuf_copy(pixbuf); /* the theme's copy may be shared */
+        g_object_unref(pixbuf);
+        pixbuf = own;
+        GdkRGBA accent = palette_color("sfe_accent", "#3584e4");
+        tint(pixbuf, &accent);
+    }
     if (pixbuf == NULL) { /* no usable icon theme at all: transparent square */
         pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, size * scale, size * scale);
         gdk_pixbuf_fill(pixbuf, 0);
@@ -42,11 +176,13 @@ static GdkPixbuf* load_pixbuf(GIcon* icon, int size, int scale)
 
 cairo_surface_t* sfe_icon_for_info(GFileInfo* info, int size, int scale)
 {
-    GIcon* icon = g_file_info_has_attribute(info, G_FILE_ATTRIBUTE_STANDARD_ICON)
-        ? g_file_info_get_icon(info)
-        : NULL;
+    bool symbolic = sfe_config()->file_icons == SFE_FILE_ICONS_SYMBOLIC
+        && g_file_info_has_attribute(info, G_FILE_ATTRIBUTE_STANDARD_SYMBOLIC_ICON);
+    GIcon* icon = symbolic ? g_file_info_get_symbolic_icon(info)
+        : g_file_info_has_attribute(info, G_FILE_ATTRIBUTE_STANDARD_ICON) ? g_file_info_get_icon(info)
+                                                                         : NULL;
     g_autofree char* icon_str = icon ? g_icon_to_string(icon) : g_strdup("");
-    g_autofree char* key = g_strdup_printf("%s@%d@%d", icon_str, size, scale);
+    g_autofree char* key = g_strdup_printf("%d@%s@%d@%d", sfe_config()->file_icons, icon_str, size, scale);
 
     ensure_cache();
     cairo_surface_t* surface = g_hash_table_lookup(cache, key);
@@ -56,4 +192,12 @@ cairo_surface_t* sfe_icon_for_info(GFileInfo* info, int size, int scale)
         g_hash_table_insert(cache, g_steal_pointer(&key), surface);
     }
     return cairo_surface_reference(surface);
+}
+
+void sfe_icons_reset(void)
+{
+    if (cache != NULL)
+        g_hash_table_remove_all(cache);
+    /* The views re-fetch their icons on "changed" (connected after us). */
+    g_signal_emit_by_name(gtk_icon_theme_get_default(), "changed");
 }

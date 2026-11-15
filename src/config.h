@@ -46,12 +46,20 @@ typedef struct {
     unsigned applies_to; /* SFE_ACTION_* */
 } SfeUserAction;
 
+/* How file icons are drawn ([general] file_icons). */
+typedef enum {
+    SFE_FILE_ICONS_SYSTEM, /* the icon theme's own colours */
+    SFE_FILE_ICONS_TINTED, /* folders recoloured to the theme's accent */
+    SFE_FILE_ICONS_SYMBOLIC, /* one-colour icons: text colour, folders accent */
+} SfeFileIcons;
+
 typedef struct {
     /* [general] */
     char* start_path; /* may start with "~" */
     bool show_hidden;
     double ui_scale;
     int view; /* SfeViewMode */
+    int file_icons; /* SfeFileIcons */
     int icon_size;
     int sort_by; /* SfeSortKey */
     bool dirs_first;

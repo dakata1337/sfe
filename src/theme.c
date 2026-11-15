@@ -1,5 +1,8 @@
 #include "theme.h"
 
+#include "app.h"
+#include "icons.h"
+
 #include <gtk/gtk.h>
 #include <math.h>
 #include <stdbool.h>
@@ -148,6 +151,8 @@ static gboolean rebuild_palette(gpointer data)
         g_string_append_printf(css, "@define-color %s %s;\n", e->name, value);
     }
     gtk_css_provider_load_from_data(palette_provider, css->str, -1, NULL);
+    if (sfe_config() != NULL && sfe_config()->file_icons != SFE_FILE_ICONS_SYSTEM) /* (none yet at startup) */
+        sfe_icons_reset(); /* tinted / symbolic icons use these colours */
     g_debug("palette:\n%s", css->str);
 
     g_string_free(css, TRUE);
