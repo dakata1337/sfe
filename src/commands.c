@@ -6,6 +6,7 @@
 #include "devices.h"
 #include "dialogs.h"
 #include "fileops.h"
+#include "prefs.h"
 #include "rename.h"
 #include "undo.h"
 #include "split.h"
@@ -737,6 +738,20 @@ static bool run_center(Ctx* c, int argc, char** argv, GError** error)
     return true;
 }
 
+static bool run_settings(Ctx* c, int argc, char** argv, GError** error)
+{
+    const char* const* pages = sfe_preferences_pages();
+    bool known = argc == 1;
+    for (int i = 0; argc == 2 && pages[i] != NULL; i++)
+        known |= strcmp(pages[i], argv[1]) == 0;
+    if (argc > 2 || !known) {
+        g_autofree char* list = g_strjoinv("|", (char**)pages);
+        return fail(error, "usage: settings [%s]", list);
+    }
+    sfe_show_preferences_page(GTK_WIDGET(c->window), argc == 2 ? argv[1] : NULL);
+    return true;
+}
+
 static bool run_command_line(Ctx* c, int argc, char** argv, GError** error)
 {
     (void)argc, (void)argv, (void)error;
@@ -1006,6 +1021,13 @@ static void complete_split(Ctx* c, int argi, char** argv, const char* query, con
 
 WORDS_COMPLETER(complete_on_off, "toggle", "on", "off")
 WORDS_COMPLETER(complete_tree, "toggle", "full", "normal")
+
+static void complete_settings(Ctx* c, int argi, char** argv, const char* query, const char** rank, GPtrArray* out)
+{
+    (void)c, (void)argv, (void)query, (void)rank;
+    if (argi == 1)
+        add_words(out, sfe_preferences_pages(), 0);
+}
 WORDS_COMPLETER(complete_view, "grid", "list")
 WORDS_COMPLETER(complete_cursor, "down", "up", "first", "last", "previous", "next")
 WORDS_COMPLETER(complete_select, "toggle", "all")
@@ -1062,6 +1084,7 @@ static const Command commands[] = {
     { { "sidebar", NO_ALIAS, "on|off|toggle", "show or hide the sidebar (Ctrl+S)" }, complete_on_off, run_sidebar, false },
     { { "tree", NO_ALIAS, "full|normal|toggle", "let the folder tree fill the sidebar, or not" }, complete_tree, run_tree, false },
     { { "view", NO_ALIAS, "grid|list", "the active view's layout" }, complete_view, run_view, false },
+    { { "settings", { "preferences", NULL }, "[<page>]", "the settings window (Ctrl+P), on a page" }, complete_settings, run_settings, false },
     { { "cursor", NO_ALIAS, "down|up|first|last|previous|next", "move the cursor" }, complete_cursor, run_cursor, true },
     { { "select", NO_ALIAS, "toggle|all", "toggle the item under the cursor / select all" }, complete_select, run_select, true },
     { { "visual", NO_ALIAS, "[off|swap]", "visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end" }, complete_visual, run_visual, true },

@@ -668,3 +668,50 @@ menu.sfe-menu {
     color: @sfe_accent;
     font-weight: bold;
 }
+
+/* ---- Settings window: pages on the left ---------------------------------- */
+
+.sfe-settings stacksidebar,
+.sfe-settings stacksidebar list {
+    background-color: @sfe_sidebar_bg;
+    border: none;
+}
+
+.sfe-settings stacksidebar list {
+    padding: 8px 0;
+}
+
+.sfe-settings stacksidebar row {
+    margin: 1px 8px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    color: @sfe_fg;
+}
+
+.sfe-settings stacksidebar row:hover {
+    background-color: alpha(@sfe_fg, 0.06);
+}
+
+.sfe-settings stacksidebar row:selected {
+    background-color: alpha(@sfe_accent, 0.22);
+    color: @sfe_fg;
+}
+
+.sfe-settings > box > box > separator {
+    background-color: alpha(@sfe_fg, 0.08);
+    min-width: 1px;
+}
+
+.sfe-settings treeview.view {
+    background-color: @sfe_bg;
+}
+
+.sfe-settings treeview.view:selected {
+    background-color: alpha(@sfe_accent, 0.22);
+    color: @sfe_fg;
+}
+
+.sfe-settings stacksidebar separator {
+    min-height: 0;
+    background-color: transparent;
+}
