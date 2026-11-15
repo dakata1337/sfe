@@ -71,6 +71,7 @@ core_src = files(
   'src/history.c',
   'src/keymap.c',
   'src/opener.c',
+  'src/portalconf.c',
   'src/rename.c',
   'src/thumbs.c',
   'src/trash.c',

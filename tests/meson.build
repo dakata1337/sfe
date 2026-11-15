@@ -71,3 +71,8 @@ appstreamcli = find_program('appstreamcli', required: false)
 if appstreamcli.found()
   test('metainfo', appstreamcli, args: ['validate', '--no-net', meson.project_source_root() / 'data' / 'org.sfe.SimpleFileExplorer.metainfo.xml'])
 endif
+
+test_portalconf = executable('test-portalconf', 'test_portalconf.c',
+  dependencies: core_dep,
+)
+test('portalconf', test_portalconf)

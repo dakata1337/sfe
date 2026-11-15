@@ -6,6 +6,7 @@
 #include "icons.h"
 #include "theme.h"
 #include "opener.h"
+#include "portalconf.h"
 #include <string.h>
 
 #define DIALOG_KEY "sfe-preferences"
@@ -317,6 +318,47 @@ static GtkWidget* options_page(const char* section, const char* text)
     return grid;
 }
 
+/* "Use sfe for Open / Save dialogs": the portal's FileChooser line. */
+static bool reverting; /* our own correction of the switch */
+
+static void on_file_dialogs(GObject* sw, GParamSpec* pspec, gpointer data)
+{
+    (void)pspec, (void)data;
+    if (reverting)
+        return;
+    bool use = gtk_switch_get_active(GTK_SWITCH(sw));
+    g_autofree char* desktop = sfe_portal_desktop();
+    g_autofree char* path = sfe_portal_conf_path(desktop);
+    g_autofree char* seed = sfe_portal_conf_seed(desktop);
+    g_autoptr(GError) error = NULL;
+    if (!sfe_portal_conf_set(path, seed, use, &error)) {
+        sfe_show_error(GTK_WIDGET(sw), "Cannot change the file dialogs", error->message);
+        reverting = true;
+        gtk_switch_set_active(GTK_SWITCH(sw), !use);
+        reverting = false;
+        return;
+    }
+    sfe_portal_restart(); /* it reads the file again on the next dialog */
+}
+
+static GtkWidget* file_dialogs_switch(void)
+{
+    GtkWidget* sw = gtk_switch_new();
+    g_autofree char* desktop = sfe_portal_desktop();
+    g_autofree char* path = sfe_portal_conf_path(desktop);
+    gtk_switch_set_active(GTK_SWITCH(sw), sfe_portal_conf_uses_sfe(path));
+    gtk_widget_set_halign(sw, GTK_ALIGN_END);
+    if (!sfe_portal_installed()) {
+        gtk_widget_set_sensitive(sw, FALSE);
+        gtk_widget_set_tooltip_text(sw, "Install sfe (meson install or the package) to use this.");
+    } else {
+        g_autofree char* tip = g_strdup_printf("Sets org.freedesktop.impl.portal.FileChooser=sfe in %s", path);
+        gtk_widget_set_tooltip_text(sw, tip);
+    }
+    g_signal_connect(sw, "notify::active", G_CALLBACK(on_file_dialogs), NULL);
+    return sw;
+}
+
 static GtkWidget* system_page(void)
 {
     GtkWidget* grid = page_grid();
@@ -328,6 +370,14 @@ static GtkWidget* system_page(void)
     show_default_state(fm_button);
     g_signal_connect(fm_button, "clicked", G_CALLBACK(on_make_default), NULL);
     add_row(GTK_GRID(grid), &row, fm_label, fm_button);
+
+    GtkWidget* dialogs_label = gtk_label_new("Use sfe for Open / Save dialogs");
+    gtk_widget_set_tooltip_text(dialogs_label, "Other programs' file dialogs (browsers, Flatpak apps) open in sfe");
+    add_row(GTK_GRID(grid), &row, dialogs_label, file_dialogs_switch());
+    gtk_grid_attach(GTK_GRID(grid),
+        note("Programs that ask the desktop portal for a file dialog get sfe instead. Firefox and Zen ask "
+             "it only with about:config → widget.use-xdg-desktop-portal.file-picker set to 1."),
+        0, row++, 2, 1);
 
     GtkWidget* open = gtk_button_new_with_label("Open config.toml");
     g_signal_connect(open, "clicked", G_CALLBACK(on_open_config), NULL);
