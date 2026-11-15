@@ -25,6 +25,7 @@ struct _SfeCommandBar {
     guint refresh_source; /* a refresh after typing */
     bool active;
     bool showing_error;
+    bool clearing; /* rows are being removed: "row-selected" leaves them alone */
 };
 
 G_DEFINE_TYPE(SfeCommandBar, sfe_command_bar, GTK_TYPE_BOX)
@@ -143,17 +144,29 @@ static GtkWidget* candidate_row(SfeCommandBar* self, SfeCandidate* c)
 
 static void on_row_selected(GtkListBox* list, GtkListBoxRow* selected, gpointer data)
 {
+    if (((SfeCommandBar*)data)->clearing)
+        return;
     g_autoptr(GList) rows = gtk_container_get_children(GTK_CONTAINER(list));
     for (GList* l = rows; l != NULL; l = l->next)
         mark_row(data, l->data, l->data == (gpointer)selected);
 }
 
-static void fill_list(SfeCommandBar* self)
+/* Empties the list. Rows point at their candidates, so this comes before
+ * the candidates are freed; removing the selected row emits "row-selected",
+ * which must not touch the rows on their way out. */
+static void clear_rows(SfeCommandBar* self)
 {
+    self->clearing = true;
     GList* rows = gtk_container_get_children(GTK_CONTAINER(self->list));
     for (GList* l = rows; l != NULL; l = l->next)
         gtk_widget_destroy(l->data);
     g_list_free(rows);
+    self->clearing = false;
+}
+
+static void fill_list(SfeCommandBar* self)
+{
+    clear_rows(self);
 
     guint n = self->candidates ? MIN(self->candidates->len, MAX_ROWS) : 0;
     for (guint i = 0; i < n; i++)
@@ -170,6 +183,7 @@ static void refresh(SfeCommandBar* self)
     int pos = gtk_editable_get_position(GTK_EDITABLE(self->entry));
     int cursor = (int)(g_utf8_offset_to_pointer(text, pos) - text);
 
+    clear_rows(self); /* before the candidates they point at go */
     g_clear_pointer(&self->candidates, g_ptr_array_unref);
     g_free(self->base);
     self->base = g_strdup(text);
@@ -281,6 +295,7 @@ static void close_bar(SfeCommandBar* self)
     self->active = false;
     self->showing_error = false;
     g_clear_handle_id(&self->refresh_source, g_source_remove);
+    clear_rows(self);
     g_clear_pointer(&self->candidates, g_ptr_array_unref);
     fill_list(self);
     gtk_widget_hide(GTK_WIDGET(self));
