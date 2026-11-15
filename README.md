@@ -21,8 +21,12 @@ keyboard shortcut.
 
 ## Building and installing
 
+Get the source of the latest release from the
+[releases page](https://github.com/dakata1337/sfe/releases), or clone the
+repository for the development version. Then:
+
 ```sh
-meson setup build --prefix=/usr
+meson setup build --prefix=/usr     # optimized release build
 ninja -C build
 meson test -C build
 ./build/sfe [DIRECTORY...]          # try it without installing
@@ -31,19 +35,20 @@ sudo meson install -C build         # sfe, its .desktop file, icon, man page and
 
 `sudo ninja -C build uninstall` removes it again. Installing adds sfe to
 application launchers and lets *Settings → System* make it the default file
-manager.
+manager. For working on sfe, `meson setup build -Dbuildtype=debug` gives a
+debug build.
 
-On Arch / Artix, `packaging/arch/PKGBUILD` builds a package with all runtime
-dependencies listed:
+On Arch / Artix there are two PKGBUILDs with all runtime dependencies
+listed; the packages replace each other:
 
 ```sh
-cd packaging/arch
-makepkg -si
+cd packaging/arch/sfe && makepkg -si       # sfe: the latest release from GitHub
+cd packaging/arch/sfe-dev && makepkg -si   # sfe-dev: this checkout, as it is
 ```
 
 Runtime dependencies: gtk3, glib2, udisks2 + polkit (mounting), xdg-utils
 (opening files) and ffmpeg (video thumbnails); archive tools and thumbnailers
-are optional. See the PKGBUILD for the full, annotated list.
+are optional. See the PKGBUILDs for the full, annotated list.
 
 ## Documentation
 

@@ -1,8 +1,11 @@
 project('sfe', 'c',
-  version: '0.1.0',
+  version: '1.0.0',
   meson_version: '>= 1.0',
   default_options: [
-    'debug=true',
+    # Optimized (-O3), no debug info, NDEBUG; for development:
+    #   meson setup build -Dbuildtype=debug
+    'buildtype=release',
+    'b_ndebug=if-release',
     'c_std=c17',
     'warning_level=3',
     # 'b_sanitize=address,undefined',
