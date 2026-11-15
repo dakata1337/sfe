@@ -10,7 +10,7 @@
 # a new library or tool.
 
 pkgname=sfe-dev
-pkgver=1.0.0
+pkgver=b2cd1cb
 pkgrel=1
 pkgdesc='Simple File Explorer - a minimal, Wayland-native GTK3 file manager (development build)'
 arch=('x86_64' 'aarch64' 'i686' 'armv7h')
@@ -57,16 +57,11 @@ sha256sums=()
 # The project root, three levels above this PKGBUILD.
 _root="$(realpath "${startdir}/../../..")"
 
-# 1.0.0.r12.gabc1234: the last release tag, commits since, the commit.
+# The commit being built, e.g. b2cd1cb (uncommitted changes are built too).
+# A bare hash does not sort: pacman cannot tell an older build from a newer
+# one and may call an update a "downgrade" (it installs it anyway).
 pkgver() {
-  cd "${_root}"
-  if git describe --long --tags --match 'v*' >/dev/null 2>&1; then
-    git describe --long --tags --match 'v*' | sed -E 's/^v//; s/-([0-9]+)-g/.r\1.g/'
-  else
-    local version
-    version=$(sed -nE "s/^\s*version:\s*'([^']+)'.*/\1/p" meson.build | head -n1)
-    printf '%s.r%s.g%s' "${version}" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
-  fi
+  git -C "${_root}" rev-parse --short HEAD
 }
 
 build() {
