@@ -743,14 +743,49 @@ GPtrArray* sfe_pane_get_entries(SfePane* self)
     return entries;
 }
 
+static GList* selected_paths(SfePane* self)
+{
+    if (self->view == SFE_VIEW_GRID)
+        return gtk_icon_view_get_selected_items(GTK_ICON_VIEW(self->grid));
+    return gtk_tree_selection_get_selected_rows(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)), NULL);
+}
+
+static void select_paths(SfePane* self, GList* paths)
+{
+    if (self->view == SFE_VIEW_GRID) {
+        gtk_icon_view_unselect_all(GTK_ICON_VIEW(self->grid));
+        for (GList* l = paths; l != NULL; l = l->next)
+            gtk_icon_view_select_path(GTK_ICON_VIEW(self->grid), l->data);
+    } else {
+        GtkTreeSelection* selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list));
+        gtk_tree_selection_unselect_all(selection);
+        for (GList* l = paths; l != NULL; l = l->next)
+            gtk_tree_selection_select_path(selection, l->data);
+    }
+}
+
 /* The views' own keyboard movement ("move-cursor"; it needs the focus).
- * `modify` moves the cursor without selecting, like Ctrl+arrow. */
+ * `modify` moves the cursor without selecting, like Ctrl+arrow.
+ *
+ * GTK 3's signal is (step, count) -> handled; some versions add (extend,
+ * modify). A move with the plain signal selects the row it lands on, so for
+ * `modify` the selection is put back afterwards. */
 static void move_cursor(SfePane* self, GtkMovementStep step, int count, bool modify)
 {
     GtkWidget* view = active_view(self);
     gboolean handled = FALSE;
+    GSignalQuery query;
+    g_signal_query(g_signal_lookup("move-cursor", G_OBJECT_TYPE(view)), &query);
+    GList* keep = modify ? selected_paths(self) : NULL;
+
     gtk_widget_grab_focus(view);
-    g_signal_emit_by_name(view, "move-cursor", step, count, FALSE, modify, &handled);
+    if (query.n_params >= 4)
+        g_signal_emit_by_name(view, "move-cursor", step, count, FALSE, modify, &handled);
+    else
+        g_signal_emit_by_name(view, "move-cursor", step, count, &handled);
+    if (modify)
+        select_paths(self, keep);
+    g_list_free_full(keep, (GDestroyNotify)gtk_tree_path_free);
 }
 
 static void apply_visual(SfePane* self);
@@ -800,6 +835,15 @@ void sfe_pane_toggle_cursor_item(SfePane* self)
         move_cursor(self, GTK_MOVEMENT_VISUAL_POSITIONS, 1, true); /* the next item, not the next row */
     } else {
         GtkTreeSelection* selection = gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list));
+        GtkTreePath* cursor = NULL;
+        gtk_tree_view_get_cursor(GTK_TREE_VIEW(self->list), &cursor, NULL);
+        if (cursor == NULL) { /* no cursor yet: a move would only put it on row 0 */
+            GList* keep = selected_paths(self);
+            gtk_tree_view_set_cursor(GTK_TREE_VIEW(self->list), path, NULL, FALSE);
+            select_paths(self, keep);
+            g_list_free_full(keep, (GDestroyNotify)gtk_tree_path_free);
+        }
+        gtk_tree_path_free(cursor);
         if (gtk_tree_selection_path_is_selected(selection, path))
             gtk_tree_selection_unselect_path(selection, path);
         else
