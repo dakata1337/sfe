@@ -14,6 +14,7 @@
  * loading, a GFileMonitor keeps the store in sync with the disk. */
 
 #include "config.h"
+#include "filefilter.h"
 #include <gtk/gtk.h>
 
 enum {
@@ -55,6 +56,10 @@ GFile* sfe_dir_model_get_dir(SfeDirModel* self);
 GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self);
 
 void sfe_dir_model_set_show_hidden(SfeDirModel* self, bool show);
+
+/* A file dialog's type filter: only matching files (and every folder) are
+ * shown. Borrowed: keep it alive while set; NULL shows everything. */
+void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter);
 
 /* Shows only files whose name matches `query` (fuzzy, see fuzzy.h), best
  * match first; NULL or "" shows everything again. Emits "loaded" with the

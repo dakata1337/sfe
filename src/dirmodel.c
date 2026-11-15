@@ -1,6 +1,7 @@
 #include "dirmodel.h"
 
 #include "fuzzy.h"
+#include "filefilter.h"
 #include "icons.h"
 #include <cairo-gobject.h>
 #include <string.h>
@@ -19,6 +20,7 @@ struct _SfeDirModel {
     GHashTable* thumbs; /* file name -> GdkPixbuf*, or NO_THUMB (none to be had) */
     bool building; /* filling a fresh store, not reacting to changes */
     char* query; /* search filter, NULL when not searching */
+    const SfeFileFilter* filter; /* a file dialog's type filter (borrowed), or NULL */
     GFileMonitor* monitor;
     GCancellable* cancel; /* cancels the load and monitor queries of `dir` */
 
@@ -166,6 +168,10 @@ static bool passes_hidden(SfeDirModel* self, GFileInfo* info)
 static bool is_shown(SfeDirModel* self, GFileInfo* info)
 {
     if (!passes_hidden(self, info))
+        return false;
+    if (self->filter != NULL && !info_is_dir(info) /* folders stay, to walk into */
+        && !sfe_file_filter_matches(self->filter, g_file_info_get_display_name(info),
+            g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE)))
         return false;
     if (self->query == NULL)
         return true;
@@ -589,6 +595,14 @@ void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* total)
     g_hash_table_iter_init(&it, self->infos);
     while (g_hash_table_iter_next(&it, NULL, &info))
         *total += passes_hidden(self, info);
+}
+
+void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter)
+{
+    if (self->filter == filter)
+        return;
+    self->filter = filter;
+    rebuild_store(self);
 }
 
 void sfe_dir_model_set_show_hidden(SfeDirModel* self, bool show)

@@ -6,6 +6,7 @@
  * Signals: "directory-changed", "split" (SfeSplitKind), "close". */
 
 #include "config.h"
+#include "filefilter.h"
 #include <gtk/gtk.h>
 #include <stdbool.h>
 
@@ -47,6 +48,9 @@ GList* sfe_pane_get_selected_files(SfePane* self);
 /* Every file shown, in display order (same freeing as above). */
 GList* sfe_pane_get_all_files(SfePane* self);
 void sfe_pane_select_all(SfePane* self);
+
+/* A file dialog's type filter for this view (borrowed), or NULL. */
+void sfe_pane_set_file_filter(SfePane* self, const SfeFileFilter* filter);
 
 /* A row of the view, for command line completion. */
 typedef struct {

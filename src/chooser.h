@@ -6,6 +6,10 @@
  *   sfe --choose folder [--folder DIR] ...
  *   sfe --choose save   [--name NAME] [--folder DIR] ...
  *   ... [--parent wayland:HANDLE | x11:XID]  (attach to the asking program)
+ *   ... [--filters 'a(sa(us)) text' [--current-filter N]] [--choices 'a(ssa(ss)s) text']
+ *
+ * Before the URIs, lines starting with "#" answer the rest: "#filter N"
+ * (the filter in use) and "#choice ID VALUE" (each option's value).
  *
  * A separate sfe instance opens one window with a bar at the bottom
  * ([name] Cancel / Open). What is chosen is printed to standard output as
@@ -28,6 +32,9 @@ typedef struct {
     char* name; /* save: the suggested file name, or NULL */
     char* accept_label; /* "Open", "Save", "Upload" ..., or NULL */
     char* parent; /* the asking program's window: "wayland:HANDLE" / "x11:XID", or NULL */
+    char* filters; /* type filters, GVariant text a(sa(us)), or NULL */
+    int current_filter; /* index into them, -1 for the first */
+    char* choices; /* extra options, GVariant text a(ssa(ss)s), or NULL */
 } SfeChooser;
 
 void sfe_chooser_free(SfeChooser* chooser);

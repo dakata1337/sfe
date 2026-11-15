@@ -12,6 +12,8 @@ void sfe_chooser_free(SfeChooser* chooser)
     g_free(chooser->name);
     g_free(chooser->accept_label);
     g_free(chooser->parent);
+    g_free(chooser->filters);
+    g_free(chooser->choices);
     g_free(chooser);
 }
 

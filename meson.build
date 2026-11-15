@@ -66,6 +66,7 @@ core_src = files(
   'src/cmdline.c',
   'src/config.c',
   'src/devices.c',
+  'src/filefilter.c',
   'src/fileops.c',
   'src/fuzzy.c',
   'src/history.c',

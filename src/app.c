@@ -325,6 +325,10 @@ static int sfe_application_handle_local_options(GApplication* gapp, GVariantDict
         g_variant_dict_lookup(options, "name", "s", &c->name);
         g_variant_dict_lookup(options, "accept-label", "s", &c->accept_label);
         g_variant_dict_lookup(options, "parent", "s", &c->parent);
+        g_variant_dict_lookup(options, "filters", "s", &c->filters);
+        g_variant_dict_lookup(options, "choices", "s", &c->choices);
+        c->current_filter = -1;
+        g_variant_dict_lookup(options, "current-filter", "i", &c->current_filter);
         app->chooser = c;
         app->exit_status = 1; /* cancelled unless something is chosen */
         /* Standard output carries only the answer: a private copy of it is
@@ -373,6 +377,9 @@ static void sfe_application_init(SfeApplication* app)
         { "name", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose save: the suggested file name", "NAME" },
         { "accept-label", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose: the label of the Open / Save button", "LABEL" },
         { "parent", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose: the asking program's window (wayland:HANDLE or x11:XID)", "WINDOW" },
+        { "filters", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose: file type filters, as GVariant text of type a(sa(us))", "FILTERS" },
+        { "current-filter", 0, 0, G_OPTION_ARG_INT, NULL, "With --filters: the one to start with (0, 1, ...)", "N" },
+        { "choices", 0, 0, G_OPTION_ARG_STRING, NULL, "With --choose: extra options, as GVariant text of type a(ssa(ss)s)", "CHOICES" },
         { NULL, 0, 0, 0, NULL, NULL, NULL },
     };
     g_application_add_main_option_entries(G_APPLICATION(app), entries);

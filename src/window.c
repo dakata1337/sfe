@@ -38,6 +38,9 @@ struct _SfeWindow {
     GtkWidget* content; /* panes over the operations bar (and the chooser bar) */
     const SfeChooser* chooser; /* chooser mode (sfe --choose), or NULL */
     GtkWidget* chooser_name; /* save: the file name entry */
+    GPtrArray* filters; /* SfeFileFilter*, or NULL */
+    int filter_index; /* the one in use */
+    GPtrArray* choice_widgets; /* GtkCheckButton / GtkComboBoxText, "sfe-choice-id" set */
     bool chosen; /* the answer was printed */
     SfeKeymap* keymap; /* normal-mode keys: defaults + config [keys] */
     SfeKeymap* visual_keymap; /* looked up first in visual mode: [keys.visual] */
@@ -128,10 +131,14 @@ static void follow_active_pane(SfeWindow* win)
 
 static void update_mode(SfeWindow* win);
 
+static void apply_filter(SfeWindow* win);
+
 static void on_directory_changed(SfeSplit* split, SfePane* pane, gpointer data)
 {
     (void)split;
     SfeWindow* win = SFE_WINDOW(data);
+    if (win->filters != NULL) /* a view opened later gets the filter too */
+        apply_filter(win);
     if (pane == sfe_window_get_active_pane(win))
         follow_active_pane(win);
 }
@@ -480,6 +487,8 @@ static void sfe_window_dispose(GObject* object)
     g_clear_pointer(&win->pending, g_ptr_array_unref);
     g_clear_pointer(&win->keymap, sfe_keymap_free);
     g_clear_pointer(&win->visual_keymap, sfe_keymap_free);
+    g_clear_pointer(&win->filters, g_ptr_array_unref);
+    g_clear_pointer(&win->choice_widgets, g_ptr_array_unref);
     G_OBJECT_CLASS(sfe_window_parent_class)->dispose(object);
 }
 
@@ -577,6 +586,20 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
 /* Prints the answer (file URIs, one per line) and ends: exit status 0. */
 static void finish_choosing(SfeWindow* win, GList* files)
 {
+    /* "#" lines first: the filter in use and the options' values */
+    if (win->filters != NULL && win->filters->len > 0) {
+        g_autofree char* line = g_strdup_printf("#filter %d", win->filter_index);
+        sfe_application_answer(sfe_app(), line);
+    }
+    for (guint i = 0; win->choice_widgets != NULL && i < win->choice_widgets->len; i++) {
+        GtkWidget* w = g_ptr_array_index(win->choice_widgets, i);
+        const char* id = g_object_get_data(G_OBJECT(w), "sfe-choice-id");
+        const char* value = GTK_IS_TOGGLE_BUTTON(w)
+            ? (gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(w)) ? "true" : "false")
+            : gtk_combo_box_get_active_id(GTK_COMBO_BOX(w));
+        g_autofree char* line = g_strdup_printf("#choice %s %s", id, value ? value : "");
+        sfe_application_answer(sfe_app(), line);
+    }
     for (GList* l = files; l != NULL; l = l->next) {
         g_autofree char* uri = g_file_get_uri(l->data);
         sfe_application_answer(sfe_app(), uri);
@@ -718,6 +741,84 @@ static void attach_to_parent(GtkWidget* widget, gpointer data)
 #endif
 }
 
+/* The type filter in use, for every view. */
+static void apply_filter(SfeWindow* win)
+{
+    const SfeFileFilter* filter = win->filters && win->filter_index >= 0 && win->filter_index < (int)win->filters->len
+        ? g_ptr_array_index(win->filters, win->filter_index)
+        : NULL;
+    for (int i = 0; i < sfe_split_get_n_panes(win->split); i++)
+        sfe_pane_set_file_filter(sfe_split_get_pane(win->split, i), filter);
+}
+
+static void on_filter_changed(GtkComboBox* combo, gpointer data)
+{
+    SfeWindow* win = data;
+    win->filter_index = gtk_combo_box_get_active(combo);
+    apply_filter(win);
+}
+
+/* "Images ▾": the filters the program offered. */
+static GtkWidget* filter_combo(SfeWindow* win)
+{
+    g_autoptr(GError) error = NULL;
+    win->filters = sfe_file_filters_parse(win->chooser->filters, &error);
+    if (win->filters == NULL) {
+        g_warning("chooser: filters: %s", error->message);
+        return NULL;
+    }
+    if (win->filters->len == 0)
+        return NULL;
+    GtkWidget* combo = gtk_combo_box_text_new();
+    for (guint i = 0; i < win->filters->len; i++)
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), ((SfeFileFilter*)g_ptr_array_index(win->filters, i))->name);
+    int start = win->chooser->current_filter;
+    win->filter_index = start >= 0 && start < (int)win->filters->len ? start : 0;
+    gtk_combo_box_set_active(GTK_COMBO_BOX(combo), win->filter_index);
+    sfe_style_combo_box(combo);
+    g_signal_connect(combo, "changed", G_CALLBACK(on_filter_changed), win);
+    apply_filter(win);
+    return combo;
+}
+
+/* The program's extra options: a check box for a yes / no one, else a
+ * drop-down of its values. */
+static void add_choices(SfeWindow* win, GtkBox* row)
+{
+    g_autoptr(GError) error = NULL;
+    g_autoptr(GVariant) v = g_variant_parse(G_VARIANT_TYPE("a(ssa(ss)s)"), win->chooser->choices, NULL, NULL, &error);
+    if (v == NULL) {
+        g_warning("chooser: choices: %s", error->message);
+        return;
+    }
+    win->choice_widgets = g_ptr_array_new();
+    GVariantIter iter;
+    const char *id, *label, *initial;
+    GVariantIter* values;
+    g_variant_iter_init(&iter, v);
+    while (g_variant_iter_next(&iter, "(&s&sa(ss)&s)", &id, &label, &values, &initial)) {
+        GtkWidget* widget;
+        if (g_variant_iter_n_children(values) == 0) {
+            widget = gtk_check_button_new_with_label(label);
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(widget), g_strcmp0(initial, "true") == 0);
+            gtk_box_pack_start(row, widget, FALSE, FALSE, 0);
+        } else {
+            widget = gtk_combo_box_text_new();
+            const char *value_id, *value_label;
+            while (g_variant_iter_next(values, "(&s&s)", &value_id, &value_label))
+                gtk_combo_box_text_append(GTK_COMBO_BOX_TEXT(widget), value_id, value_label);
+            if (!gtk_combo_box_set_active_id(GTK_COMBO_BOX(widget), initial))
+                gtk_combo_box_set_active(GTK_COMBO_BOX(widget), 0);
+            sfe_style_combo_box(widget);
+            gtk_box_pack_start(row, gtk_label_new(label), FALSE, FALSE, 0);
+            gtk_box_pack_start(row, widget, FALSE, FALSE, 0);
+        }
+        g_variant_iter_free(values);
+        g_object_set_data_full(G_OBJECT(widget), "sfe-choice-id", g_strdup(id), g_free);
+        g_ptr_array_add(win->choice_widgets, widget);
+    }
+}
+
 void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
 {
     static const char* const titles[] = { "Open", "Save", "Select Folder" };
@@ -733,30 +834,43 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
     }
     gtk_window_set_default_size(GTK_WINDOW(win), 900, 600);
 
-    GtkWidget* bar = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    /* [Name  ____________]                      (save only)
+     * [Images ▾] [options] hint ...  [Cancel] [Open] */
+    GtkWidget* bar = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_style_context_add_class(gtk_widget_get_style_context(bar), "sfe-chooser-bar");
     if (chooser->mode == SFE_CHOOSE_SAVE) {
+        GtkWidget* name_row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
         win->chooser_name = gtk_entry_new();
         gtk_entry_set_text(GTK_ENTRY(win->chooser_name), chooser->name ? chooser->name : "");
         gtk_entry_set_placeholder_text(GTK_ENTRY(win->chooser_name), "File name");
         g_signal_connect_swapped(win->chooser_name, "activate", G_CALLBACK(accept), win);
-        gtk_box_pack_start(GTK_BOX(bar), gtk_label_new("Name"), FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(bar), win->chooser_name, TRUE, TRUE, 0);
-    } else {
+        gtk_box_pack_start(GTK_BOX(name_row), gtk_label_new("Name"), FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(name_row), win->chooser_name, TRUE, TRUE, 0);
+        gtk_box_pack_start(GTK_BOX(bar), name_row, FALSE, FALSE, 0);
+    }
+    GtkWidget* row = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    GtkWidget* combo = chooser->filters ? filter_combo(win) : NULL;
+    if (combo != NULL)
+        gtk_box_pack_start(GTK_BOX(row), combo, FALSE, FALSE, 0);
+    if (chooser->choices != NULL)
+        add_choices(win, GTK_BOX(row));
+    if (chooser->mode != SFE_CHOOSE_SAVE) {
         GtkWidget* hint = gtk_label_new(chooser->mode == SFE_CHOOSE_FOLDER
                 ? "Pick a folder, or Select for the one shown"
                 : chooser->multiple ? "Pick files (Ctrl+click for several)" : "Pick a file");
         gtk_style_context_add_class(gtk_widget_get_style_context(hint), "sfe-placeholder");
         gtk_label_set_xalign(GTK_LABEL(hint), 0);
-        gtk_box_pack_start(GTK_BOX(bar), hint, TRUE, TRUE, 0);
+        gtk_label_set_ellipsize(GTK_LABEL(hint), PANGO_ELLIPSIZE_END);
+        gtk_box_pack_start(GTK_BOX(row), hint, TRUE, TRUE, 0);
     }
     GtkWidget* cancel = gtk_button_new_with_label("Cancel");
     GtkWidget* ok = gtk_button_new_with_label(chooser->accept_label ? chooser->accept_label : labels[chooser->mode]);
     gtk_style_context_add_class(gtk_widget_get_style_context(ok), "suggested-action");
     g_signal_connect(cancel, "clicked", G_CALLBACK(on_cancel), win);
     g_signal_connect(ok, "clicked", G_CALLBACK(on_accept), win);
-    gtk_box_pack_end(GTK_BOX(bar), ok, FALSE, FALSE, 0);
-    gtk_box_pack_end(GTK_BOX(bar), cancel, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(row), ok, FALSE, FALSE, 0);
+    gtk_box_pack_end(GTK_BOX(row), cancel, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(bar), row, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(win->content), bar, FALSE, FALSE, 0);
     gtk_widget_show_all(bar);
     if (win->chooser_name != NULL) {

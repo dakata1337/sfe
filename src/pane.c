@@ -1083,6 +1083,11 @@ GList* sfe_pane_get_selected_files(SfePane* self)
     return g_list_reverse(files);
 }
 
+void sfe_pane_set_file_filter(SfePane* self, const SfeFileFilter* filter)
+{
+    sfe_dir_model_set_filter(self->model, filter);
+}
+
 void sfe_pane_select_all(SfePane* self)
 {
     if (self->view == SFE_VIEW_GRID)

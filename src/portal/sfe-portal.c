@@ -10,8 +10,8 @@
  *   org.freedesktop.impl.portal.FileChooser=sfe
  *
  * For each request this runs `sfe --choose ...` (see src/chooser.h) and
- * returns the URIs it prints. Filters and "choices" are not supported yet.
- * GIO only. */
+ * returns the URIs it prints, with the filter in use and the values of the
+ * program's extra options ("choices"). GIO only. */
 
 #include <gio/gio.h>
 #include <stdbool.h>
@@ -65,6 +65,7 @@ typedef struct {
     GSubprocess* chooser;
     guint request_id; /* the Request object at the handle path */
     GPtrArray* save_names; /* SaveFiles: names to put into the chosen folder */
+    GVariant* filters; /* a(sa(us)) as asked, to answer current_filter, or NULL */
 } Dialog;
 
 static void dialog_free(Dialog* d)
@@ -74,6 +75,7 @@ static void dialog_free(Dialog* d)
     g_clear_object(&d->chooser);
     g_object_unref(d->connection);
     g_clear_pointer(&d->save_names, g_ptr_array_unref);
+    g_clear_pointer(&d->filters, g_variant_unref);
     g_free(d);
 }
 
@@ -110,11 +112,28 @@ static void on_chooser_done(GObject* source, GAsyncResult* res, gpointer data)
         dialog_free(d);
         return;
     }
-    GVariantBuilder uris;
+    GVariantBuilder uris, choices;
     g_variant_builder_init(&uris, G_VARIANT_TYPE_STRING_ARRAY);
+    g_variant_builder_init(&choices, G_VARIANT_TYPE("a(ss)"));
+    bool any_choice = false;
+    int filter = -1;
     g_auto(GStrv) lines = g_strsplit(out ? out : "", "\n", -1);
     for (int i = 0; lines[i] != NULL; i++) {
         if (*lines[i] == '\0')
+            continue;
+        if (g_str_has_prefix(lines[i], "#filter ")) { /* the filter in use */
+            filter = (int)g_ascii_strtoll(lines[i] + strlen("#filter "), NULL, 10);
+            continue;
+        }
+        if (g_str_has_prefix(lines[i], "#choice ")) { /* "#choice ID VALUE" */
+            g_auto(GStrv) parts = g_strsplit(lines[i] + strlen("#choice "), " ", 2);
+            if (parts[0] != NULL) {
+                g_variant_builder_add(&choices, "(ss)", parts[0], parts[1] ? parts[1] : "");
+                any_choice = true;
+            }
+            continue;
+        }
+        if (lines[i][0] == '#')
             continue;
         if (d->save_names == NULL) {
             g_variant_builder_add(&uris, "s", lines[i]);
@@ -132,6 +151,13 @@ static void on_chooser_done(GObject* source, GAsyncResult* res, gpointer data)
     GVariantBuilder results;
     g_variant_builder_init(&results, G_VARIANT_TYPE_VARDICT);
     g_variant_builder_add(&results, "{sv}", "uris", g_variant_builder_end(&uris));
+    GVariant* choice_list = g_variant_builder_end(&choices);
+    if (any_choice)
+        g_variant_builder_add(&results, "{sv}", "choices", choice_list);
+    else
+        g_variant_unref(g_variant_ref_sink(choice_list));
+    if (d->filters != NULL && filter >= 0 && filter < (int)g_variant_n_children(d->filters))
+        g_variant_builder_add(&results, "{sv}", "current_filter", g_variant_get_child_value(d->filters, filter));
     reply(d, RESPONSE_OK, g_variant_builder_end(&results));
     dialog_free(d);
 }
@@ -220,6 +246,29 @@ static void on_method_call(GDBusConnection* connection, const char* sender, cons
     if (parent != NULL && *parent != '\0') { /* "wayland:HANDLE" / "x11:XID": sfe attaches to it */
         g_ptr_array_add(argv, g_strdup("--parent"));
         g_ptr_array_add(argv, g_strdup(parent));
+    }
+    /* File type filters, and the one to start with (it must be one of them). */
+    d->filters = g_variant_lookup_value(options, "filters", G_VARIANT_TYPE("a(sa(us))"));
+    if (d->filters != NULL && g_variant_n_children(d->filters) > 0) {
+        g_ptr_array_add(argv, g_strdup("--filters"));
+        g_ptr_array_add(argv, g_variant_print(d->filters, TRUE));
+        g_autoptr(GVariant) current = g_variant_lookup_value(options, "current_filter", G_VARIANT_TYPE("(sa(us))"));
+        for (gsize i = 0; current != NULL && i < g_variant_n_children(d->filters); i++) {
+            g_autoptr(GVariant) f = g_variant_get_child_value(d->filters, i);
+            if (g_variant_equal(f, current)) {
+                g_ptr_array_add(argv, g_strdup("--current-filter"));
+                g_ptr_array_add(argv, g_strdup_printf("%" G_GSIZE_FORMAT, i));
+                break;
+            }
+        }
+    } else {
+        g_clear_pointer(&d->filters, g_variant_unref);
+    }
+    /* Extra options (check boxes, drop-downs), answered as "choices". */
+    g_autoptr(GVariant) choice_list = g_variant_lookup_value(options, "choices", G_VARIANT_TYPE("a(ssa(ss)s)"));
+    if (choice_list != NULL && g_variant_n_children(choice_list) > 0) {
+        g_ptr_array_add(argv, g_strdup("--choices"));
+        g_ptr_array_add(argv, g_variant_print(choice_list, TRUE));
     }
     g_autofree char* accept = option_string(options, "accept_label");
     if (accept != NULL && *accept != '\0') {
