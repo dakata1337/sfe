@@ -35,7 +35,7 @@ makepkg -si
 ```
 
 Runtime dependencies: gtk3, glib2, udisks2 + polkit (mounting), xdg-utils
-(opening files) and ffmpeg (video thumbnails, upcoming). See the PKGBUILD
+(opening files) and ffmpeg (video thumbnails). See the PKGBUILD
 for the full, annotated list.
 
 ## License

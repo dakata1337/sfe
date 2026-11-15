@@ -81,7 +81,7 @@ sort_by      = "name"         # name | size | modified | type
 dirs_first   = true
 confirm_delete = true
 thumbnails   = true
-thumbnail_max_size_mb = 50
+thumbnail_max_mb = 50
 
 [sidebar]
 bookmarks = ["~/Downloads", "~/Documents"]
@@ -243,5 +243,5 @@ Every milestone also updates the user guide (`docs/guide/index.md`) and retakes 
 6. ✅ **Rename and mass rename:** name prompt (F2), pattern dialog with template / find-replace / case / counter and live conflict preview (F2 on several, Shift+F2), two-pass rename with rollback. The directory model dropped GtkTreeModelFilter (it emitted criticals when shown rows were removed).
 7. ✅ **Fuzzy search overlay:** tiered `fuzzy.c` scorer with unit tests; the directory model filters and orders by score; a floating card centred in the bottom third of the active pane (Ctrl+F; Up/Down/Enter/Esc).
 8. ✅ **Modal workflow:** normal-mode keymap (data-driven, overridable in `[keys]`) with chord handling and showcmd. Split focus / swap commands. The `:` command line with history, argument parsing, and grouped context-aware completion using `fuzzy.c`. All commands from section 7. Unit tests for the keymap parser, the command parser and completion ordering. (`keymap.c`, `cmdline.c`, `commands.c`, `cmdbar.c`; every action is also a command.) Later: visual mode (`v`, chunks), `zz`, Ctrl+S hides the sidebar, the folder tree can fill the sidebar, chord suggestions, and undo (`undo.c`: an app-wide history of file changes; `:undo [<step>]`, `u`, Ctrl+Z; copy-like steps are undone into the trash, never deleted).
-9. **Thumbnails:** images, videos, freedesktop cache, worker pool, lazy loading of visible items only.
+9. ✅ **Thumbnails:** images, videos, freedesktop cache, worker pool, lazy loading of visible items only. (`thumbs.c`: spec cache with failure markers shared with other file managers; gdk-pixbuf for images, installed `.thumbnailer` files, ffmpeg fallback for videos; a newest-first thread pool; panes request only the rows on screen plus a margin and cancel what scrolled away. Unit tests in `tests/test_thumbs.c`.)
 10. **Settings dialog**, UI scaling, `.desktop` file, `meson install`, README.

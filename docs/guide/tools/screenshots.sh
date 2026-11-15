@@ -182,7 +182,7 @@ launch() { # DIR [XDG_CONFIG_HOME]
         mkdir -p "$REAL_HOME" "$FAKE"
         mount --bind "$WORK/realhome" "$REAL_HOME"
         mount --bind "$DEMO" "$FAKE"
-        exec env HOME="$FAKE" XDG_CONFIG_HOME="$CONFIG" XDG_DATA_HOME="$FAKE/.local/share" \
+        exec env HOME="$FAKE" XDG_CONFIG_HOME="$CONFIG" XDG_DATA_HOME="$FAKE/.local/share" XDG_CACHE_HOME="$FAKE/.cache" \
             XDG_STATE_HOME="$FAKE/.local/state" \
             DBUS_SESSION_BUS_ADDRESS=disabled: "$WORK/sfe-guide" "$FAKE/$DIR"
     ' >/dev/null 2>&1 &
@@ -258,6 +258,11 @@ key CTRL 2
 goto 1 Documents
 shot list-view
 key CTRL 1
+
+# Thumbnails: the holiday photos (made on the first visit, then cached).
+launch Pictures/Holiday
+sleep 1.5
+shot_region thumbnails 220 0 $((W - 220)) 260
 
 launch Projects
 key CTRL backslash

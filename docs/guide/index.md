@@ -60,6 +60,29 @@ program for an extension, see [Configuration](#configuration).
 - In the list view, click a column header to sort by it; click again to
   reverse. Folders always stay on top.
 
+### Thumbnails
+
+Pictures, videos and other files with a thumbnailer show a small preview
+instead of their icon, in the grid and the list.
+
+![Thumbnails of photos](images/thumbnails.png)
+
+- Only the files on screen get thumbnails, made in the background a few
+  at a time. Scrolling past a long folder doesn't make thumbnails for
+  everything in it.
+- Thumbnails are kept in `~/.cache/thumbnails`, the cache other file
+  managers use too, so files they already showed appear at once. A file
+  that changes gets a new one.
+- Images are read directly. Videos, documents and other types use the
+  thumbnailers installed on the system (`ffmpegthumbnailer`,
+  `gsf-office-thumbnailer`, …); videos fall back to `ffmpeg` when no
+  thumbnailer is installed for them.
+- A file that cannot be thumbnailed (damaged, unsupported) keeps its icon
+  and isn't tried again until it changes.
+- *Preferences* (or `[preview]` in `config.toml`) switches thumbnails off
+  and sets the size limit: bigger files keep their icon (50 MiB by default).
+  Only local files get thumbnails.
+
 ## Sidebar
 
 ![Sidebar with places, bookmarks, drives and the folder tree](images/sidebar.png)
@@ -473,8 +496,8 @@ mounting, configuration reloads).
 ## Configuration
 
 **Ctrl+P** opens *Preferences*: start folder, hidden files, scale, view,
-icon size, sorting, delete confirmation, window title bar and GTK
-bookmarks. Changes apply immediately.
+icon size, sorting, delete confirmation, window title bar, thumbnails and
+their size limit, and GTK bookmarks. Changes apply immediately.
 
 ![Preferences](images/preferences.png)
 
@@ -493,6 +516,10 @@ show_hidden = false
 ui_scale = 1.0
 view = "grid"        # grid | list
 sort_by = "name"     # name | size | modified | type
+
+[preview]
+thumbnails = true
+thumbnail_max_mb = 50
 
 [open]               # program per extension; %f is the file
 mp4 = "mpv %f"

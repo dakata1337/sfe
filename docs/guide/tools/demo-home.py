@@ -23,7 +23,7 @@ def write(path, text=""):
 
 
 def gradient(path, size, top, bottom):
-    """A simple two-colour gradient image, so image files look like images."""
+    """A sky gradient with a sun and two hills, so thumbnails look like photos."""
     os.makedirs(os.path.dirname(path), exist_ok=True)
     w, h = size
     img = Image.new("RGB", size)
@@ -32,6 +32,13 @@ def gradient(path, size, top, bottom):
         t = y / max(1, h - 1)
         color = tuple(int(top[i] + (bottom[i] - top[i]) * t) for i in range(3))
         draw.line([(0, y), (w, y)], fill=color)
+    sun = (min(255, top[0] + 90), min(255, top[1] + 80), min(255, top[2] + 60))
+    r = h // 7
+    draw.ellipse([w * 2 // 3 - r, h // 4 - r, w * 2 // 3 + r, h // 4 + r], fill=sun)
+    far = tuple(c // 2 for c in bottom)
+    near = tuple(c // 3 for c in bottom)
+    draw.polygon([(0, h * 3 // 5), (w // 3, h * 2 // 5), (w * 3 // 4, h * 3 // 5), (w, h // 2), (w, h), (0, h)], fill=far)
+    draw.polygon([(0, h * 4 // 5), (w // 2, h * 3 // 5), (w, h * 4 // 5), (w, h), (0, h)], fill=near)
     img.save(path)
 
 
