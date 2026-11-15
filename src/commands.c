@@ -668,6 +668,24 @@ static bool run_view(Ctx* c, int argc, char** argv, GError** error)
     return true;
 }
 
+/* `:sort [<key>] [<direction>]`: either may be left out (the other stays);
+ * with neither the direction flips. */
+static bool run_sort(Ctx* c, int argc, char** argv, GError** error)
+{
+    (void)c;
+    const SfeConfig* cfg = sfe_config();
+    SfeSortKey key = cfg->sort_by;
+    SfeSortOrder order = cfg->sort_order;
+    if (argc == 1)
+        order = order == SFE_SORT_ASCENDING ? SFE_SORT_DESCENDING : SFE_SORT_ASCENDING;
+    for (int i = 1; i < argc; i++) {
+        if (argc > 3 || (!sfe_sort_key_from_name(argv[i], &key) && !sfe_sort_order_from_name(argv[i], &order)))
+            return fail(error, "usage: sort [name|size|modified|type] [ascending|descending]");
+    }
+    sfe_application_set_sort(sfe_app(), key, order);
+    return true;
+}
+
 static bool run_q(Ctx* c, int argc, char** argv, GError** error)
 {
     (void)argc, (void)argv;
@@ -1035,6 +1053,17 @@ static void complete_settings(Ctx* c, int argi, char** argv, const char* query, 
         add_words(out, sfe_preferences_pages(), 0);
 }
 WORDS_COMPLETER(complete_view, "grid", "list")
+
+static void complete_sort(Ctx* c, int argi, char** argv, const char* query, const char** rank, GPtrArray* out)
+{
+    (void)c, (void)argv, (void)query, (void)rank;
+    static const char* const keys[] = { "name", "size", "modified", "type", NULL };
+    static const char* const orders[] = { "ascending", "descending", NULL };
+    if (argi == 1)
+        add_words(out, keys, 0);
+    if (argi == 1 || argi == 2)
+        add_words(out, orders, 0);
+}
 WORDS_COMPLETER(complete_cursor, "down", "up", "first", "last", "previous", "next")
 WORDS_COMPLETER(complete_select, "toggle", "all")
 WORDS_COMPLETER(complete_visual, "off", "swap")
@@ -1090,6 +1119,7 @@ static const Command commands[] = {
     { { "sidebar", NO_ALIAS, "on|off|toggle", "show or hide the sidebar (Ctrl+S)" }, complete_on_off, run_sidebar, false },
     { { "tree", NO_ALIAS, "full|normal|toggle", "let the folder tree fill the sidebar, or not" }, complete_tree, run_tree, false },
     { { "view", NO_ALIAS, "grid|list", "the active view's layout" }, complete_view, run_view, false },
+    { { "sort", NO_ALIAS, "[name|size|modified|type] [ascending|descending]", "how every view is sorted (saved); alone, flip the direction" }, complete_sort, run_sort, false },
     { { "settings", { "preferences", NULL }, "[<page>]", "the settings window (Ctrl+P), on a page" }, complete_settings, run_settings, false },
     { { "cursor", NO_ALIAS, "down|up|first|last|previous|next", "move the cursor" }, complete_cursor, run_cursor, true },
     { { "select", NO_ALIAS, "toggle|all", "toggle the item under the cursor / select all" }, complete_select, run_select, true },

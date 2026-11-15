@@ -740,6 +740,33 @@ static StateFunc state_func(const char* name)
     return NULL;
 }
 
+/* "Sort By ▸" in the folder menu: radio items over two actions whose
+ * state is the config's sort_by / sort_order name. */
+static void on_sort_by(GSimpleAction* action, GVariant* value, gpointer data)
+{
+    (void)action, (void)data;
+    SfeSortKey key;
+    if (sfe_sort_key_from_name(g_variant_get_string(value, NULL), &key))
+        sfe_application_set_sort(sfe_app(), key, sfe_config()->sort_order);
+}
+
+static void on_sort_order(GSimpleAction* action, GVariant* value, gpointer data)
+{
+    (void)action, (void)data;
+    SfeSortOrder order;
+    if (sfe_sort_order_from_name(g_variant_get_string(value, NULL), &order))
+        sfe_application_set_sort(sfe_app(), sfe_config()->sort_by, order);
+}
+
+static void add_sort_action(SfeWindow* window, const char* name, const char* state,
+    void (*change)(GSimpleAction*, GVariant*, gpointer))
+{
+    GSimpleAction* action = g_simple_action_new_stateful(name, G_VARIANT_TYPE_STRING, g_variant_new_string(state));
+    g_signal_connect(action, "change-state", G_CALLBACK(change), NULL);
+    g_action_map_add_action(G_ACTION_MAP(window), G_ACTION(action));
+    g_object_unref(action);
+}
+
 void sfe_actions_add_to_window(SfeWindow* window)
 {
     for (size_t i = 0; i < G_N_ELEMENTS(actions); i++) {
@@ -764,6 +791,9 @@ void sfe_actions_add_to_window(SfeWindow* window)
     g_signal_connect(user, "activate", G_CALLBACK(on_user_action), window);
     g_action_map_add_action(G_ACTION_MAP(window), G_ACTION(user));
     g_object_unref(user);
+
+    add_sort_action(window, "sort-by", sfe_sort_key_name(sfe_config()->sort_by), on_sort_by);
+    add_sort_action(window, "sort-order", sfe_sort_order_name(sfe_config()->sort_order), on_sort_order);
 }
 
 void sfe_actions_sync_state(SfeWindow* window)
@@ -773,6 +803,13 @@ void sfe_actions_sync_state(SfeWindow* window)
         if (action != NULL)
             g_simple_action_set_state(G_SIMPLE_ACTION(action), g_variant_new_boolean(toggles[i].state()));
     }
+    GAction* by = g_action_map_lookup_action(G_ACTION_MAP(window), "sort-by");
+    GAction* order = g_action_map_lookup_action(G_ACTION_MAP(window), "sort-order");
+    if (by != NULL)
+        g_simple_action_set_state(G_SIMPLE_ACTION(by), g_variant_new_string(sfe_sort_key_name(sfe_config()->sort_by)));
+    if (order != NULL)
+        g_simple_action_set_state(G_SIMPLE_ACTION(order),
+            g_variant_new_string(sfe_sort_order_name(sfe_config()->sort_order)));
 }
 
 void sfe_actions_set_accels(GtkApplication* app)

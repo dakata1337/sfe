@@ -6,6 +6,12 @@ new version.
 
 ## Unreleased
 
+- Sort ascending or descending, saved in the config (`sort_order`, next to
+  `sort_by`) and in *Settings*. The sort is the same in every view: a
+  column header click, the new *Sort By* submenu (right-click empty space,
+  also in the grid) and the new `:sort [<key>] [<direction>]` command all
+  change and save it.
+
 ## 1.4.1
 
 - Docs: Chromium and Electron apps (Claude Desktop, VS Code, …) use sfe as

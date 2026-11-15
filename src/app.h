@@ -33,3 +33,7 @@ int sfe_application_get_exit_status(SfeApplication* app, int run_status);
 /* A copy of the current configuration, for editing and passing back to
  * sfe_application_set_config(). */
 SfeConfig* sfe_application_dup_config(SfeApplication* app);
+
+/* Sorts every view by `key` in `order` and saves it ([general] sort_by,
+ * sort_order); nothing happens when that is the sort already. */
+void sfe_application_set_sort(SfeApplication* app, SfeSortKey key, SfeSortOrder order);

@@ -57,8 +57,12 @@ program for an extension, see [Configuration](#configuration).
 ![List view with Name, Size, Modified and Type columns](images/list-view.png)
 
 - **Ctrl+1** grid view, **Ctrl+2** list view, or the toggle button.
-- In the list view, click a column header to sort by it; click again to
-  reverse. Folders always stay on top.
+- Sorting: by name, size, date modified or type, ascending or descending.
+  In the list view, click a column header to sort by it; click again to
+  reverse. In either view, right-click empty space → *Sort By*, or
+  `:sort modified descending` (`:sort` alone flips the direction). The sort
+  applies to every view and is saved (`sort_by`, `sort_order`, also in
+  *Settings*). Folders stay on top unless *Folders first* is off.
 - When a view gets too narrow for the names, the list drops columns from the
   right (Type, then Modified, then Size) and brings them back as it widens.
   Name always stays. Column widths follow their contents and can't be
@@ -463,6 +467,7 @@ selection.
 | `sidebar` | `on\|off\|toggle` | show or hide the sidebar (Ctrl+S) |
 | `tree` | `full\|normal\|toggle` | let the folder tree fill the sidebar, or not |
 | `view` | `grid\|list` | the active view's layout |
+| `sort` | `[name\|size\|modified\|type] [ascending\|descending]` | how every view is sorted, saved in the config; either part may be left out (`asc` / `desc` work too), and `:sort` alone flips the direction |
 | `settings` (`preferences`) | `[<page>]` | the settings window, on a page: `general`, `thumbnails`, `sidebar`, `keys`, `commands`, `programs`, `system` |
 | `cursor` | `down\|up\|first\|last\|previous\|next` | move the cursor (`previous` / `next`: the item before / after) |
 | `select` | `toggle\|all` | toggle the item under the cursor / select all |
@@ -575,6 +580,7 @@ show_hidden = false
 ui_scale = 1.0
 view = "grid"        # grid | list
 sort_by = "name"     # name | size | modified | type
+sort_order = "ascending"  # ascending | descending
 
 [preview]
 thumbnails = true

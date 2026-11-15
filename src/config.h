@@ -23,6 +23,19 @@ typedef enum {
     SFE_SORT_TYPE,
 } SfeSortKey;
 
+typedef enum {
+    SFE_SORT_ASCENDING, /* A → Z, smallest, oldest first */
+    SFE_SORT_DESCENDING,
+} SfeSortOrder;
+
+/* Sort keys and orders by name, as in the config and `:sort`: "name",
+ * "size", "modified", "type"; "ascending" / "descending" (or "asc" /
+ * "desc"). Case-insensitive; false for anything else. */
+bool sfe_sort_key_from_name(const char* name, SfeSortKey* key);
+bool sfe_sort_order_from_name(const char* name, SfeSortOrder* order);
+const char* sfe_sort_key_name(SfeSortKey key);
+const char* sfe_sort_order_name(SfeSortOrder order);
+
 /* What a custom command applies to. */
 typedef enum {
     SFE_ACTION_FILES = 1 << 0, /* [[actions.files]] */
@@ -68,6 +81,7 @@ typedef struct {
     int file_icons; /* SfeFileIcons */
     int icon_size;
     int sort_by; /* SfeSortKey */
+    int sort_order; /* SfeSortOrder */
     bool dirs_first;
     bool confirm_delete;
     bool decorations;

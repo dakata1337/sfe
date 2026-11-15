@@ -19,10 +19,45 @@ G_DEFINE_QUARK(sfe-config-error-quark, sfe_config_error)
 
 static const char* const view_names[] = { "grid", "list", NULL };
 static const char* const sort_names[] = { "name", "size", "modified", "type", NULL };
+static const char* const order_names[] = { "ascending", "descending", NULL };
 static const char* const file_icon_names[] = { "system", "tinted", "symbolic", NULL };
 static const char* const device_names[] = { "all", "removable", NULL };
 
 #define FIELD(f) offsetof(SfeConfig, f)
+
+bool sfe_sort_key_from_name(const char* name, SfeSortKey* key)
+{
+    for (int i = 0; name != NULL && sort_names[i] != NULL; i++) {
+        if (g_ascii_strcasecmp(name, sort_names[i]) == 0) {
+            *key = (SfeSortKey)i;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool sfe_sort_order_from_name(const char* name, SfeSortOrder* order)
+{
+    if (name == NULL)
+        return false;
+    if (g_ascii_strcasecmp(name, "ascending") == 0 || g_ascii_strcasecmp(name, "asc") == 0)
+        *order = SFE_SORT_ASCENDING;
+    else if (g_ascii_strcasecmp(name, "descending") == 0 || g_ascii_strcasecmp(name, "desc") == 0)
+        *order = SFE_SORT_DESCENDING;
+    else
+        return false;
+    return true;
+}
+
+const char* sfe_sort_key_name(SfeSortKey key)
+{
+    return key >= SFE_SORT_NAME && key <= SFE_SORT_TYPE ? sort_names[key] : "name";
+}
+
+const char* sfe_sort_order_name(SfeSortOrder order)
+{
+    return order == SFE_SORT_DESCENDING ? "descending" : "ascending";
+}
 
 static const SfeOption options[] = {
     { "general", "start_path", SFE_OPT_STRING, FIELD(start_path), "Directory opened by new windows", .label = "Start folder" },
@@ -31,7 +66,8 @@ static const SfeOption options[] = {
     { "general", "view", SFE_OPT_ENUM, FIELD(view), "Default view: grid | list", .choices = view_names, .label = "Default view" },
     { "general", "icon_size", SFE_OPT_INT, FIELD(icon_size), "Icon size in the grid view, in pixels (16 - 256)", .min = 16, .max = 256, .label = "Icon size" },
     { "general", "file_icons", SFE_OPT_ENUM, FIELD(file_icons), "File icons: system (the icon theme as it is) | tinted (folders in the theme's accent colour) | symbolic (one-colour icons in the theme's colours)", .choices = file_icon_names, .label = "File icons" },
-    { "general", "sort_by", SFE_OPT_ENUM, FIELD(sort_by), "Sort order: name | size | modified | type", .choices = sort_names, .label = "Sort by" },
+    { "general", "sort_by", SFE_OPT_ENUM, FIELD(sort_by), "Sort by: name | size | modified | type", .choices = sort_names, .label = "Sort by" },
+    { "general", "sort_order", SFE_OPT_ENUM, FIELD(sort_order), "Sort direction: ascending (A-Z, smallest, oldest first) | descending", .choices = order_names, .label = "Sort order" },
     { "general", "dirs_first", SFE_OPT_BOOL, FIELD(dirs_first), "List directories before files", .label = "Folders first" },
     { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },
     { "general", "decorations", SFE_OPT_BOOL, FIELD(decorations), "Draw a window title bar (turn off on tiling compositors)", .label = "Window title bar" },
@@ -115,6 +151,7 @@ SfeConfig* sfe_config_new(void)
     cfg->view = SFE_VIEW_GRID;
     cfg->icon_size = 64;
     cfg->sort_by = SFE_SORT_NAME;
+    cfg->sort_order = SFE_SORT_ASCENDING;
     cfg->dirs_first = true;
     cfg->confirm_delete = true;
     cfg->decorations = true;

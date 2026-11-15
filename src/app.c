@@ -68,6 +68,16 @@ static void replace_config(SfeApplication* app, SfeConfig* cfg)
     sfe_config_free(old);
 }
 
+void sfe_application_set_sort(SfeApplication* app, SfeSortKey key, SfeSortOrder order)
+{
+    if (app->config->sort_by == (int)key && app->config->sort_order == (int)order)
+        return;
+    SfeConfig* cfg = sfe_application_dup_config(app);
+    cfg->sort_by = key;
+    cfg->sort_order = order;
+    sfe_application_set_config(app, cfg);
+}
+
 void sfe_application_set_config(SfeApplication* app, SfeConfig* cfg)
 {
     g_autoptr(GError) error = NULL;

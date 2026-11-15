@@ -34,6 +34,7 @@ static void test_values_round_trip(void)
     cfg->view = SFE_VIEW_LIST;
     cfg->icon_size = 96;
     cfg->sort_by = SFE_SORT_MODIFIED;
+    cfg->sort_order = SFE_SORT_DESCENDING;
     g_ptr_array_add(cfg->bookmarks, g_strdup("~/Downloads"));
     g_ptr_array_add(cfg->bookmarks, g_strdup("/mnt/data"));
     g_hash_table_replace(cfg->open_with, g_strdup("mp4"), g_strdup("mpv %f"));
@@ -50,6 +51,8 @@ static void test_values_round_trip(void)
     g_assert_cmpint(back->view, ==, SFE_VIEW_LIST);
     g_assert_cmpint(back->icon_size, ==, 96);
     g_assert_cmpint(back->sort_by, ==, SFE_SORT_MODIFIED);
+    g_assert_cmpint(back->sort_order, ==, SFE_SORT_DESCENDING);
+    g_assert_nonnull(strstr(text, "sort_order = \"descending\""));
     g_assert_cmpuint(back->bookmarks->len, ==, 2);
     g_assert_cmpstr(g_ptr_array_index(back->bookmarks, 1), ==, "/mnt/data");
     g_assert_cmpstr(g_hash_table_lookup(back->open_with, "tar.gz"), ==, "file-roller %f");
@@ -98,6 +101,54 @@ static void test_invalid_values_keep_defaults(void)
     g_test_trap_assert_passed();
     g_test_trap_assert_stderr("*invalid value for general.show_hidden*");
     g_test_trap_assert_stderr("*unknown option general.typo_key*");
+}
+
+/* sort_order: ascending unless set; any case; a bad value keeps the
+ * default; files from before sort_order existed still load. */
+static void test_sort_order(void)
+{
+    g_autoptr(SfeConfig) def = sfe_config_new();
+    g_assert_cmpint(def->sort_order, ==, SFE_SORT_ASCENDING);
+    g_autoptr(SfeConfig) old = parse("[general]\nsort_by = \"type\"\n");
+    g_assert_cmpint(old->sort_by, ==, SFE_SORT_TYPE);
+    g_assert_cmpint(old->sort_order, ==, SFE_SORT_ASCENDING);
+    g_autoptr(SfeConfig) desc = parse("[general]\nsort_order = \"Descending\"\n");
+    g_assert_cmpint(desc->sort_order, ==, SFE_SORT_DESCENDING);
+
+    if (g_test_subprocess()) {
+        g_log_set_always_fatal(G_LOG_FATAL_MASK);
+        g_autoptr(SfeConfig) bad = parse("[general]\nsort_order = \"upwards\"\n");
+        g_assert_cmpint(bad->sort_order, ==, SFE_SORT_ASCENDING);
+        g_assert_cmpuint(bad->problems->len, ==, 1);
+        return;
+    }
+    g_test_trap_subprocess(NULL, 0, G_TEST_SUBPROCESS_DEFAULT);
+    g_test_trap_assert_passed();
+    g_test_trap_assert_stderr("*invalid value for general.sort_order*");
+}
+
+/* The names `:sort` and the menu use. */
+static void test_sort_names(void)
+{
+    SfeSortKey key = SFE_SORT_NAME;
+    SfeSortOrder order = SFE_SORT_ASCENDING;
+    g_assert_true(sfe_sort_key_from_name("Modified", &key));
+    g_assert_cmpint(key, ==, SFE_SORT_MODIFIED);
+    g_assert_false(sfe_sort_key_from_name("date", &key));
+    g_assert_false(sfe_sort_key_from_name(NULL, &key));
+    g_assert_cmpint(key, ==, SFE_SORT_MODIFIED); /* untouched on failure */
+    g_assert_true(sfe_sort_order_from_name("desc", &order));
+    g_assert_cmpint(order, ==, SFE_SORT_DESCENDING);
+    g_assert_true(sfe_sort_order_from_name("ASC", &order));
+    g_assert_cmpint(order, ==, SFE_SORT_ASCENDING);
+    g_assert_false(sfe_sort_order_from_name("down", &order));
+    for (int k = SFE_SORT_NAME; k <= SFE_SORT_TYPE; k++) {
+        SfeSortKey back;
+        g_assert_true(sfe_sort_key_from_name(sfe_sort_key_name(k), &back));
+        g_assert_cmpint(back, ==, k);
+    }
+    g_assert_cmpstr(sfe_sort_order_name(SFE_SORT_DESCENDING), ==, "descending");
+    g_assert_cmpstr(sfe_sort_order_name(SFE_SORT_ASCENDING), ==, "ascending");
 }
 
 /* The older [[actions]] form still works and applies to both kinds. */
@@ -233,6 +284,8 @@ int main(int argc, char** argv)
     g_test_add_func("/config/defaults-round-trip", test_defaults_round_trip);
     g_test_add_func("/config/values-round-trip", test_values_round_trip);
     g_test_add_func("/config/invalid-values", test_invalid_values_keep_defaults);
+    g_test_add_func("/config/sort-order", test_sort_order);
+    g_test_add_func("/config/sort-names", test_sort_names);
     g_test_add_func("/config/old-style-actions", test_old_style_actions);
     g_test_add_func("/config/keys", test_keys);
     g_test_add_func("/config/visual-keys", test_visual_keys);

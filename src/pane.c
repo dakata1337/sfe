@@ -28,9 +28,10 @@ struct _SfePane {
     char* select_after_load; /* name of the entry to select once listed */
     char* reveal_name; /* a just-created file to select when it appears */
 
-    /* Sort settings last taken from the config: a config change only
-     * overrides the pane's own sort (column clicks) if these changed. */
+    /* Sort settings last applied from the config (every view sorts the
+     * same way; column clicks change the config). */
     int cfg_sort_by;
+    int cfg_sort_order;
     bool cfg_dirs_first;
 
     GtkWidget* back_button;
@@ -995,10 +996,13 @@ static void apply_config(SfePane* self)
     }
 
     sfe_dir_model_set_show_hidden(self->model, cfg->show_hidden);
-    if (cfg->sort_by != self->cfg_sort_by || cfg->dirs_first != self->cfg_dirs_first) {
+    if (cfg->sort_by != self->cfg_sort_by || cfg->sort_order != self->cfg_sort_order
+        || cfg->dirs_first != self->cfg_dirs_first) {
         self->cfg_sort_by = cfg->sort_by;
+        self->cfg_sort_order = cfg->sort_order;
         self->cfg_dirs_first = cfg->dirs_first;
-        sfe_dir_model_set_sort(self->model, cfg->sort_by, GTK_SORT_ASCENDING, cfg->dirs_first);
+        sfe_dir_model_set_sort(self->model, cfg->sort_by,
+            cfg->sort_order == SFE_SORT_DESCENDING ? GTK_SORT_DESCENDING : GTK_SORT_ASCENDING, cfg->dirs_first);
         update_sort_indicators(self);
     }
     apply_icon_sizes(self);
@@ -1683,20 +1687,17 @@ static void on_list_activated(GtkTreeView* view, GtkTreePath* path, GtkTreeViewC
     activate_path(SFE_PANE(data), path);
 }
 
-/* Clicking a column header sorts by it; clicking again flips the order. */
+/* Clicking a column header sorts by it; clicking again flips the order.
+ * Saved in the config, so every view (and the next start) follows. */
 static void on_column_clicked(GtkTreeViewColumn* column, gpointer data)
 {
-    SfePane* self = data;
-    SfeSortKey key, clicked = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(column), "sfe-sort-key"));
-    GtkSortType order;
-
-    sfe_dir_model_get_sort(self->model, &key, &order);
-    if (key == clicked)
-        order = order == GTK_SORT_ASCENDING ? GTK_SORT_DESCENDING : GTK_SORT_ASCENDING;
-    else
-        order = GTK_SORT_ASCENDING;
-    sfe_dir_model_set_sort(self->model, clicked, order, sfe_config()->dirs_first);
-    update_sort_indicators(self);
+    (void)data;
+    SfeSortKey clicked = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(column), "sfe-sort-key"));
+    const SfeConfig* cfg = sfe_config();
+    SfeSortOrder order = SFE_SORT_ASCENDING;
+    if (cfg->sort_by == (int)clicked && cfg->sort_order == SFE_SORT_ASCENDING)
+        order = SFE_SORT_DESCENDING;
+    sfe_application_set_sort(sfe_app(), clicked, order);
 }
 
 static gboolean on_view_key_press(GtkWidget* view, GdkEventKey* event, gpointer data)
@@ -2060,6 +2061,7 @@ static void sfe_pane_init(SfePane* self)
     self->history = sfe_history_new();
     self->model = sfe_dir_model_new();
     self->cfg_sort_by = -1;
+    self->cfg_sort_order = -1;
     g_signal_connect(self->model, "loaded", G_CALLBACK(on_loaded), self);
     g_signal_connect(self->model, "error", G_CALLBACK(on_load_error), self);
     g_signal_connect(self->model, "gone", G_CALLBACK(on_gone), self);

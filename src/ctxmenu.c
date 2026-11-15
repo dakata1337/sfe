@@ -46,6 +46,31 @@ static GMenu* open_with_menu(GFile* file)
     return menu;
 }
 
+/* "Sort By ▸": the key, then the direction, as radio items (the window's
+ * stateful "sort-by" / "sort-order" actions). */
+static GMenu* sort_menu(void)
+{
+    static const char* const keys[][2] = {
+        { "Name", "name" }, { "Size", "size" }, { "Modified", "modified" }, { "Type", "type" } };
+    static const char* const orders[][2] = { { "Ascending", "ascending" }, { "Descending", "descending" } };
+    GMenu* menu = g_menu_new();
+    g_autoptr(GMenu) by = g_menu_new();
+    for (size_t i = 0; i < G_N_ELEMENTS(keys); i++) {
+        g_autoptr(GMenuItem) item = g_menu_item_new(keys[i][0], NULL);
+        g_menu_item_set_action_and_target_value(item, "win.sort-by", g_variant_new_string(keys[i][1]));
+        g_menu_append_item(by, item);
+    }
+    g_autoptr(GMenu) order = g_menu_new();
+    for (size_t i = 0; i < G_N_ELEMENTS(orders); i++) {
+        g_autoptr(GMenuItem) item = g_menu_item_new(orders[i][0], NULL);
+        g_menu_item_set_action_and_target_value(item, "win.sort-order", g_variant_new_string(orders[i][1]));
+        g_menu_append_item(order, item);
+    }
+    g_menu_append_section(menu, NULL, G_MENU_MODEL(by));
+    g_menu_append_section(menu, NULL, G_MENU_MODEL(order));
+    return menu;
+}
+
 static GMenuModel* build_menu(const SfeActionTarget* t)
 {
     unsigned where = t->files ? SFE_MENU_ITEMS : SFE_MENU_FOLDER;
@@ -67,6 +92,10 @@ static GMenuModel* build_menu(const SfeActionTarget* t)
         if (strcmp(a->name, "open") == 0) {
             g_autoptr(GMenu) apps = open_with_menu(t->files->data);
             g_menu_append_submenu(*section, "Open With", G_MENU_MODEL(apps));
+        }
+        if (strcmp(a->name, "toggle-hidden") == 0) {
+            g_autoptr(GMenu) sort = sort_menu();
+            g_menu_append_submenu(*section, "Sort By", G_MENU_MODEL(sort));
         }
     }
 
