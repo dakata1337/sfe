@@ -715,3 +715,24 @@ menu.sfe-menu {
     min-height: 0;
     background-color: transparent;
 }
+
+/* Settings → File icons: a card per style with a preview. */
+.sfe-dialog button.sfe-icon-choice {
+    background-color: alpha(@sfe_fg, 0.05);
+    border: 1px solid alpha(@sfe_fg, 0.08);
+    border-radius: 8px;
+    padding: 10px;
+}
+
+.sfe-dialog button.sfe-icon-choice:hover {
+    background-color: alpha(@sfe_fg, 0.09);
+}
+
+.sfe-dialog button.sfe-icon-choice:checked {
+    background-color: alpha(@sfe_accent, 0.18);
+    border-color: @sfe_accent;
+}
+
+.sfe-icon-choice-title {
+    font-weight: bold;
+}

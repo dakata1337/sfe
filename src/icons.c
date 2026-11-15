@@ -137,9 +137,8 @@ static GdkPixbuf* load_symbolic(GIcon* icon, int size, int scale)
     return pixbuf;
 }
 
-static GdkPixbuf* load_pixbuf(GIcon* icon, int size, int scale)
+static GdkPixbuf* load_pixbuf(GIcon* icon, int size, int scale, int style)
 {
-    int style = sfe_config()->file_icons;
     if (style == SFE_FILE_ICONS_SYMBOLIC) {
         GdkPixbuf* symbolic = load_symbolic(icon, size, scale);
         if (symbolic != NULL)
@@ -187,7 +186,7 @@ cairo_surface_t* sfe_icon_for_info(GFileInfo* info, int size, int scale)
     ensure_cache();
     cairo_surface_t* surface = g_hash_table_lookup(cache, key);
     if (surface == NULL) {
-        g_autoptr(GdkPixbuf) pixbuf = load_pixbuf(icon, size, scale);
+        g_autoptr(GdkPixbuf) pixbuf = load_pixbuf(icon, size, scale, sfe_config()->file_icons);
         surface = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale, NULL);
         g_hash_table_insert(cache, g_steal_pointer(&key), surface);
     }
@@ -200,4 +199,11 @@ void sfe_icons_reset(void)
         g_hash_table_remove_all(cache);
     /* The views re-fetch their icons on "changed" (connected after us). */
     g_signal_emit_by_name(gtk_icon_theme_get_default(), "changed");
+}
+
+GdkPixbuf* sfe_icon_preview(const char* content_type, int style, int size, int scale)
+{
+    g_autoptr(GIcon) icon = style == SFE_FILE_ICONS_SYMBOLIC ? g_content_type_get_symbolic_icon(content_type)
+                                                            : g_content_type_get_icon(content_type);
+    return load_pixbuf(icon, size, scale, style);
 }

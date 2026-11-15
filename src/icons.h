@@ -12,6 +12,10 @@
  * HiDPI outputs. Never returns NULL. */
 cairo_surface_t* sfe_icon_for_info(GFileInfo* info, int size, int scale);
 
+/* The icon of `content_type` ("inode/directory", "text/plain") drawn in a
+ * file_icons style (SfeFileIcons), for previews; not cached. */
+GdkPixbuf* sfe_icon_preview(const char* content_type, int style, int size, int scale);
+
 /* Drops the cached icons and makes the views fetch them again: the
  * theme's colours or [general] file_icons changed. */
 void sfe_icons_reset(void);

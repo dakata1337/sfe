@@ -3,6 +3,8 @@
 #include "app.h"
 #include "defaultfm.h"
 #include "dialogs.h"
+#include "icons.h"
+#include "theme.h"
 #include "opener.h"
 #include <string.h>
 
@@ -200,6 +202,94 @@ static GtkWidget* note(const char* text)
     return label;
 }
 
+/* ---- File icons: one card per style, previewing it ---------------------- */
+
+static const char* const preview_types[] = { "inode/directory", "text/plain", "image/png", "audio/mpeg", "application/pdf" };
+static const char* const style_titles[] = { "System", "Tinted", "Symbolic" };
+static const char* const style_notes[] = {
+    "The icon theme as it is",
+    "Folders in the theme's accent colour",
+    "One colour, from the theme",
+};
+
+/* Draws the preview icons of every card again (the theme's colours changed). */
+static void fill_previews(GtkWidget* chooser)
+{
+    int size = sfe_theme_scaled(32);
+    int scale = gtk_widget_get_scale_factor(chooser);
+    g_autoptr(GList) cards = gtk_container_get_children(GTK_CONTAINER(chooser));
+    int style = 0;
+    for (GList* l = cards; l != NULL; l = l->next, style++) {
+        GtkWidget* strip = g_object_get_data(G_OBJECT(l->data), "sfe-strip");
+        g_autoptr(GList) old = gtk_container_get_children(GTK_CONTAINER(strip));
+        for (GList* o = old; o != NULL; o = o->next)
+            gtk_widget_destroy(o->data);
+        for (size_t i = 0; i < G_N_ELEMENTS(preview_types); i++) {
+            g_autoptr(GdkPixbuf) pixbuf = sfe_icon_preview(preview_types[i], style, size, scale);
+            cairo_surface_t* surface = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale, NULL);
+            GtkWidget* image = gtk_image_new_from_surface(surface);
+            cairo_surface_destroy(surface);
+            gtk_box_pack_start(GTK_BOX(strip), image, FALSE, FALSE, 0);
+            gtk_widget_show(image);
+        }
+    }
+}
+
+static void on_icons_changed(GtkIconTheme* theme, gpointer chooser)
+{
+    (void)theme;
+    fill_previews(chooser);
+}
+
+static void on_style_toggled(GtkToggleButton* card, gpointer data)
+{
+    (void)data;
+    if (!gtk_toggle_button_get_active(card))
+        return;
+    const SfeOption* opt = option_of(G_OBJECT(card));
+    int style = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(card), "sfe-style"));
+    if (*(const int*)sfe_config_field(sfe_config(), opt) != style)
+        apply(opt, set_int, GINT_TO_POINTER(style));
+}
+
+static GtkWidget* file_icons_chooser(const SfeOption* opt)
+{
+    GtkWidget* chooser = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+    gtk_box_set_homogeneous(GTK_BOX(chooser), TRUE);
+    int current = *(const int*)sfe_config_field(sfe_config(), opt);
+    GtkWidget* first = NULL;
+    for (int style = 0; opt->choices[style] != NULL; style++) {
+        GtkWidget* card = first ? gtk_radio_button_new_from_widget(GTK_RADIO_BUTTON(first)) : gtk_radio_button_new(NULL);
+        first = first ? first : card;
+        gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(card), FALSE); /* a card, not a dot */
+        gtk_style_context_add_class(gtk_widget_get_style_context(card), "sfe-icon-choice");
+        GtkWidget* box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
+        GtkWidget* strip = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 4);
+        gtk_widget_set_halign(strip, GTK_ALIGN_CENTER);
+        GtkWidget* title = gtk_label_new(style_titles[style]);
+        GtkWidget* note = gtk_label_new(style_notes[style]);
+        gtk_style_context_add_class(gtk_widget_get_style_context(title), "sfe-icon-choice-title");
+        gtk_style_context_add_class(gtk_widget_get_style_context(note), "sfe-placeholder");
+        gtk_label_set_line_wrap(GTK_LABEL(note), TRUE);
+        gtk_label_set_justify(GTK_LABEL(note), GTK_JUSTIFY_CENTER);
+        gtk_label_set_max_width_chars(GTK_LABEL(note), 18);
+        gtk_box_pack_start(GTK_BOX(box), strip, FALSE, FALSE, 4);
+        gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(box), note, FALSE, FALSE, 0);
+        gtk_container_add(GTK_CONTAINER(card), box);
+        g_object_set_data(G_OBJECT(card), "sfe-strip", strip);
+        g_object_set_data(G_OBJECT(card), "sfe-option", (gpointer)opt);
+        g_object_set_data(G_OBJECT(card), "sfe-style", GINT_TO_POINTER(style));
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(card), style == current);
+        g_signal_connect(card, "toggled", G_CALLBACK(on_style_toggled), NULL);
+        gtk_box_pack_start(GTK_BOX(chooser), card, TRUE, TRUE, 0);
+    }
+    fill_previews(chooser);
+    /* Colours regenerated (Noctalia) while Settings is open: previews follow. */
+    g_signal_connect_object(gtk_icon_theme_get_default(), "changed", G_CALLBACK(on_icons_changed), chooser, 0);
+    return chooser;
+}
+
 /* The options of one config section, built from the option table. */
 static GtkWidget* options_page(const char* section, const char* text)
 {
@@ -216,6 +306,12 @@ static GtkWidget* options_page(const char* section, const char* text)
         GtkWidget* label = gtk_label_new(opts[i].label ? opts[i].label : opts[i].key);
         g_autofree char* tip = g_strdup_printf("%s\n(%s.%s in config.toml)", opts[i].help, opts[i].section, opts[i].key);
         gtk_widget_set_tooltip_text(label, tip);
+        if (strcmp(opts[i].key, "file_icons") == 0) { /* previews need the whole width */
+            gtk_label_set_xalign(GTK_LABEL(label), 0);
+            gtk_grid_attach(GTK_GRID(grid), label, 0, row++, 2, 1);
+            gtk_grid_attach(GTK_GRID(grid), file_icons_chooser(&opts[i]), 0, row++, 2, 1);
+            continue;
+        }
         add_row(GTK_GRID(grid), &row, label, widget_for(&opts[i]));
     }
     return grid;
