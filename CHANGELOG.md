@@ -6,8 +6,11 @@ new version.
 
 ## Unreleased
 
-- The views always end with half a view of empty space, to right-click
-  for the folder's menu in long folders.
+- The views always end with empty space (a third of the view, at least
+  six rows in the list and one row in the grid), to right-click for the
+  folder's menu in long folders.
+- In the grid, Shift+click and Shift+arrows select in reading order
+  instead of a rectangle.
 - In narrow views the list drops columns from the right (Type, then
   Modified, then Size) to make room for the names.
 - The sidebar says "No devices" (or "No removable drives" with the

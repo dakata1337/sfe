@@ -63,8 +63,11 @@ program for an extension, see [Configuration](#configuration).
   right (Type, then Modified, then Size) and brings them back as it widens.
   Name always stays. Column widths follow their contents and can't be
   dragged.
-- There is always some empty space after the last file (half a view), so
-  you can right-click it for the folder's menu even in long folders.
+- There is always some empty space after the last file (a third of the
+  view, at least six rows in the list and one row in the grid), so you can
+  right-click it for the folder's menu even in long folders.
+- In the grid, Shift+click and Shift+arrows select in reading order: from
+  where you started to the item you pick, row by row, like text.
 
 ### Thumbnails
 
