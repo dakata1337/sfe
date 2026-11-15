@@ -53,6 +53,12 @@ void sfe_pane_select_all(SfePane* self);
 /* A file dialog's type filter for this view (borrowed), or NULL. */
 void sfe_pane_set_file_filter(SfePane* self, const SfeFileFilter* filter);
 
+/* One item at a time (a file dialog for one file): Ctrl/Shift+click,
+ * Shift+arrows and the rubber band select just the item, and select all
+ * and visual mode do nothing (visual mode ends). */
+void sfe_pane_set_single_selection(SfePane* self, bool single);
+bool sfe_pane_get_single_selection(SfePane* self);
+
 /* A row of the view, for command line completion. */
 typedef struct {
     char* name; /* display name */

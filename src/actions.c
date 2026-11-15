@@ -71,6 +71,12 @@ static bool has_files(const SfeActionTarget* t)
     return t->files != NULL;
 }
 
+/* Select All: not in a file dialog for one file. */
+static bool selects_many(const SfeActionTarget* t)
+{
+    return t->pane == NULL || !sfe_pane_get_single_selection(t->pane);
+}
+
 static bool single_dir(const SfeActionTarget* t)
 {
     return t->files != NULL && t->files->next == NULL && is_dir(t->files->data);
@@ -598,7 +604,7 @@ static const SfeAction actions[] = {
     { "trash",              "Move to Trash",              { "Delete", NULL },               ITEMS,        3, can_trash,               run_trash },
     { "delete",             "Delete Permanently…",        { "<Shift>Delete", NULL },        ITEMS,        3, has_files,               run_delete },
     { "search",             "Search…",                    { "<Control>f", NULL },           FOLDER,       2, NULL,                    run_search },
-    { "select-all",         "Select All",                 { "<Control>a", NULL },           FOLDER,       2, NULL,                    run_select_all },
+    { "select-all",         "Select All",                 { "<Control>a", NULL },           FOLDER,       2, selects_many,            run_select_all },
     { "toggle-hidden",      "Show Hidden Files",          { "<Control>h", NULL },           FOLDER,       2, NULL,                    run_toggle_hidden },
     { "bookmark-selection", "Add to Bookmarks",           { NULL },                         ITEMS,        4, can_bookmark_selection,  run_bookmark_selection },
     { "unbookmark-selection", "Remove from Bookmarks",    { NULL },                         ITEMS,        4, can_unbookmark_selection, run_bookmark_selection },

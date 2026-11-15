@@ -545,7 +545,9 @@ are saved to `config.toml`.
 the desktop portal for a file dialog (Flatpak apps, browsers) open sfe
 instead. A bar at the bottom holds the name to save as, the file types to
 show, the program's extra options (an encoding, say), *Cancel* and *Open* /
-*Save*; when opening, the selected file is previewed on the right. Enter or a
+*Save*; when opening, the selected file is previewed on the right. Unless
+the program asked for several files, one item is selected at a time
+(Select All and visual mode are off). Enter or a
 double-click on a file picks it, Ctrl+Enter is the *Open* / *Save* button.
 Firefox and Zen use the portal only with
 `about:config` → `widget.use-xdg-desktop-portal.file-picker` set to `1`.

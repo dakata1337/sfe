@@ -84,6 +84,7 @@ struct _SfePane {
     GHashTable* visual_base; /* GFile* set */
 
     guint selection_source; /* a pending "selection-changed" */
+    bool single; /* one item at a time (a file dialog for one file) */
 };
 
 G_DEFINE_TYPE(SfePane, sfe_pane, GTK_TYPE_BOX)
@@ -894,7 +895,7 @@ static void event_to_content(GtkWidget* view, double x, double y, double* cx, do
 
 static void band_press(SfePane* self, GtkWidget* view, GdkEventButton* event)
 {
-    if (event->button != GDK_BUTTON_PRIMARY || event->type != GDK_BUTTON_PRESS)
+    if (event->button != GDK_BUTTON_PRIMARY || event->type != GDK_BUTTON_PRESS || self->single)
         return;
     self->band_pressed = true;
     self->band_active = false;
@@ -1091,8 +1092,31 @@ void sfe_pane_set_file_filter(SfePane* self, const SfeFileFilter* filter)
     sfe_dir_model_set_filter(self->model, filter);
 }
 
+void sfe_pane_set_single_selection(SfePane* self, bool single)
+{
+    if (self->single == single)
+        return;
+    self->single = single;
+    if (single) {
+        sfe_pane_visual_end(self);
+        forget_anchor(self);
+    }
+    /* SINGLE, not BROWSE: Ctrl+click can still clear the selection */
+    GtkSelectionMode mode = single ? GTK_SELECTION_SINGLE : GTK_SELECTION_MULTIPLE;
+    gtk_icon_view_set_selection_mode(GTK_ICON_VIEW(self->grid), mode);
+    gtk_tree_view_set_rubber_banding(GTK_TREE_VIEW(self->list), !single);
+    gtk_tree_selection_set_mode(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)), mode);
+}
+
+bool sfe_pane_get_single_selection(SfePane* self)
+{
+    return self->single;
+}
+
 void sfe_pane_select_all(SfePane* self)
 {
+    if (self->single)
+        return;
     if (self->view == SFE_VIEW_GRID)
         gtk_icon_view_select_all(GTK_ICON_VIEW(self->grid));
     else
@@ -1348,7 +1372,7 @@ static void finish_chunk(SfePane* self)
 
 void sfe_pane_visual_start(SfePane* self)
 {
-    if (self->visual || n_rows(self) == 0)
+    if (self->visual || self->single || n_rows(self) == 0)
         return;
     self->visual = true;
     g_hash_table_remove_all(self->visual_base);
@@ -1359,6 +1383,8 @@ void sfe_pane_visual_start(SfePane* self)
 
 void sfe_pane_visual_chunk(SfePane* self)
 {
+    if (self->single)
+        return;
     if (!self->visual) {
         sfe_pane_visual_start(self);
         return;
@@ -1552,6 +1578,8 @@ static void select_run(SfePane* self, GtkTreePath* a, GtkTreePath* b, bool keep)
 static bool grid_click(SfePane* self, GdkEventButton* event)
 {
     GtkIconView* grid = GTK_ICON_VIEW(self->grid);
+    if (self->single)
+        return false; /* GTK selects the one item */
     GtkTreePath* path = gtk_icon_view_get_path_at_pos(grid, (int)event->x, (int)event->y);
     if (path == NULL)
         return false;
@@ -1590,7 +1618,7 @@ static bool grid_key(SfePane* self, GdkEventKey* event)
     case GDK_KEY_Page_Down: case GDK_KEY_KP_Page_Down: step = GTK_MOVEMENT_PAGES; count = 1; break;
     default: return false;
     }
-    if (!(event->state & GDK_SHIFT_MASK)) {
+    if (!(event->state & GDK_SHIFT_MASK) || self->single) {
         forget_anchor(self); /* GTK moves; the new cursor is the next anchor */
         return false;
     }

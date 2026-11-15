@@ -696,8 +696,12 @@ static bool run_cursor(Ctx* c, int argc, char** argv, GError** error)
     return fail(error, "usage: cursor down|up|first|last|previous|next");
 }
 
+#define ONE_FILE "this dialog picks one file"
+
 static bool run_select(Ctx* c, int argc, char** argv, GError** error)
 {
+    if (argc == 2 && strcmp(argv[1], "all") == 0 && sfe_pane_get_single_selection(c->pane))
+        return fail(error, ONE_FILE);
     if (argc == 2 && strcmp(argv[1], "toggle") == 0)
         sfe_pane_toggle_cursor_item(c->pane);
     else if (argc == 2 && strcmp(argv[1], "all") == 0)
@@ -709,6 +713,8 @@ static bool run_select(Ctx* c, int argc, char** argv, GError** error)
 
 static bool run_visual(Ctx* c, int argc, char** argv, GError** error)
 {
+    if (argc == 1 && sfe_pane_get_single_selection(c->pane))
+        return fail(error, ONE_FILE);
     if (argc == 1)
         sfe_pane_visual_chunk(c->pane);
     else if (argc == 2 && strcmp(argv[1], "off") == 0)

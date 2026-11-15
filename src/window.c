@@ -135,6 +135,7 @@ static void follow_active_pane(SfeWindow* win)
 static void update_mode(SfeWindow* win);
 
 static void apply_filter(SfeWindow* win);
+static void apply_selection_mode(SfeWindow* win);
 
 /* The chooser's preview follows the active view's selection. */
 static void update_preview(SfeWindow* win)
@@ -161,6 +162,8 @@ static void on_directory_changed(SfeSplit* split, SfePane* pane, gpointer data)
     SfeWindow* win = SFE_WINDOW(data);
     if (win->filters != NULL || win->folder_filter != NULL) /* a view opened later gets the filter too */
         apply_filter(win);
+    if (win->chooser != NULL)
+        apply_selection_mode(win);
     if (pane == sfe_window_get_active_pane(win)) {
         follow_active_pane(win);
         update_preview(win);
@@ -779,6 +782,15 @@ static void apply_filter(SfeWindow* win)
         sfe_pane_set_file_filter(sfe_split_get_pane(win->split, i), filter);
 }
 
+/* A dialog for one file (or folder, or a name to save as) selects one
+ * item at a time; only "open several files" selects more. */
+static void apply_selection_mode(SfeWindow* win)
+{
+    bool single = !(win->chooser->mode == SFE_CHOOSE_OPEN && win->chooser->multiple);
+    for (int i = 0; i < sfe_split_get_n_panes(win->split); i++)
+        sfe_pane_set_single_selection(sfe_split_get_pane(win->split, i), single);
+}
+
 static void on_filter_changed(GtkComboBox* combo, gpointer data)
 {
     SfeWindow* win = data;
@@ -852,6 +864,7 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
     static const char* const titles[] = { "Open", "Save", "Select Folder" };
     static const char* const labels[] = { "Open", "Save", "Select" };
     win->chooser = chooser;
+    apply_selection_mode(win);
     gtk_window_set_title(GTK_WINDOW(win), chooser->title ? chooser->title : titles[chooser->mode]);
     if (chooser->parent != NULL) {
         gtk_window_set_type_hint(GTK_WINDOW(win), GDK_WINDOW_TYPE_HINT_DIALOG);

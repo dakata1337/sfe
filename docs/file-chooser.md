@@ -78,7 +78,10 @@ sfe adds two pieces:
 ## What works
 
 - Open one file, several files (`multiple`), or a folder (`directory`,
-  `<input webkitdirectory>` in browsers: only folders are listed).
+  `<input webkitdirectory>` in browsers: only folders are listed). Only a
+  request for several files selects more than one item: otherwise
+  Ctrl/Shift+click and the rubber band pick just one, and *Select All* and
+  visual mode (`v`) are off.
 - Save with the suggested name and folder; replacing an existing file asks
   first. "Save as" for an existing file starts there.
 - SaveFiles (saving several files at once into a folder).
