@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="1.5.0" date="2026-11-15">
+      <description>
+        <p>Sort ascending or descending, saved in the settings, from Settings, the list's column headers, a Sort By menu or the :sort command; every view sorts the same way.</p>
+      </description>
+    </release>
     <release version="1.4.1" date="2026-11-15">
       <description>
         <p>Documentation: how to make Chromium and Electron apps use sfe as their file dialog when the session bus address is not set.</p>

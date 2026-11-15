@@ -6,6 +6,8 @@ new version.
 
 ## Unreleased
 
+## 1.5.0
+
 - Sort ascending or descending, saved in the config (`sort_order`, next to
   `sort_by`) and in *Settings*. The sort is the same in every view: a
   column header click, the new *Sort By* submenu (right-click empty space,
