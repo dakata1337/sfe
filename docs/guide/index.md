@@ -28,7 +28,7 @@ Wayland. This guide covers every feature and every shortcut.
 
 ## The window
 
-- **Sidebar** (left): places, bookmarks and drives in the top two thirds, a folder tree below. Drag the divider to resize them.
+- **Sidebar** (left): places, bookmarks and drives in the top two thirds, a folder tree below. Drag the divider to resize them. **Ctrl+S** hides the sidebar for a minimal window, and brings it back.
 - **Path bar** (top of each view): back, forward and parent buttons, the full
   path, the grid/list toggle, and the split and close buttons.
 - **Files**: the contents of the current folder.
@@ -73,7 +73,10 @@ program for an extension, see [Configuration](#configuration).
 - **Drives**: see [Drives](#drives).
 - **Folder tree** (bottom third): follows the active view, keeping the
   current folder in the middle. Its root is your home folder, or the drive
-  the folder is on. Click a folder to open it.
+  the folder is on. Click a folder to open it. The button in its *Folders*
+  bar lets the tree fill the whole sidebar; press it again (or
+  `:toggle_tree`) to bring the places back, with the divider where you
+  left it.
 - Right-click → *Open in Split* opens a place or a tree folder in a new view
   (see [Split views](#split-views)); middle-click, or right-click → *Open in
   New Window*, opens it in a new window. The Menu key or Shift+F10 opens the
@@ -292,6 +295,8 @@ not finished within a second is dropped, and Esc drops it at once.
 | `x` / `X` | `trash` / `delete` | move to trash / delete permanently (asks) |
 | `r` / `R` | `rename` / `mass_rename` | rename / rename with a pattern |
 | `zh` | `hidden toggle` | show / hide hidden files |
+| `zz` | `center` | scroll the cursor to the middle of the view (in visual mode the first selected item) |
+| `v` | `visual` | visual mode, below |
 | `/` | `search` | the fuzzy search |
 | `:` | | the command line |
 | `<C-w>v` / `<C-w>s` | `split vertical` / `split horizontal` | split side by side / top and bottom (same rules as the buttons) |
@@ -299,6 +304,37 @@ not finished within a second is dropped, and Esc drops it at once.
 | `W` | `split next` | next view: left, right-top, right-bottom |
 | `H` `J` `K` `L` | `split left` / `down` / `up` / `right` | focus the view in that direction |
 | `<C-H>` `<C-J>` `<C-K>` `<C-L>` | `split move left` / … | swap the active view with the one in that direction |
+
+### Visual mode
+
+![Visual mode with two chunks selected](images/visual.png)
+
+`v` selects with the keyboard. The cursor moves without changing the
+selection, and a *chunk* (from where you pressed `v` to the cursor) is
+selected like a Shift+click range:
+
+1. `v` starts a chunk; `j` / `k` (`gg`, `G`) stretch it. In a grid `j`
+   moves a whole row; `h` / `l` move one item.
+2. `v` again ends the chunk: it stays selected and the cursor moves freely.
+3. `v` starts the next chunk wherever the cursor is. Chunks add up like
+   Ctrl+clicks; `<Space>` adds or removes single items.
+
+The corner shows `-- VISUAL --` and how many items are selected.
+
+| Keys | Command | Does |
+|---|---|---|
+| `v` | `visual` | end the chunk / start a new one at the cursor |
+| `o` | `visual swap` | jump to the other end of the chunk |
+| `h` / `l` | `cursor previous` / `cursor next` | the item before / after |
+| `y` | `copy_clipboard` | copy the selection to the clipboard |
+| `d` | `cut` | cut the selection |
+| `<Esc>` | `visual off` | leave visual mode |
+
+Other keys work as in normal mode: `x` trashes the selection, `r` / `R`
+rename it, `:` opens the command line for it. Anything that acts on the
+files ends visual mode, and so do going to another folder, switching the
+view, searching or clicking. Leaving visual mode never changes the
+selection.
 
 ### The command line
 
@@ -342,15 +378,18 @@ not finished within a second is dropped, and Esc drops it at once.
 | `unbookmark` | `[<bookmark>]` | remove one of sfe's bookmarks |
 | `hidden` | `on\|off\|toggle` | show or hide hidden files |
 | `view` | `grid\|list` | the active view's layout |
-| `cursor` | `down\|up\|first\|last` | move the cursor |
+| `cursor` | `down\|up\|first\|last\|previous\|next` | move the cursor (`previous` / `next`: the item before / after) |
 | `select` | `toggle\|all` | toggle the item under the cursor / select all |
+| `visual` | `[off\|swap]` | visual mode: start it, end / start a chunk; leave it; jump to the chunk's other end |
+| `center` | | scroll the cursor (in visual mode the first selected item) to the middle |
 | `command_line` |  | open the command line |
 | `q` (`quit`) | | close the active view |
 
 Every action is a command too, with `-` written as `_`: `:paste`,
 `:preferences`, `:properties`, `:search`, `:reload`, `:back`, `:forward`,
 `:up`, `:compress`, `:extract`, `:restore`, `:empty_trash`, `:select_all`,
-`:view_grid`, `:view_list`, `:new_window` and so on; they act on the
+`:view_grid`, `:view_list`, `:new_window`, `:toggle_sidebar`,
+`:toggle_tree` and so on; they act on the
 selection, like the menu. `:copy` and `:move` always need a destination
 folder: `:copy notes.txt ~/Backup`. For the second and later arguments the
 other views' folders are offered first.
@@ -366,7 +405,13 @@ Keys are bound in `config.toml`; an empty command removes a default:
 "x" = ""
 ```
 
-A binding can be any command line, with arguments.
+A binding can be any command line, with arguments. Visual mode has its own
+table, looked up before `[keys]` while selecting:
+
+```toml
+[keys.visual]
+"x" = "cut"
+```
 
 ## Debugging
 
@@ -452,5 +497,6 @@ Every shortcut in one place. The single-letter keys of normal mode are in
 | F6 | next view |
 | Ctrl+W Q | close the view |
 | Ctrl+P | preferences |
+| Ctrl+S | hide / show the sidebar |
 | Ctrl+N | new window |
 | Ctrl+Q | quit |

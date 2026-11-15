@@ -268,6 +268,20 @@ sleep 0.6
 goto 2 Pictures/Holiday
 shot splits
 
+# Visual mode: two chunks, the second still being drawn.
+launch Pictures
+key CTRL 2
+key "" j
+key "" v
+key "" j
+key "" v
+key "" j
+key "" j
+key "" v
+key "" j
+sleep 0.4
+shot visual
+
 # The command line completing a destination: the other view's folder first.
 launch Projects/website
 key CTRL backslash

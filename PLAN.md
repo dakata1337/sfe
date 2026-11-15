@@ -133,6 +133,7 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 
 ### Modes
 - **Normal mode:** the file views. Single keys are commands.
+- **Visual mode:** `v` in a file view; the cursor moves alone and selects chunks (below).
 - **Command mode:** the `:` command line at the bottom.
 - **Text input:** the path entry, the search field and dialogs. Keys type text there; Esc returns to normal mode.
 
@@ -153,9 +154,17 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 | `x` / `X` | `:trash` / `:delete` | move to trash / delete permanently (asks) |
 | `r` / `R` | `:rename` / `:mass_rename` | rename (milestone 6) |
 | `zh` | `:hidden toggle` | hidden files |
+| `zz` | `:center` | scroll the cursor (in visual mode the first selected item) to the middle |
+| `v` | `:visual` | visual mode |
 | `/` | `:search` | fuzzy search overlay (milestone 7) |
 | `:` | | command line |
 | Esc | | clear the selection, close overlays |
+
+### Visual mode (TODO, 2026-11-15)
+
+- `v` starts a chunk at the cursor; `j`/`k`/`gg`/`G` (and `h`/`l`, one item) stretch it like a Shift+click range. `v` again ends the chunk, the cursor then moves without selecting, and the next `v` starts another chunk: chunks add up like Ctrl+clicks. `o` jumps to the chunk's other end, Space toggles single items.
+- `y` / `d` yank / cut at once. Any command that acts on the files ends visual mode, as do Esc, navigating, switching the view, searching, clicking, or another view becoming active. Leaving never changes the selection.
+- Visual keys are a second keymap looked up first (`[keys.visual]` in the config); everything else falls through to the normal keys. `-- VISUAL --` and the count show in the bottom-left corner.
 
 ### Split keys (as you specified)
 
@@ -230,6 +239,6 @@ Every milestone also updates the user guide (`docs/guide/index.md`) and retakes 
 5. ✅ **File ops:** action table, context menu, clipboard, copy/move/trash/delete jobs, new file/folder, properties.
 6. ✅ **Rename and mass rename:** name prompt (F2), pattern dialog with template / find-replace / case / counter and live conflict preview (F2 on several, Shift+F2), two-pass rename with rollback. The directory model dropped GtkTreeModelFilter (it emitted criticals when shown rows were removed).
 7. ✅ **Fuzzy search overlay:** tiered `fuzzy.c` scorer with unit tests; the directory model filters and orders by score; a floating card centred in the bottom third of the active pane (Ctrl+F; Up/Down/Enter/Esc).
-8. ✅ **Modal workflow:** normal-mode keymap (data-driven, overridable in `[keys]`) with chord handling and showcmd. Split focus / swap commands. The `:` command line with history, argument parsing, and grouped context-aware completion using `fuzzy.c`. All commands from section 7. Unit tests for the keymap parser, the command parser and completion ordering. (`keymap.c`, `cmdline.c`, `commands.c`, `cmdbar.c`; every action is also a command.)
+8. ✅ **Modal workflow:** normal-mode keymap (data-driven, overridable in `[keys]`) with chord handling and showcmd. Split focus / swap commands. The `:` command line with history, argument parsing, and grouped context-aware completion using `fuzzy.c`. All commands from section 7. Unit tests for the keymap parser, the command parser and completion ordering. (`keymap.c`, `cmdline.c`, `commands.c`, `cmdbar.c`; every action is also a command.) Later: visual mode (`v`, chunks), `zz`, Ctrl+S hides the sidebar, the folder tree can fill the sidebar.
 9. **Thumbnails:** images, videos, freedesktop cache, worker pool, lazy loading of visible items only.
 10. **Settings dialog**, UI scaling, `.desktop` file, `meson install`, README.
