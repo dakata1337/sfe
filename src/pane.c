@@ -1,4 +1,5 @@
 #include "pane.h"
+#include "theme.h"
 
 #include "app.h"
 #include "ctxmenu.h"
@@ -97,8 +98,7 @@ static void update_buttons(SfePane* self)
     gtk_widget_set_sensitive(self->forward_button, sfe_history_can_forward(self->history));
     gtk_widget_set_sensitive(self->up_button, parent != NULL);
     gtk_button_set_image(GTK_BUTTON(self->view_button),
-        gtk_image_new_from_icon_name(self->view == SFE_VIEW_GRID ? "view-list-symbolic" : "view-grid-symbolic",
-            GTK_ICON_SIZE_BUTTON));
+        sfe_scaled_icon_new(self->view == SFE_VIEW_GRID ? "view-list-symbolic" : "view-grid-symbolic", 16));
     gtk_widget_set_tooltip_text(self->view_button,
         self->view == SFE_VIEW_GRID ? "List view (Ctrl+2)" : "Grid view (Ctrl+1)");
 }
@@ -1297,7 +1297,8 @@ static void on_view_button_clicked(GtkButton* button, gpointer data)
 
 static GtkWidget* icon_button(const char* icon, const char* tooltip, GCallback callback, gpointer data)
 {
-    GtkWidget* button = gtk_button_new_from_icon_name(icon, GTK_ICON_SIZE_BUTTON);
+    GtkWidget* button = gtk_button_new();
+    gtk_button_set_image(GTK_BUTTON(button), sfe_scaled_icon_new(icon, 16));
     gtk_widget_set_tooltip_text(button, tooltip);
     gtk_widget_set_focus_on_click(button, FALSE);
     g_signal_connect_swapped(button, "clicked", callback, data);

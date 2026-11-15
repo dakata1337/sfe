@@ -1,4 +1,5 @@
 #include "opsbar.h"
+#include "theme.h"
 
 #include "dialogs.h"
 
@@ -171,7 +172,8 @@ static void on_cancel_clicked(GtkButton* button, gpointer data)
 void sfe_ops_bar_run(SfeOpsBar* self, SfeFileOp* op)
 {
     Job* job = g_new0(Job, 1);
-    GtkWidget* cancel = gtk_button_new_from_icon_name("window-close-symbolic", GTK_ICON_SIZE_BUTTON);
+    GtkWidget* cancel = gtk_button_new();
+    gtk_button_set_image(GTK_BUTTON(cancel), sfe_scaled_icon_new("window-close-symbolic", 16));
 
     job->bar = self;
     job->op = g_object_ref(op);

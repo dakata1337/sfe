@@ -1,4 +1,5 @@
 #include "window.h"
+#include "theme.h"
 
 #include "actions.h"
 #include "cmdbar.h"
@@ -487,7 +488,7 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     }
 
     win->sidebar = SFE_SIDEBAR(sfe_sidebar_new());
-    gtk_widget_set_size_request(GTK_WIDGET(win->sidebar), SIDEBAR_MIN_WIDTH, -1);
+    gtk_widget_set_size_request(GTK_WIDGET(win->sidebar), sfe_theme_scaled(SIDEBAR_MIN_WIDTH), -1);
     g_signal_connect(win->sidebar, "open-location", G_CALLBACK(on_sidebar_open), win);
 
     win->split = sfe_split_new(dir);
@@ -538,7 +539,7 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     GtkWidget* paned = gtk_paned_new(GTK_ORIENTATION_HORIZONTAL);
     gtk_paned_pack1(GTK_PANED(paned), GTK_WIDGET(win->sidebar), FALSE, FALSE);
     gtk_paned_pack2(GTK_PANED(paned), content, TRUE, FALSE);
-    gtk_paned_set_position(GTK_PANED(paned), SIDEBAR_WIDTH);
+    gtk_paned_set_position(GTK_PANED(paned), sfe_theme_scaled(SIDEBAR_WIDTH));
     gtk_container_add(GTK_CONTAINER(win), paned);
     gtk_widget_show_all(paned);
 

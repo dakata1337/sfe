@@ -1,6 +1,7 @@
 #include "theme.h"
 
 #include <gtk/gtk.h>
+#include <math.h>
 #include <stdbool.h>
 
 /* GTK3 reads ~/.config/gtk-3.0/gtk.css exactly once, at startup. To pick up
@@ -191,10 +192,91 @@ static double base_dpi(void)
     return xft_dpi > 0 ? xft_dpi / 1024.0 : 96.0;
 }
 
+/* ------------------------------------------------------------------------ */
+/* Scale                                                                     */
+/* ------------------------------------------------------------------------ */
+
+static GtkCssProvider* scale_provider; /* pixel sizes that fonts do not move */
+static GPtrArray* scaled_icons; /* GtkImage*, weak */
+
+static int scaled(int base)
+{
+    return (int)lround(base * ui_scale);
+}
+
+double sfe_theme_get_scale(void)
+{
+    return ui_scale;
+}
+
+int sfe_theme_scaled(int base_px)
+{
+    return scaled(base_px);
+}
+
+GtkIconSize sfe_theme_icon_size_near(int base_px)
+{
+    static const struct {
+        int px;
+        GtkIconSize size;
+    } sizes[] = { { 16, GTK_ICON_SIZE_MENU }, { 24, GTK_ICON_SIZE_LARGE_TOOLBAR }, { 32, GTK_ICON_SIZE_DND },
+        { 48, GTK_ICON_SIZE_DIALOG } };
+    int want = scaled(base_px);
+    GtkIconSize best = GTK_ICON_SIZE_MENU;
+    int best_gap = G_MAXINT;
+    for (size_t i = 0; i < G_N_ELEMENTS(sizes); i++) {
+        int gap = ABS(sizes[i].px - want);
+        if (gap < best_gap) {
+            best = sizes[i].size;
+            best_gap = gap;
+        }
+    }
+    return best;
+}
+
+static void forget_icon(gpointer data, GObject* gone)
+{
+    (void)data;
+    g_ptr_array_remove_fast(scaled_icons, gone);
+}
+
+GtkWidget* sfe_scaled_icon_new(const char* icon_name, int base_px)
+{
+    GtkWidget* image = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_MENU);
+    g_object_set_data(G_OBJECT(image), "sfe-base-px", GINT_TO_POINTER(base_px));
+    gtk_image_set_pixel_size(GTK_IMAGE(image), scaled(base_px));
+    if (scaled_icons == NULL)
+        scaled_icons = g_ptr_array_new();
+    g_ptr_array_add(scaled_icons, image);
+    g_object_weak_ref(G_OBJECT(image), forget_icon, NULL);
+    return image;
+}
+
+/* Buttons and tree expanders have pixel sizes in style.css. */
+static void load_scale_css(void)
+{
+    g_autofree char* css = g_strdup_printf(
+        ".sfe-window button { min-width: %dpx; min-height: %dpx; }\n"
+        ".sfe-sidebar button.sfe-eject, .sfe-window .sfe-tree-bar button { min-width: %dpx; min-height: %dpx; }\n"
+        ".sfe-window .sfe-sidebar treeview.view { -GtkTreeView-expander-size: %d; }\n",
+        scaled(26), scaled(26), scaled(20), scaled(20), scaled(12));
+    if (scale_provider == NULL) {
+        scale_provider = gtk_css_provider_new();
+        gtk_style_context_add_provider_for_screen(gdk_screen_get_default(), GTK_STYLE_PROVIDER(scale_provider),
+            GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
+    }
+    gtk_css_provider_load_from_data(scale_provider, css, -1, NULL);
+}
+
 static void apply_scale(void)
 {
     GdkScreen* screen = gdk_screen_get_default();
-    gdk_screen_set_resolution(screen, base_dpi() * ui_scale);
+    for (guint i = 0; scaled_icons != NULL && i < scaled_icons->len; i++) {
+        GtkImage* image = g_ptr_array_index(scaled_icons, i);
+        gtk_image_set_pixel_size(image, scaled(GPOINTER_TO_INT(g_object_get_data(G_OBJECT(image), "sfe-base-px"))));
+    }
+    load_scale_css();
+    gdk_screen_set_resolution(screen, base_dpi() * ui_scale); /* (notify::resolution: the tree's icons) */
     gtk_style_context_reset_widgets(screen);
 }
 
@@ -219,6 +301,7 @@ void sfe_theme_init(void)
     /* sfe's own icons (e.g. the split buttons), looked up like theme icons. */
     gtk_icon_theme_add_resource_path(gtk_icon_theme_get_default(), "/org/sfe/icons");
     load_app_css();
+    load_scale_css();
     watch_user_css();
     g_signal_connect(settings, "notify::gtk-xft-dpi", G_CALLBACK(on_dpi_changed), NULL);
     g_signal_connect(settings, "notify::gtk-theme-name", G_CALLBACK(on_theme_setting_changed), NULL);

@@ -1,4 +1,5 @@
 #include "search.h"
+#include "theme.h"
 
 struct _SfeSearchBar {
     GtkBox parent;
@@ -86,7 +87,7 @@ static void sfe_search_bar_class_init(SfeSearchBarClass* klass)
 
 static void sfe_search_bar_init(SfeSearchBar* self)
 {
-    GtkWidget* icon = gtk_image_new_from_icon_name("system-search-symbolic", GTK_ICON_SIZE_BUTTON);
+    GtkWidget* icon = sfe_scaled_icon_new("system-search-symbolic", 16);
 
     gtk_orientable_set_orientation(GTK_ORIENTABLE(self), GTK_ORIENTATION_HORIZONTAL);
     gtk_box_set_spacing(GTK_BOX(self), 8);

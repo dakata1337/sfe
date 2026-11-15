@@ -1,4 +1,5 @@
 #include "dirtree.h"
+#include "theme.h"
 
 #include <glib/gstdio.h>
 #include <string.h>
@@ -658,6 +659,15 @@ static gboolean on_popup_menu(GtkWidget* widget, gpointer data)
     return TRUE;
 }
 
+/* The UI scale changed (it moves the screen resolution): icons follow. */
+static void on_resolution(GdkScreen* screen, GParamSpec* pspec, gpointer data)
+{
+    (void)screen, (void)pspec;
+    GtkCellRenderer* icon = g_object_get_data(G_OBJECT(data), "sfe-icon-cell");
+    g_object_set(icon, "stock-size", sfe_theme_icon_size_near(16), NULL);
+    gtk_tree_view_columns_autosize(GTK_TREE_VIEW(data));
+}
+
 static void sfe_dir_tree_init(SfeDirTree* self)
 {
     GtkTreeView* view = GTK_TREE_VIEW(self);
@@ -673,7 +683,9 @@ static void sfe_dir_tree_init(SfeDirTree* self)
     gtk_tree_sortable_set_sort_column_id(GTK_TREE_SORTABLE(self->store), COL_COLLATE, GTK_SORT_ASCENDING);
     gtk_tree_view_set_model(view, GTK_TREE_MODEL(self->store));
 
-    g_object_set(icon, "xpad", 2, "ypad", 5, NULL); /* rows as tall as the list's */
+    g_object_set(icon, "xpad", 2, "ypad", 5, "stock-size", sfe_theme_icon_size_near(16), NULL); /* rows as tall as the list's */
+    g_object_set_data(G_OBJECT(self), "sfe-icon-cell", icon);
+    g_signal_connect_object(gdk_screen_get_default(), "notify::resolution", G_CALLBACK(on_resolution), self, 0);
     g_object_set(text, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
     gtk_tree_view_column_pack_start(column, icon, FALSE);
     gtk_tree_view_column_add_attribute(column, icon, "icon-name", COL_ICON);

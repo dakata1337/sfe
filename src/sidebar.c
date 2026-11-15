@@ -1,4 +1,5 @@
 #include "sidebar.h"
+#include "theme.h"
 
 #include "app.h"
 #include "bookmarks.h"
@@ -92,7 +93,7 @@ static GtkWidget* add_row(SfeSidebar* self, Section section, const char* icon, c
 
     gtk_label_set_xalign(GTK_LABEL(text), 0);
     gtk_label_set_ellipsize(GTK_LABEL(text), PANGO_ELLIPSIZE_END);
-    gtk_box_pack_start(GTK_BOX(box), gtk_image_new_from_icon_name(icon, GTK_ICON_SIZE_MENU), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), sfe_scaled_icon_new(icon, 16), FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box), text, TRUE, TRUE, 0);
     gtk_widget_set_tooltip_text(row, file ? g_file_peek_path(file) : label);
 
@@ -297,7 +298,8 @@ static void add_devices(SfeSidebar* self)
         if (!dev->mount_path)
             gtk_style_context_add_class(gtk_widget_get_style_context(row), "sfe-unmounted");
         if (dev->can_unmount) {
-            GtkWidget* eject = gtk_button_new_from_icon_name("media-eject-symbolic", GTK_ICON_SIZE_MENU);
+            GtkWidget* eject = gtk_button_new();
+            gtk_button_set_image(GTK_BUTTON(eject), sfe_scaled_icon_new("media-eject-symbolic", 16));
             gtk_widget_set_tooltip_text(eject, dev->removable ? "Eject" : "Unmount");
             gtk_widget_set_focus_on_click(eject, FALSE);
             gtk_style_context_add_class(gtk_widget_get_style_context(eject), "sfe-eject");
@@ -621,7 +623,7 @@ static void update_tree_button(SfeSidebar* self)
 {
     bool full = !gtk_widget_get_visible(self->list_sw);
     gtk_button_set_image(GTK_BUTTON(self->tree_button),
-        gtk_image_new_from_icon_name(full ? "view-restore-symbolic" : "view-fullscreen-symbolic", GTK_ICON_SIZE_MENU));
+        sfe_scaled_icon_new(full ? "view-restore-symbolic" : "view-fullscreen-symbolic", 16));
     gtk_widget_set_tooltip_text(self->tree_button, full ? "Show the places again" : "Let the folder tree fill the sidebar");
 }
 
