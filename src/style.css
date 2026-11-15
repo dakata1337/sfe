@@ -506,6 +506,25 @@ menu.sfe-menu {
     border: none;
 }
 
+/* ---- Path bar completion (a popup window of its own) ------------------ */
+
+.sfe-completion,
+.sfe-completion treeview.view {
+    background-color: @sfe_bg;
+    color: @sfe_fg;
+}
+
+.sfe-completion frame > border {
+    border: 1px solid alpha(@sfe_fg, 0.1);
+}
+
+/* The row under the pointer is the selected one. */
+.sfe-window.sfe-completion treeview.view:selected,
+.sfe-window.sfe-completion treeview.view:selected:focus {
+    background-color: @sfe_accent;
+    color: @sfe_accent_fg;
+}
+
 /* ---- Search (Ctrl+F): a floating card over the files -------------------- */
 
 .sfe-window .sfe-search {

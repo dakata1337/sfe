@@ -100,6 +100,22 @@ static gboolean on_key_press(GtkWidget* entry, GdkEventKey* event, gpointer data
     return TRUE;
 }
 
+/* The completion popup is a window of its own, outside .sfe-window: give
+ * it sfe's style so the hovered row uses the theme's highlight colour. */
+static void style_completion_popup(GtkWidget* entry)
+{
+    GList* toplevels = gtk_window_list_toplevels();
+    for (GList* l = toplevels; l != NULL; l = l->next) {
+        GtkWindow* window = l->data;
+        if (gtk_window_get_window_type(window) == GTK_WINDOW_POPUP && gtk_window_get_attached_to(window) == entry) {
+            GtkStyleContext* style = gtk_widget_get_style_context(GTK_WIDGET(window));
+            gtk_style_context_add_class(style, "sfe-window");
+            gtk_style_context_add_class(style, "sfe-completion");
+        }
+    }
+    g_list_free(toplevels);
+}
+
 GtkWidget* sfe_path_entry_new(void)
 {
     GtkWidget* entry = gtk_entry_new();
@@ -116,6 +132,7 @@ GtkWidget* sfe_path_entry_new(void)
     gtk_entry_completion_set_popup_single_match(completion, FALSE);
     gtk_entry_set_completion(GTK_ENTRY(entry), completion);
     g_object_unref(completion);
+    style_completion_popup(entry);
 
     gtk_entry_set_input_hints(GTK_ENTRY(entry), GTK_INPUT_HINT_NO_SPELLCHECK);
     /* Small minimum width so three panes fit in a narrow (tiled) window; the
