@@ -142,6 +142,13 @@
     color: @sfe_fg;
 }
 
+/* "No devices": a note, not something to click. */
+.sfe-sidebar row.sfe-empty,
+.sfe-sidebar row.sfe-empty:hover {
+    background-color: transparent;
+    color: alpha(@sfe_fg, 0.45);
+}
+
 .sfe-sidebar row.sfe-unmounted {
     color: alpha(@sfe_fg, 0.6);
 }

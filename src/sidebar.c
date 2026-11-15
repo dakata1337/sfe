@@ -390,6 +390,7 @@ static void add_devices(SfeSidebar* self)
         g_ptr_array_add(devices, g_ptr_array_index(all, i));
     g_ptr_array_sort(devices, compare_devices);
 
+    guint displayed_devices = 0;
     for (guint i = 0; i < devices->len; i++) {
         SfeDevice* dev = g_ptr_array_index(devices, i);
         if (removable_only && !dev->removable)
@@ -418,6 +419,25 @@ static void add_devices(SfeSidebar* self)
             g_signal_connect(eject, "clicked", G_CALLBACK(on_eject_clicked), self);
             gtk_box_pack_end(GTK_BOX(row_box(row)), eject, FALSE, FALSE, 0);
         }
+        displayed_devices++;
+    }
+
+    if (displayed_devices == 0) { /* says so, rather than an empty Devices heading */
+        GtkWidget* row = gtk_list_box_row_new();
+        GtkWidget* text = gtk_label_new(removable_only ? "No removable drives" : "No devices");
+        RowData* d = g_new0(RowData, 1);
+
+        d->section = SECTION_DEVICES; /* for the "Devices" heading */
+        d->bookmark_index = -1;
+        g_object_set_data_full(G_OBJECT(row), "sfe-row", d, row_data_free);
+
+        gtk_label_set_xalign(GTK_LABEL(text), 0);
+        gtk_style_context_add_class(gtk_widget_get_style_context(row), "sfe-empty");
+        gtk_list_box_row_set_activatable(GTK_LIST_BOX_ROW(row), FALSE);
+        gtk_list_box_row_set_selectable(GTK_LIST_BOX_ROW(row), FALSE);
+        gtk_widget_set_can_focus(row, FALSE);
+        gtk_container_add(GTK_CONTAINER(row), text);
+        gtk_container_add(GTK_CONTAINER(self->list), row);
     }
 }
 
@@ -533,6 +553,8 @@ static void popup(GtkWidget* menu, GtkWidget* anchor, const GdkRectangle* rect, 
 static void show_row_menu(SfeSidebar* self, GtkListBoxRow* row, GdkEvent* event)
 {
     RowData* d = row_data(row);
+    if (d->file == NULL && d->device_id == NULL && d->bookmark_index < 0)
+        return; /* the "No devices" note: nothing to offer */
     GtkWidget* menu = gtk_menu_new();
 
     if (d->file != NULL)
