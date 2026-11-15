@@ -62,6 +62,12 @@ struct _SfePane {
     double scroll_wanted[2]; /* per view (grid, list): where it was scrolled to */
     bool padding; /* our own changes to the adjustments */
 
+    /* List columns that make way for the names in a narrow view. */
+    int name_width; /* widest name in pixels (capped), -1 to measure again */
+    int column_width[4]; /* by SfeSortKey: last width seen while shown */
+    int columns_for_width; /* list width the columns were fitted to */
+    guint columns_source;
+
     /* Visual mode: the selection is `visual_base` (chunks already drawn,
      * as GFile*) plus the rows from `visual_anchor` to the cursor. */
     bool visual;
@@ -459,6 +465,7 @@ static gboolean on_overlay_position(GtkOverlay* overlay, GtkWidget* child, GdkRe
 }
 
 static void schedule_thumbnails(SfePane* self);
+static void names_changed(SfePane* self);
 
 static void on_loaded(SfeDirModel* model, gpointer data)
 {
@@ -487,6 +494,7 @@ static void on_loaded(SfeDirModel* model, gpointer data)
     if (had_focus)
         gtk_widget_grab_focus(view);
     schedule_thumbnails(self);
+    names_changed(self);
 }
 
 static void on_load_error(SfeDirModel* model, GError* error, gpointer data)
@@ -677,6 +685,105 @@ static void on_scroll_range(GtkAdjustment* adjustment, gpointer data)
     self->padding = false;
 }
 
+/* ------------------------------------------------------------------------ */
+/* Columns that make way for the names                                       */
+/* ------------------------------------------------------------------------ */
+
+#define NAME_CHARS_CAP 40 /* a longer name is not worth dropping columns for */
+
+/* The widest name shown, capped at about NAME_CHARS_CAP characters. */
+static int measure_names(SfePane* self)
+{
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    GtkTreeIter iter;
+    PangoLayout* layout = gtk_widget_create_pango_layout(self->list, NULL);
+    int cap = 0, widest = 0, w = 0;
+
+    pango_layout_set_text(layout, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN", NAME_CHARS_CAP);
+    pango_layout_get_pixel_size(layout, &cap, NULL);
+    for (bool ok = model && gtk_tree_model_get_iter_first(model, &iter); ok && widest < cap;
+         ok = gtk_tree_model_iter_next(model, &iter)) {
+        g_autofree char* name = NULL;
+        gtk_tree_model_get(model, &iter, SFE_COL_NAME, &name, -1);
+        pango_layout_set_text(layout, name ? name : "", -1);
+        pango_layout_get_pixel_size(layout, &w, NULL);
+        widest = MAX(widest, w);
+    }
+    g_object_unref(layout);
+    return MIN(widest, cap);
+}
+
+/* Shows Size, Modified and Type only while the names still fit beside
+ * them; they go from the right: Type, then Modified, then Size. */
+static void fit_columns(SfePane* self)
+{
+    static const SfeSortKey extras[] = { SFE_SORT_SIZE, SFE_SORT_MODIFIED, SFE_SORT_TYPE };
+    int width = gtk_widget_get_allocated_width(self->list);
+    if (self->view != SFE_VIEW_LIST || width <= 1)
+        return;
+    if (self->name_width < 0)
+        self->name_width = measure_names(self);
+
+    for (size_t i = 0; i < G_N_ELEMENTS(extras); i++) { /* widths of the shown ones, for later */
+        GtkTreeViewColumn* c = self->columns[extras[i]];
+        if (gtk_tree_view_column_get_visible(c) && gtk_tree_view_column_get_width(c) > 0)
+            self->column_width[extras[i]] = gtk_tree_view_column_get_width(c);
+    }
+    const SfeConfig* cfg = sfe_config();
+    int icon = (int)lround(LIST_ICON_SIZE * cfg->ui_scale);
+    int name_needed = self->name_width + icon + 32; /* icon, paddings, a little air */
+    int keep = (int)G_N_ELEMENTS(extras);
+    for (;;) {
+        int used = name_needed;
+        for (int i = 0; i < keep; i++)
+            used += self->column_width[extras[i]] > 0 ? self->column_width[extras[i]] : 90;
+        if (keep == 0 || used <= width)
+            break;
+        keep--;
+    }
+    bool changed = false;
+    for (int i = 0; i < (int)G_N_ELEMENTS(extras); i++) {
+        GtkTreeViewColumn* c = self->columns[extras[i]];
+        if (gtk_tree_view_column_get_visible(c) != (i < keep)) {
+            gtk_tree_view_column_set_visible(c, i < keep);
+            changed = true;
+        }
+    }
+    if (changed) /* the list keeps the old widths otherwise: the name stays squeezed */
+        gtk_tree_view_columns_autosize(GTK_TREE_VIEW(self->list));
+    self->columns_for_width = width;
+}
+
+static gboolean on_fit_columns(gpointer data)
+{
+    SfePane* self = data;
+    self->columns_source = 0;
+    fit_columns(self);
+    return G_SOURCE_REMOVE;
+}
+
+/* Not during the allocation itself: hiding a column relays the list out. */
+static void schedule_fit_columns(SfePane* self)
+{
+    if (self->columns_source == 0)
+        self->columns_source = g_idle_add(on_fit_columns, self);
+}
+
+static void on_list_allocated(GtkWidget* list, GdkRectangle* alloc, gpointer data)
+{
+    (void)list;
+    SfePane* self = data;
+    if (alloc->width != self->columns_for_width)
+        schedule_fit_columns(self);
+}
+
+/* Other names: measure them again. */
+static void names_changed(SfePane* self)
+{
+    self->name_width = -1;
+    schedule_fit_columns(self);
+}
+
 static void on_scroll_value(GtkAdjustment* adjustment, gpointer data)
 {
     SfePane* self = data;
@@ -690,6 +797,7 @@ static void on_files_changed(SfeDirModel* model, gpointer data)
 {
     (void)model;
     schedule_thumbnails(data);
+    names_changed(data);
 }
 
 static void apply_config(SfePane* self)
@@ -741,6 +849,7 @@ void sfe_pane_set_view(SfePane* self, SfeViewMode mode)
     if (gtk_stack_get_visible_child(GTK_STACK(self->stack)) != self->message_box)
         gtk_stack_set_visible_child(GTK_STACK(self->stack), gtk_widget_get_parent(active_view(self)));
     update_buttons(self);
+    schedule_fit_columns(self);
     schedule_thumbnails(self);
 
     /* Keep the first selected file selected across the switch. */
@@ -1386,6 +1495,7 @@ static GtkWidget* build_list(SfePane* self)
     g_signal_connect(list, "key-press-event", G_CALLBACK(on_view_key_press), self);
     g_signal_connect(list, "button-press-event", G_CALLBACK(on_view_button_press), self);
     g_signal_connect(list, "popup-menu", G_CALLBACK(on_view_popup_menu), self);
+    g_signal_connect(list, "size-allocate", G_CALLBACK(on_list_allocated), self);
     return list;
 }
 
@@ -1547,6 +1657,7 @@ static void sfe_pane_dispose(GObject* object)
         g_cancellable_cancel(self->thumb_cancel);
     g_clear_object(&self->thumb_cancel);
     g_clear_handle_id(&self->thumb_source, g_source_remove);
+    g_clear_handle_id(&self->columns_source, g_source_remove);
     if (self->model != NULL) {
         g_signal_handlers_disconnect_by_data(self->model, self);
         g_clear_object(&self->model);
@@ -1594,6 +1705,7 @@ static void sfe_pane_init(SfePane* self)
     g_signal_connect(self->model, "files-changed", G_CALLBACK(on_files_changed), self);
     self->cfg_thumbnails = -1;
     self->thumb_size = -1;
+    self->name_width = -1;
 
     self->grid = build_grid(self);
     self->list = build_list(self);
