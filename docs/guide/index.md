@@ -533,9 +533,25 @@ are saved to `config.toml`.
   ([Custom commands](#custom-commands)), edited in place: name, command,
   and whether they are for files, folders or both.
 - **Programs**: which program opens which extension, as in `[open]`.
-- **System**: make sfe the default file manager, open `config.toml`.
+- **System**: make sfe the default file manager, [use it for other
+  programs' Open / Save dialogs](#open-and-save-dialogs), open
+  `config.toml`.
 
 ![The Keys page](images/settings-keys.png)
+
+### Open and save dialogs
+
+*Settings → System → Use sfe for Open / Save dialogs* makes programs that ask
+the desktop portal for a file dialog (Flatpak apps, browsers) open sfe
+instead. A bar at the bottom holds the name to save as, *Cancel* and *Open* /
+*Save*; Enter or a double-click on a file picks it, Ctrl+Enter is the
+*Open* / *Save* button. Firefox and Zen use the portal only with
+`about:config` → `widget.use-xdg-desktop-portal.file-picker` set to `1`.
+The details, and how to set it up by hand, are in
+[file-chooser.md](../file-chooser.md). File type filters are not supported
+yet: every file is shown.
+
+### Default file manager
 
 *Settings → System → Default file manager* makes sfe open folders for other
 applications and `xdg-open` (it sets `inode/directory` in `mimeapps.list`).

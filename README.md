@@ -47,8 +47,9 @@ cd packaging/arch/sfe-dev && makepkg -si   # sfe-dev: this checkout, as it is
 ```
 
 Runtime dependencies: gtk3, glib2, udisks2 + polkit (mounting), xdg-utils
-(opening files) and ffmpeg (video thumbnails); archive tools and thumbnailers
-are optional. See the PKGBUILDs for the full, annotated list.
+(opening files) and ffmpeg (video thumbnails); archive tools, thumbnailers
+and xdg-desktop-portal (sfe as other programs' Open / Save dialog) are
+optional. See the PKGBUILDs for the full, annotated list.
 
 ## Documentation
 

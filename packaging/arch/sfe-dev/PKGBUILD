@@ -38,6 +38,7 @@ optdepends=(
   '7zip: Extract Here for 7z and rar, Compress to 7z and zip, without bsdtar (archive.c)'
   'unrar: Extract Here for rar (archive.c)'
   'libnotify: notify-send for config file errors (app.c; GNotification otherwise)'
+  'xdg-desktop-portal: sfe as the Open / Save dialog of other programs (sfe-portal, portalconf.c)'
   'webp-pixbuf-loader: WebP image thumbnails'
   'libheif: HEIF/AVIF image thumbnails'
   'ntfs-3g: mount NTFS drives'

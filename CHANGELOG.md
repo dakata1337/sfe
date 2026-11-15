@@ -6,6 +6,11 @@ new version.
 
 ## Unreleased
 
+- sfe can be the file dialog of other programs: *Settings → System → Use sfe
+  for Open / Save dialogs* (through xdg-desktop-portal; Firefox and Zen
+  also need `widget.use-xdg-desktop-portal.file-picker = 1`). Behind it,
+  `sfe --choose open|save|folder` and the `sfe-portal` backend.
+
 - Installed packages no longer print sfe's debug messages: debug logging
   now follows meson's `debug` option instead of "anything but a release
   build" (the Arch packages build with `buildtype=plain`).
