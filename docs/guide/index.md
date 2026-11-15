@@ -294,7 +294,10 @@ boxes can be changed directly.
 ## Drives
 
 Drives appear in the sidebar under *Devices*, named by their label or else
-by the drive's vendor and model (hover for size, filesystem and device):
+by the drive's vendor and model. Mounted drives, the system disk included,
+have a thin bar under the name showing how full they are (red above 90%);
+hover for the numbers ("94.1 GB used of 2.0 TB (5%) · 1.9 TB free") as well
+as the size, filesystem and device.
 
 - **Click** an unmounted drive to mount and open it (USB drives need no password).
 - **⏏** unmounts; for USB drives it also powers them off so they can be unplugged.
@@ -311,6 +314,10 @@ polkit.addRule(function(action, subject) {
         return polkit.Result.YES;
 });
 ```
+
+*Settings → Sidebar → Devices* (`devices` under `[sidebar]`) chooses what
+is listed: `all` (removable drives and internal disks) or `removable` (only
+what can be unplugged, such as flash drives and SD cards).
 
 Encrypted (LUKS) drives are not supported yet.
 
@@ -506,7 +513,7 @@ are saved to `config.toml`.
   confirmation and the window title bar. *Scale* grows
   everything: text, icons, buttons and the sidebar.
 - **Thumbnails**: on or off, and the size limit ([Thumbnails](#thumbnails)).
-- **Sidebar**: GTK bookmarks.
+- **Sidebar**: which [devices](#drives) are listed, and GTK bookmarks.
 - **Keys**: every key with its command and what it does. Double-click a
   command to change it (any command line works, with arguments); *Add…*
   binds new keys, normal or visual mode only; *Unbind* switches a key off;
