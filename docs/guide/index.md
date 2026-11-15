@@ -502,7 +502,8 @@ are saved to `config.toml`.
 ![Settings](images/settings.png)
 
 - **General**: start folder, hidden files, scale, default view, icon size,
-  sorting, delete confirmation and the window title bar. *Scale* grows
+  [file icon style](#file-icons) (with a preview of each), sorting, delete
+  confirmation and the window title bar. *Scale* grows
   everything: text, icons, buttons and the sidebar.
 - **Thumbnails**: on or off, and the size limit ([Thumbnails](#thumbnails)).
 - **Sidebar**: GTK bookmarks.
@@ -556,6 +557,24 @@ it changes, so colour schemes from tools like Noctalia, matugen or pywal apply
 instantly. The same window with the plain Adwaita theme:
 
 ![sfe with a light theme](images/theme-light.png)
+
+### File icons
+
+Icon themes draw files in fixed colours (Adwaita's folders are always
+blue), so sfe can recolour them to match the theme. *Settings → General →
+File icons* shows a preview of each style:
+
+![The three file icon styles](images/file-icons.png)
+
+- **System**: the icon theme as it is.
+- **Tinted**: folders in the theme's accent colour, keeping their shading;
+  files keep their own colours, so types still stand out.
+- **Symbolic**: one-colour icons, files in the text colour and folders in
+  the accent.
+
+Tinted and symbolic icons follow colour scheme changes live. The sidebar
+keeps its own icons. In `config.toml`: `file_icons = "system"`, `"tinted"`
+or `"symbolic"` under `[general]`.
 
 ## Keyboard shortcuts
 

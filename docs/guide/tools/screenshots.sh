@@ -391,6 +391,13 @@ launch Pictures
 key CTRL p
 sleep 1
 shot settings dialog
+# The file icons chooser: the second card row of the General page.
+capture dialog "$WORK/settings.png"
+python3 -c '
+import sys
+from PIL import Image
+Image.open(sys.argv[1]).crop((200, 225, 830, 400)).save(sys.argv[2])
+' "$WORK/settings.png" "$OUT/file-icons.png"
 type_cmd "settings keys"
 sleep 0.8
 shot settings-keys dialog
