@@ -7,7 +7,8 @@
 sfe is a small, fast file manager for Wayland, written in C with GTK3. It
 aims to stay minimal and readable while covering what a daily file manager
 needs: a sidebar with bookmarks, drives and a folder tree; up to three split
-views; fuzzy search; thumbnails; copy, move, trash, undo and batch rename;
+views; fuzzy search; thumbnails and album covers on folders; copy, move,
+trash, undo and batch rename;
 and custom commands. Everything also works from the keyboard, vim style,
 with a `:` command line.
 

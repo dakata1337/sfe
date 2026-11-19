@@ -13,7 +13,8 @@ sfe \- Simple File Explorer, a small file manager for Wayland
 .B sfe
 is a minimal GTK3 file manager: a sidebar with places, bookmarks, drives
 and a folder tree; up to three split views in a grid or a list; fuzzy
-search; thumbnails; copy, move, trash, undo and batch rename; custom
+search; thumbnails, with cover pictures on folders; copy, move, trash,
+undo and batch rename; custom
 commands; and vim-style keys with a command line.
 .PP
 Each \fIDIRECTORY\fR opens in a window of its own; without one, a window
@@ -60,7 +61,9 @@ options, default; no options makes a check box).
 In the file views single keys are commands (normal mode):
 \fBj\fR/\fBk\fR move, \fBh\fR goes to the parent folder, \fBl\fR opens,
 \fBv\fR selects with the keyboard, \fByy\fR/\fBdd\fR/\fBp\fR copy, cut and
-paste, \fBu\fR undoes, \fB/\fR searches and \fB:\fR opens the command line.
+paste, \fBx\fR trashes, \fBu\fR undoes, \fB/\fR searches and \fB:\fR opens
+the command line. Renaming one file and creating files or folders also
+happen on the command line (\fB:rename\fR, \fB:mkdir\fR, \fB:touch\fR).
 Ctrl+W followed by \fBv\fR, \fBs\fR or \fBq\fR splits and closes views.
 After half a second in a key chord, sfe lists the keys that can follow.
 .PP

@@ -626,6 +626,7 @@ sort_order = "ascending"  # ascending | descending
 [preview]
 thumbnails = true
 thumbnail_max_mb = 50
+folder_covers = true  # cover.jpg / folder.png instead of the folder icon
 
 [open]               # program per extension; %f is the file
 mp4 = "mpv %f"

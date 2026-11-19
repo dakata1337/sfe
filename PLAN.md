@@ -175,7 +175,7 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 | Shift+`h`/`j`/`k`/`l` | `:split left/down/up/right` | move focus to the view in that direction |
 | Shift+`W` | `:split next` | cycle focus clockwise: left → right-top → right-bottom |
 | Ctrl+Shift+`h`/`j`/`k`/`l` | `:split move left/down/up/right` | swap the active view with the one in that direction |
-| Ctrl+W `q` | `:split close` / `:q` | close the active view (the window if it is the last) |
+| Ctrl+W `q` | `:q` | close the active view (the window if it is the last) |
 
 - Split rules (shared by the keys, the buttons and Ctrl+\\ / Ctrl+-): one view splits either way; two views side by side split top / bottom and two stacked views split side by side, and then the view being split becomes right-top, the new one right-bottom and the other one moves left. Three views do not split. Where a split is not allowed the chord does nothing (the command line says why).
 - `:split absolute left|right|right-top|right-bottom|top|bottom` focuses a position. Only positions that exist are offered: `left` / `right` side by side, `top` / `bottom` stacked, `left` / `right-top` / `right-bottom` with three views.
@@ -201,7 +201,7 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 
 **Context-aware completion.** Candidates come in groups, always in this order: the **active view** first, then the other views clockwise (right-top, right-bottom, then left). Within a group, candidates are ranked by the fuzzy matcher from milestone 7 (exact > prefix > word start > substring > fuzzy). Each candidate shows a small tag saying where it comes from (`left`, `right-top`, `bookmark`, `device`, …).
 
-**Commands.** Every row of the action table is also a command; the arguments are what's new. Completion shows one row per command with its aliases (`mkdir | new_directory | new_folder`), the arguments dimmed and the help on the right, with the matched letters in the accent colour; actions that duplicate a command are not offered (typed, they still run with a deprecation note, to be removed later), and the key-binding helpers come last, dimmed (TODO, 2026-11-15).
+**Commands.** Every row of the action table is also a command; the arguments are what's new. Completion shows one row per command with its aliases (`mkdir | new_directory | new_folder`), the arguments dimmed and the help on the right, with the matched letters in the accent colour; actions that duplicate a command are not offered and are not commands (their old command names were removed in 2.0), and the key-binding helpers come last, dimmed (TODO, 2026-11-15).
 
 | Command | Arguments (what completion offers) |
 |---|---|
@@ -219,7 +219,7 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 | `:sidebar` / `:tree` | `on/off/toggle` / `full/normal/toggle` |
 | `:cd` / `:open` | `<path>` / `<file>` |
 | `:hidden` / `:view` | `on/off/toggle` / `grid/list` |
-| `:q` (`:quit`) | close the active view, like `:split close` |
+| `:q` (`:quit`) | close the active view (the window if it is the last) |
 
 ## 8. Decisions confirmed with you
 
@@ -240,7 +240,7 @@ Every milestone also updates the user guide (`docs/guide/index.md`) and retakes 
 3. ✅ **Sidebar:** places, bookmarks (add/remove/reorder) and devices via UDisks2 (mount/unmount/eject, auto-navigate after mount) in the top half. The directory tree, which follows the active pane, goes in the bottom half (`dirtree.c`).
 4. ✅ **Splits:** 3-pane layout, v/h split rules, close + slide-left, active-pane tracking.
 5. ✅ **File ops:** action table, context menu, clipboard, copy/move/trash/delete jobs, new file/folder, properties.
-6. ✅ **Rename and mass rename:** name prompt (F2), pattern dialog with template / find-replace / case / counter and live conflict preview (F2 on several, Shift+F2), two-pass rename with rollback. The directory model dropped GtkTreeModelFilter (it emitted criticals when shown rows were removed).
+6. ✅ **Rename and mass rename:** name prompt (F2; on the command line since 2.0), pattern dialog with template / find-replace / case / counter and live conflict preview (F2 on several, Shift+F2), two-pass rename with rollback. The directory model dropped GtkTreeModelFilter (it emitted criticals when shown rows were removed).
 7. ✅ **Fuzzy search overlay:** tiered `fuzzy.c` scorer with unit tests; the directory model filters and orders by score; a floating card centred in the bottom third of the active pane (Ctrl+F; Up/Down/Enter/Esc).
 8. ✅ **Modal workflow:** normal-mode keymap (data-driven, overridable in `[keys]`) with chord handling and showcmd. Split focus / swap commands. The `:` command line with history, argument parsing, and grouped context-aware completion using `fuzzy.c`. All commands from section 7. Unit tests for the keymap parser, the command parser and completion ordering. (`keymap.c`, `cmdline.c`, `commands.c`, `cmdbar.c`; every action is also a command.) Later: visual mode (`v`, chunks), `zz`, Ctrl+S hides the sidebar, the folder tree can fill the sidebar, chord suggestions, and undo (`undo.c`: an app-wide history of file changes; `:undo [<step>]`, `u`, Ctrl+Z; copy-like steps are undone into the trash, never deleted).
 9. ✅ **Thumbnails:** images, videos, freedesktop cache, worker pool, lazy loading of visible items only. (`thumbs.c`: spec cache with failure markers shared with other file managers; gdk-pixbuf for images, installed `.thumbnailer` files, ffmpeg fallback for videos; a newest-first thread pool; panes request only the rows on screen plus a margin and cancel what scrolled away. Unit tests in `tests/test_thumbs.c`.)
