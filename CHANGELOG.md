@@ -7,6 +7,11 @@ release: see the top of that script).
 
 ## Unreleased
 
+- NTFS drives the kernel's driver refuses (Windows Fast Startup or
+  hibernation leaves them unclean, and udisks reported only "wrong fs type,
+  bad option, bad superblock") are mounted with ntfs-3g when it is
+  installed; without it, the error says to install it.
+
 ## 2.1.0
 
 - Lighter on big folders: about 800 bytes less memory per file (16 MB

@@ -370,13 +370,56 @@ static GDBusProxy* filesystem_for_id(SfeDevices* self, const char* id, GTask* ta
     return fs;
 }
 
+/* A mount in progress (the GTask's data). */
+typedef struct {
+    GDBusProxy* fs;
+    bool ntfs; /* an NTFS filesystem: the kernel driver may refuse it */
+    bool retried; /* already asked for ntfs-3g */
+} MountJob;
+
+static void mount_job_free(gpointer p)
+{
+    MountJob* job = p;
+    g_object_unref(job->fs);
+    g_free(job);
+}
+
+/* udisks mounts NTFS with the kernel's ntfs3 driver first, which refuses a
+ * volume Windows did not close cleanly (Fast Startup, hibernation), with a
+ * bare "wrong fs type, bad option, bad superblock" error. ntfs-3g mounts
+ * those: asking for the fstype "ntfs" makes udisks use it (mount.ntfs). */
+static bool ntfs_3g_installed(void)
+{
+    g_autofree char* helper = g_find_program_in_path("mount.ntfs");
+    g_autofree char* fallback = helper ? NULL : g_find_program_in_path("ntfs-3g");
+    return helper != NULL || fallback != NULL;
+}
+
+static void call_mount(GTask* task, const char* fstype);
+
 static void on_mount_done(GObject* source, GAsyncResult* res, gpointer data)
 {
     GTask* task = data;
+    MountJob* job = g_task_get_task_data(task);
     GError* error = NULL;
     g_autoptr(GVariant) ret = g_dbus_proxy_call_finish(G_DBUS_PROXY(source), res, &error);
 
     if (ret == NULL) {
+        /* Refused, not denied or cancelled: try ntfs-3g once. */
+        bool failed = g_dbus_error_is_remote_error(error)
+            && g_strcmp0(g_dbus_error_get_remote_error(error), "org.freedesktop.UDisks2.Error.Failed") == 0;
+        if (job->ntfs && !job->retried && failed) {
+            if (ntfs_3g_installed()) {
+                g_debug("ntfs3 refused the volume (%s); trying ntfs-3g", error->message);
+                g_error_free(error);
+                job->retried = true;
+                call_mount(task, "ntfs");
+                return;
+            }
+            g_dbus_error_strip_remote_error(error);
+            g_prefix_error(&error, "The kernel's NTFS driver refused this volume; Windows probably did not close it "
+                                   "cleanly (Fast Startup or hibernation). Installing ntfs-3g lets sfe mount it. ");
+        }
         return_dbus_error(task, error);
         return;
     }
@@ -386,16 +429,34 @@ static void on_mount_done(GObject* source, GAsyncResult* res, gpointer data)
     g_object_unref(task);
 }
 
+/* Filesystem.Mount, with udisks' default driver or `fstype`. */
+static void call_mount(GTask* task, const char* fstype)
+{
+    MountJob* job = g_task_get_task_data(task);
+    GVariantBuilder options;
+    g_variant_builder_init(&options, G_VARIANT_TYPE("a{sv}"));
+    if (fstype != NULL)
+        g_variant_builder_add(&options, "{sv}", "fstype", g_variant_new_string(fstype));
+    g_dbus_proxy_call(job->fs, "Mount", g_variant_new("(a{sv})", &options), G_DBUS_CALL_FLAGS_ALLOW_INTERACTIVE_AUTHORIZATION,
+        CALL_TIMEOUT, g_task_get_cancellable(task), on_mount_done, task);
+}
+
 void sfe_devices_mount(SfeDevices* self, const char* id, GCancellable* cancel,
     GAsyncReadyCallback callback, gpointer data)
 {
     GTask* task = g_task_new(self, cancel, callback, data);
-    g_autoptr(GDBusProxy) fs = filesystem_for_id(self, id, task);
+    GDBusProxy* fs = filesystem_for_id(self, id, task);
 
     g_debug("mount %s", id);
-    if (fs != NULL)
-        g_dbus_proxy_call(fs, "Mount", g_variant_new("(a{sv})", NULL),
-            G_DBUS_CALL_FLAGS_ALLOW_INTERACTIVE_AUTHORIZATION, CALL_TIMEOUT, cancel, on_mount_done, task);
+    if (fs == NULL)
+        return;
+    g_autoptr(GDBusObject) object = g_dbus_object_manager_get_object(self->udisks, id);
+    g_autofree char* type = prop_string(object, IFACE_BLOCK, "IdType");
+    MountJob* job = g_new0(MountJob, 1);
+    job->fs = fs;
+    job->ntfs = g_strcmp0(type, "ntfs") == 0;
+    g_task_set_task_data(task, job, mount_job_free);
+    call_mount(task, NULL);
 }
 
 char* sfe_devices_mount_finish(SfeDevices* self, GAsyncResult* res, GError** error)

@@ -343,6 +343,11 @@ polkit.addRule(function(action, subject) {
 });
 ```
 
+**NTFS drives** (Windows) are mounted with the kernel's NTFS driver. It
+refuses a drive Windows did not close cleanly, which is common with
+*Fast Startup* or hibernation; sfe then mounts it with `ntfs-3g` instead,
+when that is installed. Without it, the error says so.
+
 *Settings → Sidebar → Devices* (`devices` under `[sidebar]`) chooses what
 is listed: `all` (removable drives and internal disks) or `removable` (only
 what can be unplugged, such as flash drives and SD cards).

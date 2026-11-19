@@ -43,7 +43,7 @@ optdepends=(
   'xdg-desktop-portal: sfe as the Open / Save dialog of other programs (sfe-portal, portalconf.c)'
   'webp-pixbuf-loader: WebP image thumbnails'
   'libheif: HEIF/AVIF image thumbnails'
-  'ntfs-3g: mount NTFS drives'
+  'ntfs-3g: mount NTFS drives that the kernel driver refuses, e.g. after Windows Fast Startup (devices.c)'
   'exfatprogs: exFAT drive support'
   'dosfstools: FAT drive support'
 )
