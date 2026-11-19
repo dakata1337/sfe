@@ -347,8 +347,11 @@ static void on_query_done(GObject* source, GAsyncResult* res, gpointer data)
     g_autoptr(GFileInfo) info = g_file_query_info_finish(G_FILE(source), res, NULL);
     g_autoptr(GFile) parent = g_file_get_parent(G_FILE(source));
 
-    /* Ignore results that arrive after the pane moved to another directory. */
-    if (info != NULL && self->store != NULL && parent != NULL && g_file_equal(parent, self->dir))
+    /* Ignore results that arrive after the pane moved to another directory,
+     * or for a file renamed or deleted meanwhile (that event was already
+     * handled: adding it now would leave a ghost, e.g. a download's .part). */
+    if (info != NULL && self->store != NULL && parent != NULL && g_file_equal(parent, self->dir)
+        && g_file_query_exists(G_FILE(source), NULL))
         add_or_update(self, info);
 }
 

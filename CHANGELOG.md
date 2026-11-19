@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Files renamed right after they appear (a browser download's `.part`
+  becoming the finished file) no longer leave a ghost entry under the old
+  name, which could not be opened until the folder was reloaded.
+
 ## 2.1.2
 
 - The size count behind the "Yanked … (32 MB)" notice stops when the notice
