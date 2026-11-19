@@ -1,5 +1,3 @@
-<p align="center"><img src="data/icons/hicolor/scalable/apps/sfe.svg" alt="sfe logo" width="96"></p>
-
 # sfe — Simple File Explorer
 
 ![sfe](docs/guide/images/overview.png)
