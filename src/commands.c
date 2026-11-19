@@ -487,8 +487,10 @@ static bool run_split(Ctx* c, int argc, char** argv, GError** error)
         sfe_split_focus_next(c->split);
         return true;
     }
-    if (strcmp(sub, "close") == 0)
+    if (strcmp(sub, "close") == 0) { /* TODO: remove with deprecated_names (deprecated 2026-11-19) */
+        sfe_window_show_message(c->window, "“split close” is an old name and will go away: use :q", false);
         return run_action(c, "close-pane", NULL, error);
+    }
     if (parse_direction(sub, &direction)) {
         /* Wraps around at the edge; with no other view on that line there
          * is simply nothing to do (no error: the keys are pressed blindly). */
@@ -510,7 +512,7 @@ static bool run_split(Ctx* c, int argc, char** argv, GError** error)
         sfe_split_focus(c->split, pane);
         return true;
     }
-    return fail(error, "usage: split move|next|vertical|horizontal|left|right|up|down|absolute|close");
+    return fail(error, "usage: split move|next|vertical|horizontal|left|right|up|down|absolute");
 }
 
 /* ---- Bookmarks ---------------------------------------------------------- */
@@ -1049,7 +1051,7 @@ static void complete_split(Ctx* c, int argi, char** argv, const char* query, con
     (void)query, (void)rank;
     if (argi == 1) {
         static const char* const first[] = { "move", "next", NULL };
-        static const char* const rest[] = { "vertical", "horizontal", "left", "right", "up", "down", "absolute", "close", NULL };
+        static const char* const rest[] = { "vertical", "horizontal", "left", "right", "up", "down", "absolute", NULL };
         add_words(out, first, 0);
         add_words(out, rest, 1);
     } else if (argi == 2 && strcmp(argv[1], "move") == 0) {
@@ -1142,8 +1144,8 @@ static const Command commands[] = {
     { { "mount", NO_ALIAS, "<device>", "mount a drive and open it" }, complete_devices, run_mount, false },
     { { "unmount", NO_ALIAS, "<device>", "unmount a drive" }, complete_devices, run_unmount, false },
     { { "eject", NO_ALIAS, "<device>", "unmount and power off a removable drive" }, complete_devices, run_eject, false },
-    { { "split", NO_ALIAS, "<sub-command>", "move|next|vertical|horizontal|left|right|up|down|absolute|close" }, complete_split, run_split, false },
-    { { "q", { "quit", NULL }, "", "close the active view, like split close (the window if it is the last)" }, NULL, run_q, false },
+    { { "split", NO_ALIAS, "<sub-command>", "move|next|vertical|horizontal|left|right|up|down|absolute" }, complete_split, run_split, false },
+    { { "q", { "quit", NULL }, "", "close the active view (the window if it is the last)" }, NULL, run_q, false },
     { { "bookmark", NO_ALIAS, "[<folder>…]", "bookmark folders (the selected ones, else this one)" }, complete_folders, run_bookmark, false },
     { { "unbookmark", NO_ALIAS, "[<bookmark>…]", "remove bookmarks (the selected folders, else this one)" }, complete_unbookmark, run_unbookmark, false },
     { { "hidden", NO_ALIAS, "on|off|toggle", "show or hide hidden files" }, complete_on_off, run_hidden, false },
@@ -1171,7 +1173,7 @@ static const struct {
     { "view_list", "view list" },
     { "split_vertical", "split vertical" },
     { "split_horizontal", "split horizontal" },
-    { "close_pane", "split close" },
+    { "close_pane", "q" },
     { "next_pane", "split next" },
     { "select_all", "select all" },
     { "paste_into", "paste <folder>" },

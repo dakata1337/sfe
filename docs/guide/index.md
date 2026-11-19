@@ -374,7 +374,7 @@ once; one left alone without the list is dropped after a second.
 | `/` | `search` | the fuzzy search |
 | `:` | | the command line |
 | `<C-w>v` / `<C-w>s` | `split vertical` / `split horizontal` | split side by side / top and bottom (same rules as the buttons) |
-| `<C-w>q` | `split close` | close the view (the window if it is the last) |
+| `<C-w>q` | `q` | close the view (the window if it is the last) |
 | `W` | `split next` | next view: left, right-top, right-bottom |
 | `H` `J` `K` `L` | `split left` / `down` / `up` / `right` | focus the view in that direction; at the edge it wraps around to the far side |
 | `<C-H>` `<C-J>` `<C-K>` `<C-L>` | `split move left` / … | swap the active view with the one in that direction (wrapping around too) |
@@ -459,8 +459,8 @@ selection.
 | `mount` | `<device>` | mount a drive and open it |
 | `unmount` | `<device>` | unmount a drive |
 | `eject` | `<device>` | unmount and power off a removable drive |
-| `split` | `move\|next\|vertical\|horizontal\|left\|right\|up\|down\|absolute\|close` | the split commands above; `absolute left\|right\|right-top\|right-bottom\|top\|bottom` focuses a position, offering only the ones that exist |
-| `q` (`quit`) | | close the active view, like `split close` |
+| `split` | `move\|next\|vertical\|horizontal\|left\|right\|up\|down\|absolute` | the split commands above; `absolute left\|right\|right-top\|right-bottom\|top\|bottom` focuses a position, offering only the ones that exist |
+| `q` (`quit`) | | close the active view (the window if it is the last) |
 | `bookmark` | `[<folder>…]` | bookmark folders: the ones given, else the selected folders, else this one |
 | `unbookmark` | `[<bookmark>…]` | remove sfe's bookmarks the same way |
 | `hidden` | `on\|off\|toggle` | show or hide hidden files |
@@ -489,7 +489,7 @@ folder: `:cp notes.txt ~/Backup`. For the second and later arguments the
 other views' folders are offered first.
 
 Older names (`toggle_hidden`, `view_grid`, `split_vertical`,
-`close_pane`, `paste_into`, `toggle_sidebar`, …) still work for now, so
+`close_pane`, `split close`, `paste_into`, `toggle_sidebar`, …) still work for now, so
 key bindings in `config.toml` keep working, but each use says which
 command replaces it. They will be removed in a later version.
 

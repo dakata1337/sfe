@@ -13,6 +13,8 @@ new version.
   argument; it no longer takes file names. `R` does the same.
 - `:mkdir` and `:touch` take one name: `:mkdir Hello World!` makes the
   folder “Hello World!” (it made two folders).
+- `:split close` is gone in favour of `:q` / `:quit` (`<C-w>q` runs `q`);
+  the old name still works for now, with a note.
 
 ## 1.5.0
 

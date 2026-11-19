@@ -32,7 +32,7 @@ static const SfeKeyBinding defaults[] = {
     { ":", "command_line", "command line" },
     { "<C-w>v", "split vertical", "split side by side" },
     { "<C-w>s", "split horizontal", "split top / bottom" },
-    { "<C-w>q", "split close", "close the view (the window if it is the last)" },
+    { "<C-w>q", "q", "close the view (the window if it is the last)" },
     { "W", "split next", "next view: left, right-top, right-bottom" },
     { "H", "split left", "focus the view on the left" },
     { "J", "split down", "focus the view below" },
