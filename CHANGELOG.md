@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Memory goes back down after leaving or closing a view of a big folder:
+  glibc kept the freed memory for reuse, so sfe stayed at its peak (about
+  200 MB after visiting a folder of 100,000 files; 630 MB with three
+  views). It is now returned to the system: 52 MB after going back.
 - Command-line completion works right after a big folder loads. The list
   view measures its rows in the background after loading (about 30 s for
   100,000 files), and the completion update waited behind that work: the

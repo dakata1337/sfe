@@ -443,8 +443,37 @@ static GtkListStore* new_store(void)
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_BOOLEAN);
 }
 
+#ifdef __GLIBC__
+#include <malloc.h>
+
+/* glibc keeps freed memory for reuse instead of returning it to the system,
+ * so after leaving (or closing) a folder of 100,000 files sfe kept ~150 MB
+ * it no longer used. Once the views have let go of the old rows (an idle
+ * later), the free memory is handed back. */
+#define BIG_FOLDER_FILES 5000
+
+static guint trim_source;
+
+static gboolean trim_memory(gpointer data)
+{
+    (void)data;
+    trim_source = 0;
+    malloc_trim(0);
+    return G_SOURCE_REMOVE;
+}
+
+static void release_freed_memory(guint dropped_files)
+{
+    if (dropped_files >= BIG_FOLDER_FILES && trim_source == 0)
+        trim_source = g_idle_add_full(G_PRIORITY_LOW, trim_memory, NULL, NULL);
+}
+#else
+static void release_freed_memory(guint dropped_files) { (void)dropped_files; }
+#endif
+
 static void clear_contents(SfeDirModel* self)
 {
+    release_freed_memory(self->infos ? g_hash_table_size(self->infos) : 0);
     if (self->monitor != NULL) {
         g_signal_handlers_disconnect_by_data(self->monitor, self);
         g_clear_object(&self->monitor);
