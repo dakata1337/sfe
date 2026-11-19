@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 2.1.0
+
 - Lighter on big folders: about 800 bytes less memory per file (16 MB
   for 20,000 files) and about 12% less CPU to open them, with the same
   icons. sfe picks a file's icon from its type instead of keeping the
