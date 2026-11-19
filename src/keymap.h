@@ -70,6 +70,13 @@ typedef enum {
 SfeKeysResult sfe_keymap_lookup(const SfeKeymap* map, char* const* tokens, guint n, const char** command,
     bool* prefix);
 
+/* Two maps at once (visual mode: the visual keys, then the normal ones): an
+ * exact binding of `first` wins over one of `then`, but a longer binding in
+ * either still makes the caller wait, so a visual "d" does not swallow the
+ * first key of the normal "dd". `first` may be NULL. */
+SfeKeysResult sfe_keymap_lookup_layered(const SfeKeymap* first, const SfeKeymap* then, char* const* tokens,
+    guint n, const char** command, bool* prefix);
+
 /* A key that can follow a partly typed chord, for the suggestions list. */
 typedef struct {
     char* keys; /* the rest of the sequence: "v", "<C-x>q" */

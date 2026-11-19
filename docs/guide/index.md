@@ -411,7 +411,9 @@ counted in the background, folders included).
 | `d` | `cut` | cut the selection |
 | `<Esc>` | `visual off` | leave visual mode |
 
-Other keys work as in normal mode: `x` trashes the selection, `r` / `R`
+Other keys work as in normal mode, chords included: `dd` trashes the
+selection and `yy` yanks it, so `y` and `d` on their own wait a second for
+a possible second key before they run. `x` trashes the selection too, `r` / `R`
 rename it, `:` opens the command line for it. Anything that acts on the
 files ends visual mode, and so do going to another folder, switching the
 view, searching or clicking. Leaving visual mode never changes the

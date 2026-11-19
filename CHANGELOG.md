@@ -6,6 +6,9 @@ new version.
 
 ## Unreleased
 
+- Visual mode: `dd` and `yy` work as in normal mode (the first `d` / `y`
+  ran on its own and the second key leaked into normal mode); a key bound
+  in visual mode now waits when it also starts a normal-mode chord.
 - `:cd` without a folder goes to the start folder from the settings
   (it went to the home folder).
 - `:mass_rename [all|files|directories]` renames the selected items (in

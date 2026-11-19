@@ -395,3 +395,22 @@ SfeKeysResult sfe_keymap_lookup(const SfeKeymap* map, char* const* tokens, guint
         return SFE_KEYS_MATCH;
     return longer ? SFE_KEYS_PREFIX : SFE_KEYS_NONE;
 }
+
+SfeKeysResult sfe_keymap_lookup_layered(const SfeKeymap* first, const SfeKeymap* then, char* const* tokens,
+    guint n, const char** command, bool* prefix)
+{
+    const char* a = NULL;
+    const char* b = NULL;
+    bool longer_a = false, longer_b = false;
+    if (first != NULL)
+        sfe_keymap_lookup(first, tokens, n, &a, &longer_a);
+    sfe_keymap_lookup(then, tokens, n, &b, &longer_b);
+    const char* exact = a != NULL ? a : b;
+    if (command != NULL)
+        *command = exact;
+    if (prefix != NULL)
+        *prefix = longer_a || longer_b;
+    if (exact != NULL)
+        return SFE_KEYS_MATCH;
+    return longer_a || longer_b ? SFE_KEYS_PREFIX : SFE_KEYS_NONE;
+}

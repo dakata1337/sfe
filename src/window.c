@@ -442,11 +442,9 @@ static bool normal_mode_key(SfeWindow* win, const GdkEventKey* event, GtkWidget*
     const char* command = NULL;
     bool prefix = false;
     char* const* keys = (char* const*)win->pending->pdata;
-    SfeKeysResult result = SFE_KEYS_NONE;
-    if (sfe_pane_in_visual(sfe_window_get_active_pane(win))) /* visual keys first */
-        result = sfe_keymap_lookup(win->visual_keymap, keys, win->pending->len, &command, &prefix);
-    if (result == SFE_KEYS_NONE)
-        result = sfe_keymap_lookup(win->keymap, keys, win->pending->len, &command, &prefix);
+    bool visual = sfe_pane_in_visual(sfe_window_get_active_pane(win)); /* visual keys first */
+    SfeKeysResult result = sfe_keymap_lookup_layered(visual ? win->visual_keymap : NULL, win->keymap, keys,
+        win->pending->len, &command, &prefix);
 
     if (result == SFE_KEYS_MATCH && !prefix) {
         g_autofree char* line = g_strdup(command);

@@ -168,6 +168,58 @@ static void test_continuations(void)
     g_assert_cmpstr(((SfeKeyHint*)g_ptr_array_index(both, 2))->command, ==, "open");
 }
 
+/* Typing `sequence` key by key with `first` over `then`: no earlier key may
+ * run a command on its own (MATCH without a longer binding), else the rest
+ * of the sequence would leak into the next chord (the old visual "dd"). The
+ * whole sequence must give `expected`. */
+static void assert_reachable(const SfeKeymap* first, const SfeKeymap* then, const char* sequence,
+    const char* expected)
+{
+    g_auto(GStrv) tokens = sfe_keymap_parse(sequence, NULL);
+    guint n = g_strv_length(tokens);
+    for (guint k = 1; k < n; k++) {
+        bool prefix = false;
+        SfeKeysResult r = sfe_keymap_lookup_layered(first, then, tokens, k, NULL, &prefix);
+        if (r == SFE_KEYS_NONE || (r == SFE_KEYS_MATCH && !prefix))
+            g_error("“%s” is cut short after %u key(s)%s", sequence, k, first ? " in visual mode" : "");
+    }
+    const char* command = NULL;
+    g_assert_cmpint(sfe_keymap_lookup_layered(first, then, tokens, n, &command, NULL), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, expected);
+}
+
+/* Every built-in key works in both modes: normal keys in visual mode too,
+ * unless visual mode binds the very same keys. */
+static void test_layered(void)
+{
+    g_autoptr(SfeKeymap) normal = sfe_keymap_new_default();
+    g_autoptr(SfeKeymap) visual = sfe_keymap_new_visual_default();
+    size_t n = 0, nv = 0;
+    const SfeKeyBinding* d = sfe_keymap_defaults(&n);
+    const SfeKeyBinding* v = sfe_keymap_visual_defaults(&nv);
+
+    for (size_t i = 0; i < n; i++) {
+        assert_reachable(NULL, normal, d[i].sequence, d[i].command);
+        const char* own = NULL;
+        g_auto(GStrv) tokens = sfe_keymap_parse(d[i].sequence, NULL);
+        sfe_keymap_lookup(visual, tokens, g_strv_length(tokens), &own, NULL);
+        assert_reachable(visual, normal, d[i].sequence, own ? own : d[i].command);
+    }
+    for (size_t i = 0; i < nv; i++)
+        assert_reachable(visual, normal, v[i].sequence, v[i].command);
+
+    /* The case that was broken: "d" waits (it is cut on its own after the
+     * timeout), "dd" is the normal trash. */
+    const char* command = NULL;
+    bool prefix = false;
+    char* d1[] = { "d", NULL };
+    g_assert_cmpint(sfe_keymap_lookup_layered(visual, normal, d1, 1, &command, &prefix), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "cut");
+    g_assert_true(prefix);
+    assert_reachable(visual, normal, "dd", "trash");
+    assert_reachable(visual, normal, "yy", "yank");
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -177,5 +229,6 @@ int main(int argc, char** argv)
     g_test_add_func("/keymap/overrides", test_overrides);
     g_test_add_func("/keymap/defaults", test_defaults);
     g_test_add_func("/keymap/continuations", test_continuations);
+    g_test_add_func("/keymap/layered", test_layered);
     return g_test_run();
 }
