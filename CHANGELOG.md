@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 2.1.2
+
 - The size count behind the "Yanked … (32 MB)" notice stops when the notice
   goes away or a new one replaces it. Yanking a big folder tree (a home
   folder, /usr) kept a thread walking the whole tree for minutes.
