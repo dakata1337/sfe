@@ -56,6 +56,7 @@ struct _SfePane {
     GtkWidget* message; /* GtkLabel for errors */
     GtkWidget* message_box; /* holds it; takes the focus so the pane can be active */
     GtkCellRenderer* grid_text;
+    GtkCellRenderer* grid_icon;
     GtkTreeViewColumn* columns[4]; /* indexed by SfeSortKey */
     gulong config_handler;
 
@@ -654,6 +655,17 @@ static void apply_icon_sizes(SfePane* self)
     sfe_dir_model_set_icon_sizes(self->model, grid, list, gtk_widget_get_scale_factor(GTK_WIDGET(self)));
     gtk_icon_view_set_item_width(GTK_ICON_VIEW(self->grid), item_width);
     g_object_set(self->grid_text, "wrap-width", item_width, NULL);
+
+    /* PROTOTYPE: every grid item the same size, so GtkIconView does not
+     * measure each name. Names get at most two lines. */
+    PangoLayout* two_lines = gtk_widget_create_pango_layout(self->grid, "Ag\nAg");
+    int text_h;
+    pango_layout_get_pixel_size(two_lines, NULL, &text_h);
+    g_object_unref(two_lines);
+    int xpad, ypad;
+    gtk_cell_renderer_get_padding(self->grid_text, &xpad, &ypad);
+    gtk_cell_renderer_set_fixed_size(self->grid_text, item_width, text_h + 2 * ypad);
+    gtk_cell_renderer_set_fixed_size(self->grid_icon, grid + 2, grid + 2);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -2194,6 +2206,7 @@ static GtkWidget* build_grid(SfePane* self)
     gtk_cell_layout_pack_start(layout, text, FALSE);
     gtk_cell_layout_add_attribute(layout, text, "text", SFE_COL_NAME);
     self->grid_text = text;
+    self->grid_icon = icon;
     g_object_set_data_full(G_OBJECT(text), "sfe-base-attributes", attrs, /* takes our reference */
         (GDestroyNotify)pango_attr_list_unref);
     gtk_cell_layout_set_cell_data_func(layout, text, name_cell, self, NULL);
