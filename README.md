@@ -47,6 +47,18 @@ cd packaging/arch/sfe && makepkg -si       # sfe: the latest release from GitHub
 cd packaging/arch/sfe-dev && makepkg -si   # sfe-dev: this checkout, as it is
 ```
 
+If sfe was installed with `sudo meson install` before, pacman refuses to
+overwrite those files (“exists in filesystem”). Remove that install first,
+from the build folder it was made from (it uses Meson's install log, so it
+removes exactly those files):
+
+```sh
+sudo ninja -C build uninstall
+```
+
+or let pacman take the files over:
+`sudo pacman -U --overwrite '/usr/*' sfe-*.pkg.tar.zst`.
+
 Runtime dependencies: gtk3, glib2, udisks2 + polkit (mounting), xdg-utils
 (opening files) and ffmpeg (video thumbnails); archive tools, thumbnailers
 and xdg-desktop-portal (sfe as other programs' Open / Save dialog) are
