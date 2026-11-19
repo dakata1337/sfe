@@ -442,7 +442,7 @@ selection.
 |---|---|---|
 | `cd` | `[<folder>]` | go to a folder (the start folder from Settings → General without one) |
 | `open` | `[<file>…]` | open files and folders (the selection without any) |
-| `open_with` | `[<application> [<file>…]]` | open with an installed program (Tab lists them, the ones for the selected file's type first); the chooser without one |
+| `open_with` | `[<application> [<file>…]]` | open with an installed program (Tab lists them, the ones for the selected file's type first): the files given, else the selection, else the current folder; the chooser without a program |
 | `cp` (`copy`) | `<file>… <destination>` | copy into a folder |
 | `mv` (`move`) | `<file>… <destination>` | move into a folder |
 | `ln` (`symlink`) | `<target>… <folder or link name>` | make symbolic links |

@@ -357,7 +357,8 @@ static GAppInfo* find_app(const char* name)
     return found;
 }
 
-/* No application: the chooser dialog. Files: the arguments or the selection. */
+/* No application: the chooser dialog. Files: the arguments, else the
+ * selection, else the current folder. */
 static bool run_open_with(Ctx* c, int argc, char** argv, GError** error)
 {
     if (argc == 1)
@@ -366,9 +367,9 @@ static bool run_open_with(Ctx* c, int argc, char** argv, GError** error)
     if (app == NULL)
         return fail(error, "no application “%s”", argv[1]);
     GList* files = argc > 2 ? resolve_all(c, argc - 2, argv + 2) : sfe_pane_get_selected_files(c->pane);
+    if (files == NULL) /* nothing selected: the folder itself */
+        files = g_list_append(NULL, g_object_ref(c->dir));
     bool ok = all_exist(files, error);
-    if (ok && files == NULL)
-        ok = fail(error, "nothing selected to open");
     if (ok)
         sfe_actions_open_with(c->window, app, files);
     g_list_free_full(files, g_object_unref);

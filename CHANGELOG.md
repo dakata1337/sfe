@@ -22,6 +22,8 @@ new version.
   the grid too); `gg` the same for the first.
 - `dd` moves to the trash, like `x` (it was cut; cut is still Ctrl+X and
   `:cut`).
+- `:open_with <program>` with nothing selected opens the current folder in
+  it (it said there was nothing to open).
 
 ## 1.5.0
 
