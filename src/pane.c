@@ -645,6 +645,28 @@ static void on_gone(SfeDirModel* model, gpointer data)
 /* Config                                                                    */
 /* ------------------------------------------------------------------------ */
 
+/* PROTOTYPE: every grid item the same size, so GtkIconView does not
+ * measure each name. Names get two lines, in the font in use: measured
+ * again when the style changes (UI scale, font). */
+static void fit_grid_items(SfePane* self)
+{
+    PangoLayout* two_lines = gtk_widget_create_pango_layout(self->grid, "Ag\nAg");
+    int text_h, xpad, ypad;
+    pango_layout_get_pixel_size(two_lines, NULL, &text_h);
+    g_object_unref(two_lines);
+    gtk_cell_renderer_get_padding(self->grid_text, &xpad, &ypad);
+    gtk_cell_renderer_set_fixed_size(self->grid_text, gtk_icon_view_get_item_width(GTK_ICON_VIEW(self->grid)),
+        text_h + 2 * ypad);
+}
+
+static void on_grid_style_updated(GtkWidget* grid, gpointer data)
+{
+    (void)grid;
+    SfePane* self = data;
+    if (self->grid != NULL) /* (not while it is being built) */
+        fit_grid_items(self);
+}
+
 static void apply_icon_sizes(SfePane* self)
 {
     const SfeConfig* cfg = sfe_config();
@@ -655,17 +677,8 @@ static void apply_icon_sizes(SfePane* self)
     sfe_dir_model_set_icon_sizes(self->model, grid, list, gtk_widget_get_scale_factor(GTK_WIDGET(self)));
     gtk_icon_view_set_item_width(GTK_ICON_VIEW(self->grid), item_width);
     g_object_set(self->grid_text, "wrap-width", item_width, NULL);
-
-    /* PROTOTYPE: every grid item the same size, so GtkIconView does not
-     * measure each name. Names get at most two lines. */
-    PangoLayout* two_lines = gtk_widget_create_pango_layout(self->grid, "Ag\nAg");
-    int text_h;
-    pango_layout_get_pixel_size(two_lines, NULL, &text_h);
-    g_object_unref(two_lines);
-    int xpad, ypad;
-    gtk_cell_renderer_get_padding(self->grid_text, &xpad, &ypad);
-    gtk_cell_renderer_set_fixed_size(self->grid_text, item_width, text_h + 2 * ypad);
     gtk_cell_renderer_set_fixed_size(self->grid_icon, grid + 2, grid + 2);
+    fit_grid_items(self);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -674,6 +687,14 @@ static void apply_icon_sizes(SfePane* self)
 
 #define THUMB_DELAY_MS 80 /* scrolling settles before asking */
 #define THUMB_MARGIN 8 /* rows past the visible ones, for a little scrolling */
+
+/* Icons are drawn from the model and items have a fixed size: a new
+ * thumbnail needs a redraw, not a new layout of every item. */
+static void on_thumbnails_changed(SfeDirModel* model, gpointer data)
+{
+    (void)model;
+    gtk_widget_queue_draw(active_view(data));
+}
 
 static void on_thumbnail(GFile* file, GdkPixbuf* pixbuf, gpointer data)
 {
@@ -2180,12 +2201,57 @@ static void text_cell(GtkTreeViewColumn* column, GtkCellRenderer* cell, GtkTreeM
     g_object_set(cell, "text", text, NULL);
 }
 
+/* PROTOTYPE: a grid name in its fixed two-line box. GtkCellRendererText
+ * would cut a third line off; this draws at most two, with "…" in the
+ * middle of the second, so the end of the name (its extension) stays. */
+typedef GtkCellRendererText SfeNameRenderer;
+typedef GtkCellRendererTextClass SfeNameRendererClass;
+G_DEFINE_TYPE(SfeNameRenderer, sfe_name_renderer, GTK_TYPE_CELL_RENDERER_TEXT)
+
+static void sfe_name_renderer_render(GtkCellRenderer* cell, cairo_t* cr, GtkWidget* widget,
+    const GdkRectangle* background, const GdkRectangle* area, GtkCellRendererState flags)
+{
+    (void)background;
+    g_autofree char* text = NULL;
+    PangoAttrList* attrs = NULL;
+    int xpad, ypad;
+    g_object_get(cell, "text", &text, "attributes", &attrs, NULL);
+    gtk_cell_renderer_get_padding(cell, &xpad, &ypad);
+
+    PangoLayout* layout = gtk_widget_create_pango_layout(widget, text);
+    pango_layout_set_attributes(layout, attrs);
+    pango_layout_set_width(layout, MAX(1, area->width - 2 * xpad) * PANGO_SCALE);
+    pango_layout_set_height(layout, -2); /* two lines at most */
+    pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+    pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_MIDDLE);
+    pango_layout_set_alignment(layout, PANGO_ALIGN_CENTER);
+
+    GtkStyleContext* context = gtk_widget_get_style_context(widget);
+    gtk_style_context_save(context);
+    gtk_style_context_set_state(context, gtk_cell_renderer_get_state(cell, widget, flags));
+    gtk_render_layout(context, cr, area->x + xpad, area->y + ypad, layout);
+    gtk_style_context_restore(context);
+    g_object_unref(layout);
+    if (attrs != NULL)
+        pango_attr_list_unref(attrs);
+}
+
+static void sfe_name_renderer_class_init(SfeNameRendererClass* klass)
+{
+    GTK_CELL_RENDERER_CLASS(klass)->render = sfe_name_renderer_render;
+}
+
+static void sfe_name_renderer_init(SfeNameRenderer* self)
+{
+    (void)self;
+}
+
 static GtkWidget* build_grid(SfePane* self)
 {
     GtkWidget* grid = gtk_icon_view_new();
     GtkCellLayout* layout = GTK_CELL_LAYOUT(grid);
     GtkCellRenderer* icon = gtk_cell_renderer_pixbuf_new();
-    GtkCellRenderer* text = gtk_cell_renderer_text_new();
+    GtkCellRenderer* text = g_object_new(sfe_name_renderer_get_type(), NULL);
 
     gtk_icon_view_set_selection_mode(GTK_ICON_VIEW(grid), GTK_SELECTION_MULTIPLE);
     gtk_icon_view_set_item_padding(GTK_ICON_VIEW(grid), 4);
@@ -2213,6 +2279,7 @@ static GtkWidget* build_grid(SfePane* self)
 
     g_signal_connect(grid, "item-activated", G_CALLBACK(on_grid_activated), self);
     g_signal_connect_after(grid, "realize", G_CALLBACK(on_grid_realized), NULL);
+    g_signal_connect_after(grid, "style-updated", G_CALLBACK(on_grid_style_updated), self);
     g_signal_connect(grid, "selection-changed", G_CALLBACK(on_selection_changed), self);
     g_signal_connect(grid, "key-press-event", G_CALLBACK(on_view_key_press), self);
     g_signal_connect(grid, "button-press-event", G_CALLBACK(on_view_button_press), self);
@@ -2514,6 +2581,7 @@ static void sfe_pane_init(SfePane* self)
     g_signal_connect(self->model, "gone", G_CALLBACK(on_gone), self);
     g_signal_connect(self->model, "file-added", G_CALLBACK(on_file_added), self);
     g_signal_connect(self->model, "files-changed", G_CALLBACK(on_files_changed), self);
+    g_signal_connect(self->model, "thumbnails-changed", G_CALLBACK(on_thumbnails_changed), self);
     self->cfg_thumbnails = -1;
     self->cfg_folder_covers = -1;
     self->thumb_size = -1;

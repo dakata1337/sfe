@@ -87,7 +87,7 @@ void sfe_dir_model_set_icon_sizes(SfeDirModel* self, int grid, int list, int sca
  * is none to be had (not asked again until the file changes); forgetting
  * them all (thumbnails switched off). Rows show their thumbnail instead of
  * the icon, at both sizes. "files-changed" says that files appeared, changed
- * (they may need one) or went. */
+ * (they may need one) or went; "thumbnails-changed" that one arrived (redraw). */
 bool sfe_dir_model_wants_thumbnail(SfeDirModel* self, const char* name);
 void sfe_dir_model_set_thumbnail(SfeDirModel* self, GFile* file, GdkPixbuf* pixbuf);
 void sfe_dir_model_clear_thumbnails(SfeDirModel* self);

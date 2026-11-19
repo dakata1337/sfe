@@ -70,6 +70,7 @@ enum {
     SIGNAL_GONE,
     SIGNAL_FILE_ADDED,
     SIGNAL_FILES_CHANGED,
+    SIGNAL_THUMBNAILS_CHANGED,
     N_SIGNALS,
 };
 static guint signals[N_SIGNALS];
@@ -1103,18 +1104,12 @@ void sfe_dir_model_set_thumbnail(SfeDirModel* self, GFile* file, GdkPixbuf* pixb
         return; /* from a folder no longer shown */
     g_autofree char* name = g_file_get_basename(file);
     g_hash_table_replace(f->thumbs, g_strdup(name), pixbuf ? g_object_ref(pixbuf) : NO_THUMB);
-    GFileInfo* info = g_hash_table_lookup(f->infos, name);
-    if (info == NULL || pixbuf == NULL)
+    if (pixbuf == NULL || !g_hash_table_contains(f->infos, name))
         return;
-    GtkTreeIter* iter = g_hash_table_lookup(f->rows, name);
-    if (iter != NULL)
-        row_changed(f->store, iter);
-    for (GList* l = f->models; l != NULL; l = l->next) {
-        SfeDirModel* m = l->data;
-        iter = m->folder == f && m->own_store ? g_hash_table_lookup(m->own_rows, name) : NULL;
-        if (iter != NULL)
-            row_changed(m->own_store, iter);
-    }
+    GList* models = shown_by(f);
+    for (GList* l = models; l != NULL; l = l->next)
+        g_signal_emit(l->data, signals[SIGNAL_THUMBNAILS_CHANGED], 0);
+    g_list_free_full(models, g_object_unref);
 }
 
 void sfe_dir_model_clear_thumbnails(SfeDirModel* self)
@@ -1189,6 +1184,10 @@ static void sfe_dir_model_class_init(SfeDirModelClass* klass)
     /* A file appeared, changed or went after loading (thumbnails are due,
      * counts change). */
     signals[SIGNAL_FILES_CHANGED] = g_signal_new("files-changed", G_TYPE_FROM_CLASS(klass),
+        G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+    /* A thumbnail arrived: redraw (rows are not touched; the views draw
+     * icons from sfe_dir_model_icon()). */
+    signals[SIGNAL_THUMBNAILS_CHANGED] = g_signal_new("thumbnails-changed", G_TYPE_FROM_CLASS(klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }
 
