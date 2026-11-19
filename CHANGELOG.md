@@ -29,6 +29,8 @@ new version.
   resets it; Close sits in a footer with room around it.
 - Settings → System links to the guide's *Open and save dialogs* section
   instead of naming the Firefox setting.
+- Settings → System shows the colours sfe took from the theme, each with
+  the theme colour it came from; they follow theme changes.
 
 ## 1.5.0
 

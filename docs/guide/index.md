@@ -544,8 +544,9 @@ back to its default.
   and whether they are for files, folders or both.
 - **Programs**: which program opens which extension, as in `[open]`.
 - **System**: make sfe the default file manager, [use it for other
-  programs' Open / Save dialogs](#open-and-save-dialogs), open
-  `config.toml`.
+  programs' Open / Save dialogs](#open-and-save-dialogs), see the
+  [colours taken from the theme](#themes) (hover one for the theme colour
+  it came from), open `config.toml`.
 
 ![The Keys page](images/settings-keys.png)
 
@@ -609,6 +610,13 @@ it changes, so colour schemes from tools like Noctalia, matugen or pywal apply
 instantly. The same window with the plain Adwaita theme:
 
 ![sfe with a light theme](images/theme-light.png)
+
+*Settings → System → Theme colours* shows the eight colours sfe uses:
+window, text, view, view text, sidebar, accent, accent text and error. Each
+comes from the first colour the theme defines out of the libadwaita name
+(`window_bg_color`, `accent_bg_color`, …) and the classic GTK 3 name
+(`theme_bg_color`, `theme_selected_bg_color`, …); hovering a swatch says
+which. Dimmed ones are sfe's own, because the theme sets neither.
 
 ### File icons
 

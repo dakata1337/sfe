@@ -23,3 +23,17 @@ GtkWidget* sfe_scaled_icon_new(const char* icon_name, int base_px);
 /* The GtkIconSize nearest to `base_px` scaled (for cell renderers, which
  * take no pixel size). */
 GtkIconSize sfe_theme_icon_size_near(int base_px);
+
+/* The colours sfe took from the theme (the @sfe_* names style.css uses). */
+typedef struct {
+    const char* name; /* "sfe_accent" */
+    const char* label; /* "Accent" */
+    const char* source; /* the theme's colour it came from ("accent_bg_color"), NULL for sfe's fallback */
+    GdkRGBA rgba;
+} SfeThemeColor;
+
+const SfeThemeColor* sfe_theme_colors(size_t* n);
+
+/* Calls `changed(widget)` whenever the colours are read again (the theme
+ * changed, or a generator rewrote gtk.css), until `widget` is destroyed. */
+void sfe_theme_watch_colors(GtkWidget* widget, void (*changed)(GtkWidget* widget));

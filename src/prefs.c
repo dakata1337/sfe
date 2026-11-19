@@ -469,6 +469,82 @@ static GtkWidget* file_dialogs_switch(void)
     return sw;
 }
 
+/* ---- The colours taken from the theme ------------------------------------ */
+
+static gboolean draw_swatch(GtkWidget* area, cairo_t* cr, gpointer data)
+{
+    size_t n = 0;
+    const SfeThemeColor* c = &sfe_theme_colors(&n)[GPOINTER_TO_INT(data)];
+    int w = gtk_widget_get_allocated_width(area);
+    int h = gtk_widget_get_allocated_height(area);
+    double r = 6;
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, w - r - 0.5, r + 0.5, r, -G_PI / 2, 0);
+    cairo_arc(cr, w - r - 0.5, h - r - 0.5, r, 0, G_PI / 2);
+    cairo_arc(cr, r + 0.5, h - r - 0.5, r, G_PI / 2, G_PI);
+    cairo_arc(cr, r + 0.5, r + 0.5, r, G_PI, 3 * G_PI / 2);
+    cairo_close_path(cr);
+    gdk_cairo_set_source_rgba(cr, &c->rgba);
+    cairo_fill_preserve(cr);
+    GdkRGBA fg;
+    gtk_style_context_get_color(gtk_widget_get_style_context(area), GTK_STATE_FLAG_NORMAL, &fg);
+    cairo_set_source_rgba(cr, fg.red, fg.green, fg.blue, 0.15); /* a thin edge, for colours like the window's */
+    cairo_set_line_width(cr, 1);
+    cairo_stroke(cr);
+    return TRUE;
+}
+
+static char* hex(const GdkRGBA* c)
+{
+    return g_strdup_printf("#%02x%02x%02x", (int)(c->red * 255 + 0.5), (int)(c->green * 255 + 0.5),
+        (int)(c->blue * 255 + 0.5));
+}
+
+/* The grid's swatches and labels again, after the theme changed. */
+static void fill_colors(GtkWidget* grid)
+{
+    g_autoptr(GList) old = gtk_container_get_children(GTK_CONTAINER(grid));
+    for (GList* l = old; l != NULL; l = l->next)
+        gtk_widget_destroy(l->data);
+    size_t n = 0;
+    const SfeThemeColor* colors = sfe_theme_colors(&n);
+    for (size_t i = 0; i < n; i++) {
+        const SfeThemeColor* c = &colors[i];
+        GtkWidget* area = gtk_drawing_area_new();
+        gtk_widget_set_size_request(area, sfe_theme_scaled(28), sfe_theme_scaled(28));
+        gtk_widget_set_valign(area, GTK_ALIGN_CENTER);
+        g_signal_connect(area, "draw", G_CALLBACK(draw_swatch), GINT_TO_POINTER((int)i));
+        g_autofree char* value = hex(&c->rgba);
+        g_autofree char* markup = g_markup_printf_escaped("%s\n<small><tt>%s</tt></small>", c->label, value);
+        GtkWidget* label = gtk_label_new(NULL);
+        gtk_label_set_markup(GTK_LABEL(label), markup);
+        gtk_label_set_xalign(GTK_LABEL(label), 0);
+        g_autofree char* tip = c->source
+            ? g_strdup_printf("@%s, from the theme's @%s", c->name, c->source)
+            : g_strdup_printf("@%s: the theme sets no colour for it, so sfe uses its own", c->name);
+        gtk_widget_set_tooltip_text(area, tip);
+        gtk_widget_set_tooltip_text(label, tip);
+        GtkWidget* cell = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        gtk_box_pack_start(GTK_BOX(cell), area, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(cell), label, FALSE, FALSE, 0);
+        if (c->source == NULL)
+            gtk_style_context_add_class(gtk_widget_get_style_context(label), "sfe-placeholder");
+        gtk_grid_attach(GTK_GRID(grid), cell, (int)(i % 4), (int)(i / 4), 1, 1);
+    }
+    gtk_widget_show_all(grid);
+}
+
+static GtkWidget* colors_grid(void)
+{
+    GtkWidget* grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(grid), 12);
+    gtk_grid_set_column_spacing(GTK_GRID(grid), 18);
+    gtk_grid_set_column_homogeneous(GTK_GRID(grid), TRUE);
+    fill_colors(grid);
+    sfe_theme_watch_colors(grid, fill_colors);
+    return grid;
+}
+
 static GtkWidget* system_page(void)
 {
     GtkWidget* grid = page_grid();
@@ -489,6 +565,15 @@ static GtkWidget* system_page(void)
         "Programs that ask the desktop portal for a file dialog get sfe instead. Some need a setting of "
         "their own first: see <a href=\"" SFE_DIALOGS_DOCS "\">Open and save dialogs</a> in the guide.");
     gtk_grid_attach(GTK_GRID(grid), dialogs_note, 0, row++, 2, 1);
+
+    GtkWidget* colors_label = gtk_label_new("Theme colours");
+    gtk_label_set_xalign(GTK_LABEL(colors_label), 0);
+    gtk_grid_attach(GTK_GRID(grid), colors_label, 0, row++, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid), colors_grid(), 0, row++, 2, 1);
+    gtk_grid_attach(GTK_GRID(grid),
+        note("The colours sfe took from the GTK theme and ~/.config/gtk-3.0/gtk.css (hover for where each came "
+             "from; dimmed ones are sfe's own, the theme has none). They follow the theme as it changes."),
+        0, row++, 2, 1);
 
     GtkWidget* open = gtk_button_new_with_label("Open config.toml");
     g_signal_connect(open, "clicked", G_CALLBACK(on_open_config), NULL);

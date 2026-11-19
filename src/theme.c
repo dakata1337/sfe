@@ -131,6 +131,16 @@ static const PaletteEntry palette[] = {
     { "sfe_error", { "error_color", "error_bg_color" }, "#e01b24" },
 };
 
+/* What the palette was built from, for Settings → System. */
+static const char* const color_labels[] = { "Window", "Text", "View", "View text", "Sidebar", "Accent",
+    "Accent text", "Error" };
+static SfeThemeColor colors[G_N_ELEMENTS(palette)];
+typedef struct {
+    GtkWidget* widget;
+    void (*changed)(GtkWidget* widget);
+} Watcher;
+static GPtrArray* watchers; /* Watcher*, told about palette changes */
+
 static gboolean rebuild_palette(gpointer data)
 {
     (void)data;
@@ -143,14 +153,30 @@ static gboolean rebuild_palette(gpointer data)
         const PaletteEntry* e = &palette[i];
         GdkRGBA color;
         bool found = false;
+        int j = 0;
 
-        for (int j = 0; e->sources[j] != NULL && !found; j++)
+        for (; e->sources[j] != NULL && !found; j++)
             found = gtk_style_context_lookup_color(ctx, e->sources[j], &color);
 
         g_autofree char* value = found ? gdk_rgba_to_string(&color) : g_strdup(e->fallback);
         g_string_append_printf(css, "@define-color %s %s;\n", e->name, value);
+        colors[i].name = e->name;
+        colors[i].label = color_labels[i];
+        colors[i].source = found ? e->sources[j - 1] : NULL;
     }
     gtk_css_provider_load_from_data(palette_provider, css->str, -1, NULL);
+    /* The values as resolved (fallbacks like "@sfe_bg" included). */
+    GtkStyleContext* resolved = gtk_style_context_new();
+    gtk_style_context_set_screen(resolved, gdk_screen_get_default());
+    for (size_t i = 0; i < G_N_ELEMENTS(palette); i++) {
+        if (!gtk_style_context_lookup_color(resolved, palette[i].name, &colors[i].rgba))
+            gdk_rgba_parse(&colors[i].rgba, "#000");
+    }
+    g_object_unref(resolved);
+    for (guint i = 0; watchers != NULL && i < watchers->len; i++) {
+        const Watcher* w = g_ptr_array_index(watchers, i);
+        w->changed(w->widget);
+    }
     if (sfe_config() != NULL && sfe_config()->file_icons != SFE_FILE_ICONS_SYSTEM) /* (none yet at startup) */
         sfe_icons_reset(); /* tinted / symbolic icons use these colours */
     g_debug("palette:\n%s", css->str);
@@ -158,6 +184,29 @@ static gboolean rebuild_palette(gpointer data)
     g_string_free(css, TRUE);
     g_object_unref(ctx);
     return G_SOURCE_REMOVE;
+}
+
+const SfeThemeColor* sfe_theme_colors(size_t* n)
+{
+    *n = G_N_ELEMENTS(colors);
+    return colors;
+}
+
+static void on_watcher_destroy(GtkWidget* widget, gpointer data)
+{
+    (void)widget;
+    g_ptr_array_remove(watchers, data); /* (frees it) */
+}
+
+void sfe_theme_watch_colors(GtkWidget* widget, void (*changed)(GtkWidget* widget))
+{
+    if (watchers == NULL)
+        watchers = g_ptr_array_new_with_free_func(g_free);
+    Watcher* w = g_new(Watcher, 1);
+    w->widget = widget;
+    w->changed = changed;
+    g_ptr_array_add(watchers, w);
+    g_signal_connect(widget, "destroy", G_CALLBACK(on_watcher_destroy), w);
 }
 
 /* Theme switches can arrive as several setting changes; rebuild once. */
