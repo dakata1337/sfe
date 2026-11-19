@@ -280,7 +280,7 @@ static void notify_files(SfeWindow* window, const char* verb, GList* files)
     g_weak_ref_init(&n->window, window);
     n->id = sfe_window_show_status(window, text);
     n->verb = g_strdup(verb);
-    sfe_size_count_async(files, NULL, on_notice_counted, n);
+    sfe_size_count_async(files, sfe_window_get_status_cancellable(window), on_notice_counted, n);
 }
 
 static void run_cut(const SfeActionTarget* t)

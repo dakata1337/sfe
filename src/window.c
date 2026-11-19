@@ -39,6 +39,7 @@ struct _SfeWindow {
     GtkWidget* notice; /* "Yanked 3 files (32 MB)", for a few seconds */
     guint notice_id; /* which notice is showing (sfe_window_show_status()) */
     guint notice_timeout;
+    GCancellable* notice_cancel; /* work that fills in the notice (a size count) */
     GtkWidget* mode; /* "VISUAL" while the active view is in visual mode */
     GtkWidget* content; /* panes over the operations bar (and the chooser bar) */
     const SfeChooser* chooser; /* chooser mode (sfe --choose), or NULL */
@@ -227,6 +228,7 @@ static gboolean on_notice_timeout(gpointer data)
 {
     SfeWindow* win = data;
     win->notice_timeout = 0;
+    g_cancellable_cancel(win->notice_cancel); /* nobody will see the result */
     gtk_widget_hide(win->notice);
     update_status(win);
     return G_SOURCE_REMOVE;
@@ -239,7 +241,16 @@ guint sfe_window_show_status(SfeWindow* win, const char* text)
     update_status(win);
     g_clear_handle_id(&win->notice_timeout, g_source_remove);
     win->notice_timeout = g_timeout_add_seconds(5, on_notice_timeout, win);
+    if (win->notice_cancel != NULL)
+        g_cancellable_cancel(win->notice_cancel); /* the previous notice's count */
+    g_clear_object(&win->notice_cancel);
+    win->notice_cancel = g_cancellable_new();
     return ++win->notice_id;
+}
+
+GCancellable* sfe_window_get_status_cancellable(SfeWindow* win)
+{
+    return win->notice_cancel;
 }
 
 void sfe_window_update_status(SfeWindow* win, guint id, const char* text)
@@ -576,6 +587,9 @@ static void sfe_window_dispose(GObject* object)
         win->config_handler = 0;
     }
     g_clear_handle_id(&win->notice_timeout, g_source_remove);
+    if (win->notice_cancel != NULL)
+        g_cancellable_cancel(win->notice_cancel);
+    g_clear_object(&win->notice_cancel);
     win->ops_bar = NULL; /* destroyed with the window's children */
     if (win->pending != NULL)
         drop_chord(win);

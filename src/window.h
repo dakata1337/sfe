@@ -59,6 +59,10 @@ bool sfe_window_get_tree_full(SfeWindow* win);
  * gone after 5 seconds or when the next one comes; returns its id. */
 guint sfe_window_show_status(SfeWindow* win, const char* text);
 
+/* Cancelled when the current notice goes away or another replaces it: for
+ * the work that fills it in (borrowed; valid after sfe_window_show_status()). */
+GCancellable* sfe_window_get_status_cancellable(SfeWindow* win);
+
 /* Changes notice `id`'s text if it is still showing (a size counted later). */
 void sfe_window_update_status(SfeWindow* win, guint id, const char* text);
 

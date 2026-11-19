@@ -89,6 +89,30 @@ static void test_async(void)
     g_main_loop_unref(loop);
 }
 
+static void on_cancelled(GObject* source, GAsyncResult* res, gpointer data)
+{
+    (void)source;
+    SfeSizeCount count;
+    g_autoptr(GError) error = NULL;
+    g_assert_false(sfe_size_count_finish(res, &count, &error));
+    g_assert_error(error, G_IO_ERROR, G_IO_ERROR_CANCELLED);
+    g_main_loop_quit(data);
+}
+
+/* A count whose notice went away stops (the window cancels it). */
+static void test_cancel(void)
+{
+    const char* const rels[] = { "dir", NULL };
+    GList* files = files_of(rels);
+    g_autoptr(GCancellable) cancel = g_cancellable_new();
+    g_cancellable_cancel(cancel);
+    GMainLoop* loop = g_main_loop_new(NULL, FALSE);
+    sfe_size_count_async(files, cancel, on_cancelled, loop);
+    g_list_free_full(files, g_object_unref);
+    g_main_loop_run(loop);
+    g_main_loop_unref(loop);
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -96,6 +120,7 @@ int main(int argc, char** argv)
     g_test_add_func("/sizecount/count", test_count);
     g_test_add_func("/sizecount/items", test_items);
     g_test_add_func("/sizecount/async", test_async);
+    g_test_add_func("/sizecount/cancel", test_cancel);
     int result = g_test_run();
     g_autofree char* cmd = g_strdup_printf("rm -rf '%s'", root);
     g_assert_cmpint(system(cmd), ==, 0);

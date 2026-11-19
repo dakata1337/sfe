@@ -7,6 +7,9 @@ release: see the top of that script).
 
 ## Unreleased
 
+- The size count behind the "Yanked … (32 MB)" notice stops when the notice
+  goes away or a new one replaces it. Yanking a big folder tree (a home
+  folder, /usr) kept a thread walking the whole tree for minutes.
 - *Replace* no longer deletes the existing file before copying or moving
   the new one over it. A copy that failed or was cancelled (full disk,
   unreadable source, an unplugged drive) lost both; now the old file is
