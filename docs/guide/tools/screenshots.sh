@@ -229,20 +229,29 @@ x, y, w, h = map(int, sys.argv[3:7])
 Image.open(sys.argv[1]).crop((x, y, x + w, y + h)).save(sys.argv[2])' "$WORK/region.png" "$OUT/$1.png" "$2" "$3" "$4" "$5"
 }
 
-# A region of the main window with its popup menu open (SFE_GUIDE_MENU=1):
-# special:magic is shown on screen for the capture, then hidden again.
+# A region of the main window with its context menu open (SFE_GUIDE_MENU=1).
+# A popup menu needs its window to have the keyboard focus, which hidden test
+# windows never get: special:magic is shown on screen and the window focused,
+# then the Menu key opens the menu for the capture; afterwards the menu is
+# closed and special:magic hidden again.
 shot_menu() { # NAME X Y WIDTH HEIGHT
     if [ "${SFE_GUIDE_MENU:-0}" != 1 ]; then
         echo "keeping $1.png (popup menus need SFE_GUIDE_MENU=1)"
         return
     fi
+    target=$(window_of "$P" largest)
     dispatch 'hl.dsp.workspace.toggle_special("magic")'
+    sleep 0.5
+    dispatch "hl.dsp.focus({ window = \"address:$target\" })"
+    sleep 0.3
+    key "" Menu
     sleep 0.8
-    geo=$(geometry_of "$(window_of "$P" largest)")
+    geo=$(geometry_of "$target")
     x=${geo%%,*}
     rest=${geo#*,}
     y=${rest%% *}
     grim -g "$((x + $2)),$((y + $3)) ${4}x${5}" "$OUT/$1.png"
+    key "" Escape
     dispatch 'hl.dsp.workspace.toggle_special("magic")'
 }
 
@@ -262,7 +271,20 @@ trap finish EXIT
 
 launch Pictures
 shot overview
-shot_region sidebar 0 0 222 $H
+# Where the sidebar ends (its 1 px separator, a colour of its own between the
+# sidebar and the views): the views' crops start just after it.
+SIDE=$(python3 -c '
+import sys
+from PIL import Image
+im = Image.open(sys.argv[1]).convert("RGB")
+rows = [im.height * k // 6 for k in (2, 3, 4)]
+def separator(x):  # one colour all the way down, unlike its neighbours on each row
+    here = [im.getpixel((x, y)) for y in rows]
+    return all(h == here[0] for h in here) and all(
+        len({im.getpixel((x - 1, y)), im.getpixel((x, y)), im.getpixel((x + 1, y))}) == 3 for y in rows)
+print(next((x + 1 for x in range(120, im.width // 2) if separator(x)), 220))' "$OUT/overview.png")
+echo "sidebar width: $SIDE"
+shot_region sidebar 0 0 "$SIDE" $H
 
 key CTRL 2
 goto 1 Documents
@@ -272,12 +294,12 @@ key CTRL 1
 # Thumbnails: the holiday photos (made on the first visit, then cached).
 launch Pictures/Holiday
 sleep 1.5
-shot_region thumbnails 220 0 $((W - 220)) 260
+shot_region thumbnails "$SIDE" 0 $((W - SIDE)) 260
 
 # Folder covers: album folders with a cover.jpg / folder.png.
 launch Music
 sleep 1.5
-shot_region folder-covers 220 0 $((W - 220)) 200
+shot_region folder-covers "$SIDE" 0 $((W - SIDE)) 200
 
 launch Projects
 key CTRL backslash
@@ -318,23 +340,17 @@ key "" Escape
 key SHIFT semicolon
 type_text "re"
 sleep 0.8
-shot_region command-names 220 $((H - 260)) $((W - 220)) 260
+shot_region command-names "$SIDE" $((H - 260)) $((W - SIDE)) 260
 key "" Escape
 
 launch Downloads
 key "" Home
 key "" Right
-key "" Menu
-sleep 0.6
-shot_menu menu-files 220 0 $((W - 220)) $H
-key "" Escape
+shot_menu menu-files "$SIDE" 0 $((W - SIDE)) $H
 key CTRL a
 sleep 0.2
 key "" Escape   # nothing selected: the folder menu
-key "" Menu
-sleep 0.6
-shot_menu menu-folder 220 0 $((W - 220)) $H
-key "" Escape
+shot_menu menu-folder "$SIDE" 0 $((W - SIDE)) $H
 
 launch Documents
 key CTRL f
@@ -445,7 +461,7 @@ type_cmd "rename todo.txt tasks.txt"
 key SHIFT semicolon
 type_text "undo "
 sleep 0.8
-shot_region undo 220 $((H - 150)) $((W - 220)) 150
+shot_region undo "$SIDE" $((H - 150)) $((W - SIDE)) 150
 key "" Escape
 
 # sfe as another program's Open dialog: a type filter, an extra option and
