@@ -18,7 +18,7 @@ static const SfeKeyBinding defaults[] = {
     { "<C-i>", "forward", "forward in history" },
     { "<Space>", "select toggle", "select / unselect the item and move down" },
     { "yy", "yank", "copy the selection to the clipboard" },
-    { "dd", "cut", "cut the selection" },
+    { "dd", "trash", "move to trash" },
     { "p", "paste", "paste into this view" },
     { "u", "undo", "undo the last change to files" },
     { "x", "trash", "move to trash" },

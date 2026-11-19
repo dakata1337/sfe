@@ -20,6 +20,8 @@ new version.
   directions.
 - `G` jumps to the last item without selecting every item on the way (in
   the grid too); `gg` the same for the first.
+- `dd` moves to the trash, like `x` (it was cut; cut is still Ctrl+X and
+  `:cut`).
 
 ## 1.5.0
 
