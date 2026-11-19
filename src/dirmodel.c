@@ -20,6 +20,7 @@ struct _SfeDirModel {
     GHashTable* thumbs; /* file name -> GdkPixbuf*, or NO_THUMB (none to be had) */
     bool building; /* filling a fresh store, not reacting to changes */
     char* query; /* search filter, NULL when not searching */
+    int matched; /* files the query matched at the last rebuild (may exceed the rows) */
     const SfeFileFilter* filter; /* a file dialog's type filter (borrowed), or NULL */
     GFileMonitor* monitor;
     GCancellable* cancel; /* cancels the load and monitor queries of `dir` */
@@ -566,6 +567,37 @@ GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self)
 /* Refills the store from the remembered infos (used when the search query
  * changes: one bulk build is much faster than thousands of row updates in a
  * sorted store). Emits "loaded" so the views attach the new store. */
+/* Better match first; equal ones by name, so the cut is always the same. */
+static int best_first(gconstpointer pa, gconstpointer pb)
+{
+    GFileInfo* a = *(GFileInfo* const*)pa;
+    GFileInfo* b = *(GFileInfo* const*)pb;
+    int result = compare_numbers(g_file_info_get_attribute_int32(b, SCORE_ATTR),
+        g_file_info_get_attribute_int32(a, SCORE_ATTR));
+    return result != 0 ? result : g_strcmp0(g_file_info_get_name(a), g_file_info_get_name(b));
+}
+
+/* While searching, only the SFE_SEARCH_MAX_SHOWN best matches are shown:
+ * GTK lays out every shown row again after each change (about 2 s for
+ * 20,000), so a big folder froze at every key. Returns the infos to show. */
+static GList* best_matches(SfeDirModel* self, GList* infos)
+{
+    g_autoptr(GPtrArray) matches = g_ptr_array_new();
+    for (GList* l = infos; l != NULL; l = l->next) {
+        if (is_shown(self, l->data)) /* (scores it) */
+            g_ptr_array_add(matches, l->data);
+    }
+    self->matched = (int)matches->len;
+    if (matches->len > SFE_SEARCH_MAX_SHOWN) {
+        g_ptr_array_sort(matches, best_first);
+        g_ptr_array_set_size(matches, SFE_SEARCH_MAX_SHOWN);
+    }
+    GList* shown = NULL;
+    for (guint i = matches->len; i-- > 0;)
+        shown = g_list_prepend(shown, g_ptr_array_index(matches, i));
+    return shown;
+}
+
 static void rebuild_store(SfeDirModel* self)
 {
     if (self->infos == NULL)
@@ -573,7 +605,8 @@ static void rebuild_store(SfeDirModel* self)
 
     GtkListStore* old_store = self->store;
     GHashTable* old_rows = self->rows;
-    g_autoptr(GList) infos = g_hash_table_get_values(self->infos);
+    g_autoptr(GList) all = g_hash_table_get_values(self->infos);
+    g_autoptr(GList) infos = self->query != NULL ? best_matches(self, all) : g_list_copy(all);
 
     self->store = new_store();
     self->rows = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
@@ -601,12 +634,13 @@ void sfe_dir_model_set_query(SfeDirModel* self, const char* query)
     rebuild_store(self);
 }
 
-void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* total)
+void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* matched, int* total)
 {
     GHashTableIter it;
     gpointer info;
 
     *shown = self->rows ? (int)g_hash_table_size(self->rows) : 0;
+    *matched = self->query != NULL ? MAX(self->matched, *shown) : *shown;
     *total = 0;
     if (self->infos == NULL)
         return;

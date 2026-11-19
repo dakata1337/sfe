@@ -180,6 +180,11 @@ anywhere › letters in order (`dm` finds `dirmodel.c`)
 
 Case is ignored unless you type an uppercase letter.
 
+The count on the right shows the matches and the files in the folder
+(`12 / 300`). When more than 1,000 files match, only the best 1,000 are
+listed and the count says so (`best 1000 of 15000`); keep typing to narrow
+it down. This keeps searching folders of thousands of files fast.
+
 Type a folder name followed by `/` to search inside that folder: `src/pa`
 looks for "pa" in `src`, and `docs/guide/` walks down two levels. The search
 only goes down: `..` and `.` are not allowed.

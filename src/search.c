@@ -66,9 +66,10 @@ void sfe_search_bar_reset(SfeSearchBar* self)
     gtk_label_set_text(GTK_LABEL(self->count), "");
 }
 
-void sfe_search_bar_set_count(SfeSearchBar* self, int shown, int total)
+void sfe_search_bar_set_count(SfeSearchBar* self, int shown, int matched, int total)
 {
-    g_autofree char* text = g_strdup_printf("%d / %d", shown, total);
+    g_autofree char* text = matched > shown ? g_strdup_printf("best %d of %d", shown, matched)
+                                            : g_strdup_printf("%d / %d", shown, total);
     gtk_label_set_text(GTK_LABEL(self->count), text);
 }
 

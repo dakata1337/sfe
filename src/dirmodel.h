@@ -66,8 +66,13 @@ void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter);
  * search walks into folders); the pane clears it when navigating. */
 void sfe_dir_model_set_query(SfeDirModel* self, const char* query);
 
-/* Rows shown now, and rows that would be shown without the query. */
-void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* total);
+/* While searching, at most this many (the best) matches are shown. */
+#define SFE_SEARCH_MAX_SHOWN 1000
+
+/* Rows shown now, the files the query matches (more than shown when capped
+ * at SFE_SEARCH_MAX_SHOWN; equal to shown without a query), and the rows
+ * that would be shown without the query. */
+void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* matched, int* total);
 void sfe_dir_model_set_sort(SfeDirModel* self, SfeSortKey key, GtkSortType order, bool dirs_first);
 void sfe_dir_model_get_sort(SfeDirModel* self, SfeSortKey* key, GtkSortType* order);
 

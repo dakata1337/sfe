@@ -357,9 +357,9 @@ static void select_index(SfePane* self, int index)
 
 static void update_search_count(SfePane* self)
 {
-    int shown, total;
-    sfe_dir_model_get_counts(self->model, &shown, &total);
-    sfe_search_bar_set_count(self->search, shown, total);
+    int shown, matched, total;
+    sfe_dir_model_get_counts(self->model, &shown, &matched, &total);
+    sfe_search_bar_set_count(self->search, shown, matched, total);
 }
 
 void sfe_pane_start_search(SfePane* self)

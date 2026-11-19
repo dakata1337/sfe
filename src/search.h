@@ -22,4 +22,6 @@ void sfe_search_bar_focus(SfeSearchBar* self);
 /* Clears the text without emitting "query-changed". */
 void sfe_search_bar_reset(SfeSearchBar* self);
 
-void sfe_search_bar_set_count(SfeSearchBar* self, int shown, int total);
+/* "12 / 300" (shown / in the folder), or "best 1000 of 15000" when more
+ * matched than are shown. */
+void sfe_search_bar_set_count(SfeSearchBar* self, int shown, int matched, int total);

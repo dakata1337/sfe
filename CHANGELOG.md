@@ -7,6 +7,11 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Searching a folder of thousands of files no longer freezes at every key:
+  when more than 1,000 files match, only the best 1,000 are listed, and the
+  count says "best 1000 of 15000". In a 20,000-file folder a keystroke went
+  from about 2.4 s to 0.16 s in the list view; in the grid the first key
+  still takes under a second, the next ones a fraction of that.
 - Moving between split views goes round them clockwise: `J` focuses the next
   view clockwise (left → right-top → right-bottom → left) and `K` the next
   counter-clockwise; `Ctrl+J` / `Ctrl+K` move the active view the same way.
