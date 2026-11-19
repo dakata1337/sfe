@@ -91,3 +91,10 @@ test_sizecount = executable('test-sizecount', 'test_sizecount.c',
   dependencies: core_dep,
 )
 test('sizecount', test_sizecount)
+
+# Needs a display (icons); skipped (exit 77) without one.
+test_dirmodel = executable('test-dirmodel',
+  'test_dirmodel.c', '../src/dirmodel.c', '../src/icons.c',
+  dependencies: [core_dep, gtk_dep, m_dep],
+)
+test('dirmodel', test_dirmodel)

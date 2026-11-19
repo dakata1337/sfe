@@ -3,6 +3,12 @@
 /* The contents of one directory as a sorted GtkListStore, shared by the
  * grid and list views of a pane.
  *
+ * Panes on the same directory share its contents: the files are read once,
+ * and while no search or file-dialog filter is set they all show the same
+ * store (a search gives that pane a store of its own, built from the shared
+ * files). Hidden files, sort order and icon sizes come from the global
+ * settings, so they are the same in every pane. Reloading reloads it for all.
+ *
  * The store holds only the files that are shown; every file (hidden ones
  * too) is remembered separately, so toggling hidden files adds or removes
  * rows in place. (A GtkTreeModelFilter is deliberately avoided: its
@@ -43,7 +49,8 @@ G_DECLARE_FINAL_TYPE(SfeDirModel, sfe_dir_model, SFE, DIR_MODEL, GObject)
 
 SfeDirModel* sfe_dir_model_new(void);
 
-/* Starts loading `dir`; cancels a load that is still running.
+/* Starts loading `dir` (at once, without reading the disk, when another
+ * pane already shows it); cancels a load that is still running.
  * Emits "loaded" on success or "error" (GError*) on failure. When the
  * directory itself is deleted or unmounted, "gone" is emitted. Files that
  * appear later are announced with "file-added" (name). */

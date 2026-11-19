@@ -8,23 +8,53 @@
 
 #define BATCH_SIZE 256
 #define COLLATE_KEY_ATTR "sfe::collate-key" /* in-memory only, never written */
-#define SCORE_ATTR "sfe::search-score" /* in-memory only: match score of the query */
+
+/* One directory's contents, shared by every pane showing it: the files, the
+ * rows without search or file-dialog filter, the thumbnails and the change
+ * monitor. A new split on a big folder then neither reads it again nor
+ * builds and keeps a second copy of its rows. */
+typedef struct {
+    int refs; /* attached models, running loads and queries */
+    char* uri; /* key in `folders` while it is listed there */
+    GFile* dir;
+    GList* models; /* SfeDirModel* showing it or waiting for it (not referenced) */
+    GCancellable* cancel; /* the load and the monitor queries */
+    GtkListStore* store; /* every shown file (NULL until loaded) */
+    GHashTable* rows; /* file name -> GtkTreeIter* into store */
+    GHashTable* infos; /* file name -> GFileInfo*, every file incl. hidden */
+    GHashTable* thumbs; /* file name -> GdkPixbuf*, or NO_THUMB (none to be had) */
+    GFileMonitor* monitor;
+    bool loading;
+    bool building; /* filling fresh stores, not reacting to changes */
+
+    /* How rows look; global settings, so the same in every pane (shortcut:
+     * the last pane to set them wins; upgrade if panes ever differ). */
+    bool show_hidden;
+    SfeSortKey sort_key;
+    GtkSortType sort_order;
+    bool dirs_first;
+    int grid_size, list_size, scale;
+} Folder;
+
+static GHashTable* folders; /* uri -> Folder*, those loading or loaded */
 
 struct _SfeDirModel {
     GObject parent;
 
-    GFile* dir;
-    GtkListStore* store;
-    GHashTable* rows; /* file name -> GtkTreeIter* into store (shown files) */
-    GHashTable* infos; /* file name -> GFileInfo*, every file incl. hidden */
-    GHashTable* thumbs; /* file name -> GdkPixbuf*, or NO_THUMB (none to be had) */
-    bool building; /* filling a fresh store, not reacting to changes */
+    Folder* folder; /* the one shown (NULL before the first load) */
+    Folder* pending; /* the one being loaded to replace it */
+    guint switch_source; /* idle that shows an already loaded `pending` */
+
+    /* Only while searching or with a file-dialog filter: this pane's own
+     * rows, built from the folder's files. Otherwise the folder's are shown. */
+    GtkListStore* own_store;
+    GHashTable* own_rows;
+    GHashTable* scores; /* file name -> match score of the query */
     char* query; /* search filter, NULL when not searching */
     int matched; /* files the query matches (may exceed the rows); kept up to date as files come and go */
     const SfeFileFilter* filter; /* a file dialog's type filter (borrowed), or NULL */
-    GFileMonitor* monitor;
-    GCancellable* cancel; /* cancels the load and monitor queries of `dir` */
 
+    /* The settings this pane wants, given to every folder it shows. */
     bool show_hidden;
     SfeSortKey sort_key;
     GtkSortType sort_order;
@@ -51,6 +81,22 @@ static void thumb_unref(gpointer value)
 {
     if (value != NO_THUMB)
         g_object_unref(value);
+}
+
+static bool own_rows(SfeDirModel* self)
+{
+    return self->query != NULL || self->filter != NULL;
+}
+
+/* The store and rows the views show. */
+static GtkListStore* shown_store(SfeDirModel* self)
+{
+    return self->own_store ? self->own_store : self->folder ? self->folder->store : NULL;
+}
+
+static GHashTable* shown_rows(SfeDirModel* self)
+{
+    return self->own_store ? self->own_rows : self->folder ? self->folder->rows : NULL;
 }
 
 /* ------------------------------------------------------------------------ */
@@ -127,20 +173,20 @@ static cairo_surface_t* with_folder_badge(cairo_surface_t* cover, GFileInfo* inf
 }
 
 /* The row's picture: its thumbnail if it has one, else the theme icon. */
-static cairo_surface_t* icon_for(SfeDirModel* self, GFileInfo* info, int size)
+static cairo_surface_t* icon_for(Folder* f, GFileInfo* info, int size)
 {
-    gpointer thumb = self->thumbs ? g_hash_table_lookup(self->thumbs, g_file_info_get_name(info)) : NULL;
+    gpointer thumb = g_hash_table_lookup(f->thumbs, g_file_info_get_name(info));
     if (thumb != NULL && thumb != NO_THUMB) {
-        cairo_surface_t* surface = thumb_surface(thumb, size, self->scale);
-        return info_is_dir(info) ? with_folder_badge(surface, info, self->dir, size, self->scale) : surface;
+        cairo_surface_t* surface = thumb_surface(thumb, size, f->scale);
+        return info_is_dir(info) ? with_folder_badge(surface, info, f->dir, size, f->scale) : surface;
     }
-    return sfe_icon_for_info(info, self->dir, size, self->scale);
+    return sfe_icon_for_info(info, f->dir, size, f->scale);
 }
 
-static void set_icons(SfeDirModel* self, GtkListStore* store, GtkTreeIter* iter, GFileInfo* info)
+static void set_icons(Folder* f, GtkListStore* store, GtkTreeIter* iter, GFileInfo* info)
 {
-    cairo_surface_t* big = icon_for(self, info, self->grid_size);
-    cairo_surface_t* small = icon_for(self, info, self->list_size);
+    cairo_surface_t* big = icon_for(f, info, f->grid_size);
+    cairo_surface_t* small = icon_for(f, info, f->list_size);
 
     gtk_list_store_set(store, iter, SFE_COL_ICON, big, SFE_COL_ICON_SMALL, small, -1);
     cairo_surface_destroy(big);
@@ -149,17 +195,14 @@ static void set_icons(SfeDirModel* self, GtkListStore* store, GtkTreeIter* iter,
 
 /* Writes a whole row in one call, so a new row is inserted complete: an empty
  * row that is filled in later confuses GtkTreeModelFilter. */
-static void store_row(SfeDirModel* self, GtkListStore* store, GtkTreeIter* iter, bool insert,
-    GFile* file, GFileInfo* info)
+static void store_row(Folder* f, GtkListStore* store, GtkTreeIter* iter, bool insert, GFileInfo* info)
 {
     bool is_dir = info_is_dir(info);
+    g_autoptr(GFile) file = g_file_get_child(f->dir, g_file_info_get_name(info));
     g_autofree char* size = is_dir ? g_strdup("") : g_format_size(g_file_info_get_size(info));
     g_autofree char* mtime = format_mtime(info);
-    g_autofree char* collate = g_utf8_collate_key_for_filename(g_file_info_get_display_name(info), -1);
-    cairo_surface_t* big = icon_for(self, info, self->grid_size);
-    cairo_surface_t* small = icon_for(self, info, self->list_size);
-
-    g_file_info_set_attribute_string(info, COLLATE_KEY_ATTR, collate);
+    cairo_surface_t* big = icon_for(f, info, f->grid_size);
+    cairo_surface_t* small = icon_for(f, info, f->list_size);
 
     int columns[] = {
         SFE_COL_FILE, SFE_COL_INFO, SFE_COL_NAME, SFE_COL_ICON, SFE_COL_ICON_SMALL,
@@ -185,16 +228,39 @@ static void store_row(SfeDirModel* self, GtkListStore* store, GtkTreeIter* iter,
         g_value_unset(&values[i]);
 }
 
-static bool passes_hidden(SfeDirModel* self, GFileInfo* info)
+/* Shows, updates or removes the row of `info` in `store`. Returns whether a
+ * row was added. */
+static bool put_row(Folder* f, GtkListStore* store, GHashTable* rows, GFileInfo* info, bool shown)
 {
-    return self->show_hidden || !g_file_info_get_is_hidden(info);
+    const char* name = g_file_info_get_name(info);
+    GtkTreeIter* iter = g_hash_table_lookup(rows, name);
+
+    if (!shown) {
+        if (iter != NULL) {
+            gtk_list_store_remove(store, iter);
+            g_hash_table_remove(rows, name);
+        }
+        return false;
+    }
+    bool insert = iter == NULL;
+    if (insert) {
+        iter = g_new(GtkTreeIter, 1);
+        g_hash_table_insert(rows, g_strdup(name), iter);
+    }
+    store_row(f, store, iter, insert, info);
+    return insert;
 }
 
-/* While searching, a file is shown only if it matches; its score is kept on
- * the info for sorting. */
+static bool passes_hidden(Folder* f, GFileInfo* info)
+{
+    return f->show_hidden || !g_file_info_get_is_hidden(info);
+}
+
+/* In this pane's own rows: matches the file-dialog filter and the query (its
+ * score is kept for sorting). */
 static bool is_shown(SfeDirModel* self, GFileInfo* info)
 {
-    if (!passes_hidden(self, info))
+    if (!passes_hidden(self->folder, info))
         return false;
     if (!sfe_file_filter_shows(self->filter, g_file_info_get_display_name(info),
             g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE), info_is_dir(info)))
@@ -202,70 +268,97 @@ static bool is_shown(SfeDirModel* self, GFileInfo* info)
     if (self->query == NULL)
         return true;
     int score = sfe_fuzzy_score(self->query, g_file_info_get_display_name(info));
-    g_file_info_set_attribute_int32(info, SCORE_ATTR, score);
+    g_hash_table_replace(self->scores, g_strdup(g_file_info_get_name(info)), GINT_TO_POINTER(score));
     return score != SFE_FUZZY_NO_MATCH;
 }
 
-static void remove_row(SfeDirModel* self, const char* name)
-{
-    GtkTreeIter* iter = g_hash_table_lookup(self->rows, name);
-    if (iter != NULL) {
-        gtk_list_store_remove(self->store, iter);
-        g_hash_table_remove(self->rows, name);
-        if (self->query != NULL)
-            self->matched--;
-    }
-}
-
-/* Remembers `info` and shows, updates or hides its row. The store only
- * holds the rows that are shown: no GtkTreeModelFilter, whose reference
- * counting breaks when shown rows are removed. */
-static void add_or_update(SfeDirModel* self, GFileInfo* info)
+/* Updates this pane's own rows for `info`; returns whether a row was added. */
+static bool own_put(SfeDirModel* self, GFileInfo* info)
 {
     const char* name = g_file_info_get_name(info);
-    GtkTreeIter* iter = g_hash_table_lookup(self->rows, name);
-
-    g_hash_table_replace(self->infos, g_strdup(name), g_object_ref(info));
-    if (!self->building) {
-        g_hash_table_remove(self->thumbs, name); /* changed on disk: a new thumbnail */
-        g_signal_emit(self, signals[SIGNAL_FILES_CHANGED], 0);
-    }
-    if (!is_shown(self, info)) {
-        remove_row(self, name);
-        return;
-    }
-
-    g_autoptr(GFile) file = g_file_get_child(self->dir, name);
-    bool insert = iter == NULL;
-    if (insert) {
-        iter = g_new(GtkTreeIter, 1);
-        g_hash_table_insert(self->rows, g_strdup(name), iter);
-        if (self->query != NULL && !self->building)
-            self->matched++;
-    }
-    store_row(self, self->store, iter, insert, file, info);
-    if (insert && !self->building)
-        g_signal_emit(self, signals[SIGNAL_FILE_ADDED], 0, name);
+    bool had = g_hash_table_contains(self->own_rows, name);
+    bool added = put_row(self->folder, self->own_store, self->own_rows, info, is_shown(self, info));
+    if (self->query != NULL && !self->folder->building)
+        self->matched += added ? 1 : had && !g_hash_table_contains(self->own_rows, name) ? -1 : 0;
+    return added;
 }
 
-static void forget_file(SfeDirModel* self, const char* name)
+static void own_remove(SfeDirModel* self, const char* name)
 {
-    remove_row(self, name);
-    g_hash_table_remove(self->infos, name);
-    g_hash_table_remove(self->thumbs, name);
-    g_signal_emit(self, signals[SIGNAL_FILES_CHANGED], 0);
+    GtkTreeIter* iter = g_hash_table_lookup(self->own_rows, name);
+    if (iter == NULL)
+        return;
+    gtk_list_store_remove(self->own_store, iter);
+    g_hash_table_remove(self->own_rows, name);
+    if (self->query != NULL)
+        self->matched--;
 }
 
-static void refresh_icons(SfeDirModel* self)
+/* The panes showing `f` (copied and referenced: signal handlers may load
+ * other folders meanwhile). */
+static GList* shown_by(Folder* f)
+{
+    GList* out = NULL;
+    for (GList* l = f->models; l != NULL; l = l->next) {
+        if (SFE_DIR_MODEL(l->data)->folder == f)
+            out = g_list_prepend(out, g_object_ref(l->data));
+    }
+    return out;
+}
+
+/* Remembers `info` and updates its rows everywhere. The stores only hold
+ * the rows that are shown: no GtkTreeModelFilter, whose reference counting
+ * breaks when shown rows are removed. */
+static void add_or_update(Folder* f, GFileInfo* info)
+{
+    const char* name = g_file_info_get_name(info);
+    g_autofree char* collate = g_utf8_collate_key_for_filename(g_file_info_get_display_name(info), -1);
+    g_file_info_set_attribute_string(info, COLLATE_KEY_ATTR, collate);
+
+    g_hash_table_replace(f->infos, g_strdup(name), g_object_ref(info));
+    if (!f->building)
+        g_hash_table_remove(f->thumbs, name); /* changed on disk: a new thumbnail */
+    bool added = put_row(f, f->store, f->rows, info, passes_hidden(f, info));
+    if (f->building)
+        return;
+
+    GList* models = shown_by(f);
+    for (GList* l = models; l != NULL; l = l->next) {
+        SfeDirModel* m = l->data;
+        bool shown_added = m->own_store ? own_put(m, info) : added;
+        g_signal_emit(m, signals[SIGNAL_FILES_CHANGED], 0);
+        if (shown_added)
+            g_signal_emit(m, signals[SIGNAL_FILE_ADDED], 0, name);
+    }
+    g_list_free_full(models, g_object_unref);
+}
+
+static void each_store(Folder* f, void (*fn)(Folder*, GtkListStore*))
+{
+    if (f->store != NULL)
+        fn(f, f->store);
+    for (GList* l = f->models; l != NULL; l = l->next) {
+        SfeDirModel* m = l->data;
+        if (m->folder == f && m->own_store != NULL)
+            fn(f, m->own_store);
+    }
+}
+
+static void refresh_store_icons(Folder* f, GtkListStore* store)
 {
     GtkTreeIter iter;
-    if (self->store == NULL || !gtk_tree_model_get_iter_first(GTK_TREE_MODEL(self->store), &iter))
+    if (!gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter))
         return;
     do {
         g_autoptr(GFileInfo) info = NULL;
-        gtk_tree_model_get(GTK_TREE_MODEL(self->store), &iter, SFE_COL_INFO, &info, -1);
-        set_icons(self, self->store, &iter, info);
-    } while (gtk_tree_model_iter_next(GTK_TREE_MODEL(self->store), &iter));
+        gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, SFE_COL_INFO, &info, -1);
+        set_icons(f, store, &iter, info);
+    } while (gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter));
+}
+
+static void refresh_icons(Folder* f)
+{
+    each_store(f, refresh_store_icons);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -287,29 +380,30 @@ static int compare_numbers(guint64 a, guint64 b)
     return (a > b) - (a < b);
 }
 
-static int compare_rows(GtkTreeModel* model, GtkTreeIter* ia, GtkTreeIter* ib, gpointer data)
+static int score_of(GHashTable* scores, GFileInfo* info)
 {
-    SfeDirModel* self = data;
-    GFileInfo* a = row_info(model, ia);
-    GFileInfo* b = row_info(model, ib);
+    return GPOINTER_TO_INT(g_hash_table_lookup(scores, g_file_info_get_name(info)));
+}
+
+/* `scores` while searching (the best match comes first, whatever the sort). */
+static int compare_infos(Folder* f, GHashTable* scores, GFileInfo* a, GFileInfo* b)
+{
     int result = 0;
 
-    /* While searching, the best match comes first, whatever the sort. */
-    if (self->query != NULL) {
-        result = compare_numbers(g_file_info_get_attribute_int32(b, SCORE_ATTR),
-            g_file_info_get_attribute_int32(a, SCORE_ATTR));
+    if (scores != NULL) {
+        result = compare_numbers(score_of(scores, b), score_of(scores, a));
         if (result != 0)
-            return self->sort_order == GTK_SORT_DESCENDING ? -result : result;
+            return f->sort_order == GTK_SORT_DESCENDING ? -result : result;
     }
 
-    if (self->dirs_first && info_is_dir(a) != info_is_dir(b)) {
+    if (f->dirs_first && info_is_dir(a) != info_is_dir(b)) {
         /* Directories stay on top in both sort orders. The store inverts
          * our result for descending order, so pre-invert it here. */
         result = info_is_dir(a) ? -1 : 1;
-        return self->sort_order == GTK_SORT_DESCENDING ? -result : result;
+        return f->sort_order == GTK_SORT_DESCENDING ? -result : result;
     }
 
-    switch (self->sort_key) {
+    switch (f->sort_key) {
     case SFE_SORT_SIZE:
         result = compare_numbers(g_file_info_get_size(a), g_file_info_get_size(b));
         break;
@@ -332,113 +426,29 @@ static int compare_rows(GtkTreeModel* model, GtkTreeIter* ia, GtkTreeIter* ib, g
     return result;
 }
 
-static void apply_sort(SfeDirModel* self)
+static int compare_folder_rows(GtkTreeModel* model, GtkTreeIter* ia, GtkTreeIter* ib, gpointer data)
 {
-    GtkTreeSortable* sortable = GTK_TREE_SORTABLE(self->store);
-    if (sortable == NULL)
-        return;
+    return compare_infos(data, NULL, row_info(model, ia), row_info(model, ib));
+}
+
+static int compare_own_rows(GtkTreeModel* model, GtkTreeIter* ia, GtkTreeIter* ib, gpointer data)
+{
+    SfeDirModel* self = data;
+    return compare_infos(self->folder, self->query ? self->scores : NULL, row_info(model, ia), row_info(model, ib));
+}
+
+static void sort_store(Folder* f, GtkListStore* store)
+{
+    GtkTreeSortable* sortable = GTK_TREE_SORTABLE(store);
     /* Going through "unsorted" forces a resort even when the column and the
      * order did not change (e.g. only dirs_first did). */
-    gtk_tree_sortable_set_sort_column_id(sortable, GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, self->sort_order);
-    gtk_tree_sortable_set_sort_column_id(sortable, 0, self->sort_order);
+    gtk_tree_sortable_set_sort_column_id(sortable, GTK_TREE_SORTABLE_UNSORTED_SORT_COLUMN_ID, f->sort_order);
+    gtk_tree_sortable_set_sort_column_id(sortable, 0, f->sort_order);
 }
 
 /* ------------------------------------------------------------------------ */
-/* Directory monitor                                                         */
+/* Folders                                                                   */
 /* ------------------------------------------------------------------------ */
-
-static void on_query_done(GObject* source, GAsyncResult* res, gpointer data)
-{
-    g_autoptr(SfeDirModel) self = data;
-    g_autoptr(GFileInfo) info = g_file_query_info_finish(G_FILE(source), res, NULL);
-    g_autoptr(GFile) parent = g_file_get_parent(G_FILE(source));
-
-    /* Ignore results that arrive after the pane moved to another directory,
-     * or for a file renamed or deleted meanwhile (that event was already
-     * handled: adding it now would leave a ghost, e.g. a download's .part). */
-    if (info != NULL && self->store != NULL && parent != NULL && g_file_equal(parent, self->dir)
-        && g_file_query_exists(G_FILE(source), NULL))
-        add_or_update(self, info);
-}
-
-static void query_and_update(SfeDirModel* self, GFile* file)
-{
-    g_file_query_info_async(file, SFE_FILE_ATTRIBUTES, G_FILE_QUERY_INFO_NONE,
-        G_PRIORITY_DEFAULT, self->cancel, on_query_done, g_object_ref(self));
-}
-
-static bool is_child(SfeDirModel* self, GFile* file)
-{
-    g_autoptr(GFile) parent = file ? g_file_get_parent(file) : NULL;
-    return parent != NULL && g_file_equal(parent, self->dir);
-}
-
-static void on_dir_changed(GFileMonitor* monitor, GFile* file, GFile* other,
-    GFileMonitorEvent event, gpointer data)
-{
-    (void)monitor;
-    SfeDirModel* self = data;
-    g_autofree char* name = g_file_get_basename(file);
-
-    if (g_file_equal(file, self->dir)) {
-        if (event == G_FILE_MONITOR_EVENT_DELETED || event == G_FILE_MONITOR_EVENT_MOVED_OUT
-            || event == G_FILE_MONITOR_EVENT_UNMOUNTED)
-            g_signal_emit(self, signals[SIGNAL_GONE], 0);
-        return;
-    }
-
-    switch (event) {
-    case G_FILE_MONITOR_EVENT_CREATED:
-    case G_FILE_MONITOR_EVENT_MOVED_IN:
-    case G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT:
-    case G_FILE_MONITOR_EVENT_ATTRIBUTE_CHANGED:
-        query_and_update(self, file);
-        break;
-    case G_FILE_MONITOR_EVENT_DELETED:
-    case G_FILE_MONITOR_EVENT_MOVED_OUT:
-        forget_file(self, name);
-        break;
-    case G_FILE_MONITOR_EVENT_RENAMED:
-        forget_file(self, name);
-        if (is_child(self, other))
-            query_and_update(self, other);
-        break;
-    default:
-        break;
-    }
-}
-
-static void start_monitor(SfeDirModel* self)
-{
-    g_autoptr(GError) error = NULL;
-
-    self->monitor = g_file_monitor_directory(self->dir, G_FILE_MONITOR_WATCH_MOVES, self->cancel, &error);
-    if (self->monitor == NULL) {
-        g_debug("not watching %s: %s", g_file_peek_path(self->dir), error->message);
-        return;
-    }
-    g_signal_connect(self->monitor, "changed", G_CALLBACK(on_dir_changed), self);
-}
-
-/* ------------------------------------------------------------------------ */
-/* Loading                                                                   */
-/* ------------------------------------------------------------------------ */
-
-typedef struct {
-    SfeDirModel* self;
-    GFile* dir;
-    GCancellable* cancel;
-    GPtrArray* infos; /* GFileInfo* */
-} LoadJob;
-
-static void load_job_free(LoadJob* job)
-{
-    g_object_unref(job->self);
-    g_object_unref(job->dir);
-    g_object_unref(job->cancel);
-    g_ptr_array_unref(job->infos);
-    g_free(job);
-}
 
 static GtkListStore* new_store(void)
 {
@@ -446,6 +456,11 @@ static GtkListStore* new_store(void)
         G_TYPE_FILE, G_TYPE_FILE_INFO, G_TYPE_STRING,
         CAIRO_GOBJECT_TYPE_SURFACE, CAIRO_GOBJECT_TYPE_SURFACE,
         G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_BOOLEAN);
+}
+
+static GHashTable* new_rows(void)
+{
+    return g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
 }
 
 #ifdef __GLIBC__
@@ -476,52 +491,364 @@ static void release_freed_memory(guint dropped_files)
 static void release_freed_memory(guint dropped_files) { (void)dropped_files; }
 #endif
 
-static void clear_contents(SfeDirModel* self)
+static void on_icon_theme_changed(GtkIconTheme* theme, gpointer data)
 {
-    release_freed_memory(self->infos ? g_hash_table_size(self->infos) : 0);
-    if (self->monitor != NULL) {
-        g_signal_handlers_disconnect_by_data(self->monitor, self);
-        g_clear_object(&self->monitor);
+    (void)theme;
+    refresh_icons(data);
+}
+
+static void stop_monitor(Folder* f)
+{
+    if (f->monitor != NULL) {
+        g_signal_handlers_disconnect_by_data(f->monitor, f);
+        g_clear_object(&f->monitor);
     }
-    g_clear_object(&self->store);
-    g_clear_pointer(&self->rows, g_hash_table_unref);
-    g_clear_pointer(&self->infos, g_hash_table_unref);
-    g_clear_pointer(&self->thumbs, g_hash_table_unref);
+}
+
+static void clear_contents(Folder* f)
+{
+    release_freed_memory(f->infos ? g_hash_table_size(f->infos) : 0);
+    stop_monitor(f);
+    g_clear_object(&f->store);
+    g_clear_pointer(&f->rows, g_hash_table_unref);
+    g_clear_pointer(&f->infos, g_hash_table_unref);
+    g_clear_pointer(&f->thumbs, g_hash_table_unref);
+}
+
+static Folder* folder_ref(Folder* f)
+{
+    f->refs++;
+    return f;
+}
+
+/* No longer listed: the next pane to open the directory reads it afresh. */
+static void folder_unlist(Folder* f)
+{
+    if (f->uri != NULL && folders != NULL && g_hash_table_lookup(folders, f->uri) == f)
+        g_hash_table_remove(folders, f->uri);
+    g_clear_pointer(&f->uri, g_free);
+}
+
+static void folder_unref(Folder* f)
+{
+    if (--f->refs > 0)
+        return;
+    folder_unlist(f);
+    g_signal_handlers_disconnect_by_data(gtk_icon_theme_get_default(), f);
+    clear_contents(f);
+    g_clear_object(&f->cancel);
+    g_clear_object(&f->dir);
+    g_free(f);
+}
+
+static Folder* folder_get(GFile* dir)
+{
+    if (folders == NULL)
+        folders = g_hash_table_new(g_str_hash, g_str_equal);
+    g_autofree char* uri = g_file_get_uri(dir);
+    Folder* f = g_hash_table_lookup(folders, uri);
+    if (f != NULL)
+        return folder_ref(f);
+
+    f = g_new0(Folder, 1);
+    f->refs = 1;
+    f->uri = g_steal_pointer(&uri);
+    f->dir = g_object_ref(dir);
+    f->sort_order = GTK_SORT_ASCENDING;
+    f->dirs_first = true;
+    f->grid_size = 64;
+    f->list_size = 16;
+    f->scale = 1;
+    /* Connected "after" so the icon cache is already cleared. */
+    g_signal_connect_after(gtk_icon_theme_get_default(), "changed", G_CALLBACK(on_icon_theme_changed), f);
+    g_hash_table_insert(folders, f->uri, f);
+    return f;
+}
+
+/* A pane stops showing or waiting for `f`. The last one cancels its load. */
+static void folder_detach(Folder* f, SfeDirModel* model)
+{
+    f->models = g_list_remove(f->models, model);
+    if (f->models == NULL) {
+        folder_unlist(f);
+        if (f->cancel != NULL)
+            g_cancellable_cancel(f->cancel);
+        stop_monitor(f);
+    }
+    folder_unref(f);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Directory monitor                                                         */
+/* ------------------------------------------------------------------------ */
+
+static void on_query_done(GObject* source, GAsyncResult* res, gpointer data)
+{
+    Folder* f = data;
+    g_autoptr(GFileInfo) info = g_file_query_info_finish(G_FILE(source), res, NULL);
+
+    /* Ignore a file renamed or deleted meanwhile (that event was already
+     * handled: adding it now would leave a ghost, e.g. a download's .part). */
+    if (info != NULL && f->store != NULL && g_file_query_exists(G_FILE(source), NULL))
+        add_or_update(f, info);
+    folder_unref(f);
+}
+
+static void query_and_update(Folder* f, GFile* file)
+{
+    g_file_query_info_async(file, SFE_FILE_ATTRIBUTES, G_FILE_QUERY_INFO_NONE,
+        G_PRIORITY_DEFAULT, f->cancel, on_query_done, folder_ref(f));
+}
+
+static bool is_child(Folder* f, GFile* file)
+{
+    g_autoptr(GFile) parent = file ? g_file_get_parent(file) : NULL;
+    return parent != NULL && g_file_equal(parent, f->dir);
+}
+
+static void remove_file(Folder* f, const char* name)
+{
+    if (f->infos == NULL || !g_hash_table_contains(f->infos, name))
+        return;
+    GtkTreeIter* iter = g_hash_table_lookup(f->rows, name);
+    if (iter != NULL) {
+        gtk_list_store_remove(f->store, iter);
+        g_hash_table_remove(f->rows, name);
+    }
+    g_hash_table_remove(f->infos, name);
+    g_hash_table_remove(f->thumbs, name);
+
+    GList* models = shown_by(f);
+    for (GList* l = models; l != NULL; l = l->next) {
+        SfeDirModel* m = l->data;
+        if (m->own_store != NULL)
+            own_remove(m, name);
+        g_signal_emit(m, signals[SIGNAL_FILES_CHANGED], 0);
+    }
+    g_list_free_full(models, g_object_unref);
+}
+
+static void on_dir_changed(GFileMonitor* monitor, GFile* file, GFile* other,
+    GFileMonitorEvent event, gpointer data)
+{
+    (void)monitor;
+    Folder* f = data;
+    g_autofree char* name = g_file_get_basename(file);
+
+    if (g_file_equal(file, f->dir)) {
+        if (event == G_FILE_MONITOR_EVENT_DELETED || event == G_FILE_MONITOR_EVENT_MOVED_OUT
+            || event == G_FILE_MONITOR_EVENT_UNMOUNTED) {
+            folder_unlist(f); /* if it comes back, read it again */
+            GList* models = shown_by(f);
+            for (GList* l = models; l != NULL; l = l->next)
+                g_signal_emit(l->data, signals[SIGNAL_GONE], 0);
+            g_list_free_full(models, g_object_unref);
+        }
+        return;
+    }
+
+    switch (event) {
+    case G_FILE_MONITOR_EVENT_CREATED:
+    case G_FILE_MONITOR_EVENT_MOVED_IN:
+    case G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT:
+    case G_FILE_MONITOR_EVENT_ATTRIBUTE_CHANGED:
+        query_and_update(f, file);
+        break;
+    case G_FILE_MONITOR_EVENT_DELETED:
+    case G_FILE_MONITOR_EVENT_MOVED_OUT:
+        remove_file(f, name);
+        break;
+    case G_FILE_MONITOR_EVENT_RENAMED:
+        remove_file(f, name);
+        if (is_child(f, other))
+            query_and_update(f, other);
+        break;
+    default:
+        break;
+    }
+}
+
+static void start_monitor(Folder* f)
+{
+    g_autoptr(GError) error = NULL;
+
+    f->monitor = g_file_monitor_directory(f->dir, G_FILE_MONITOR_WATCH_MOVES, f->cancel, &error);
+    if (f->monitor == NULL) {
+        g_debug("not watching %s: %s", g_file_peek_path(f->dir), error->message);
+        return;
+    }
+    g_signal_connect(f->monitor, "changed", G_CALLBACK(on_dir_changed), f);
+}
+
+/* ------------------------------------------------------------------------ */
+/* A pane's own rows (search, file-dialog filter)                            */
+/* ------------------------------------------------------------------------ */
+
+/* Better match first; equal ones by name, so the cut is always the same. */
+static GHashTable* sort_scores; /* for best_first (g_ptr_array_sort has no user data) */
+
+static int best_first(gconstpointer pa, gconstpointer pb)
+{
+    GFileInfo* a = *(GFileInfo* const*)pa;
+    GFileInfo* b = *(GFileInfo* const*)pb;
+    int result = compare_numbers(score_of(sort_scores, b), score_of(sort_scores, a));
+    return result != 0 ? result : g_strcmp0(g_file_info_get_name(a), g_file_info_get_name(b));
+}
+
+/* While searching, only the SFE_SEARCH_MAX_SHOWN best matches are shown:
+ * GTK lays out every shown row again after each change (about 2 s for
+ * 20,000), so a big folder froze at every key. Returns the infos to show. */
+static GPtrArray* shown_infos(SfeDirModel* self)
+{
+    GPtrArray* shown = g_ptr_array_new();
+    GHashTableIter it;
+    gpointer info;
+    g_hash_table_iter_init(&it, self->folder->infos);
+    while (g_hash_table_iter_next(&it, NULL, &info)) {
+        if (is_shown(self, info)) /* (scores it) */
+            g_ptr_array_add(shown, info);
+    }
+    self->matched = (int)shown->len;
+    if (self->query != NULL && shown->len > SFE_SEARCH_MAX_SHOWN) {
+        sort_scores = self->scores;
+        g_ptr_array_sort(shown, best_first);
+        sort_scores = NULL;
+        g_ptr_array_set_size(shown, SFE_SEARCH_MAX_SHOWN);
+    }
+    return shown;
+}
+
+/* Builds the pane's own rows from the folder's files (search or filter),
+ * or drops them to show the folder's. The caller emits "loaded". */
+static void rebuild_own(SfeDirModel* self)
+{
+    g_clear_object(&self->own_store);
+    g_clear_pointer(&self->own_rows, g_hash_table_unref);
+    g_hash_table_remove_all(self->scores);
+    if (self->folder == NULL || self->folder->infos == NULL || !own_rows(self))
+        return;
+
+    Folder* f = self->folder;
+    g_autoptr(GPtrArray) infos = shown_infos(self);
+    self->own_store = new_store();
+    self->own_rows = new_rows();
+    for (guint i = 0; i < infos->len; i++)
+        put_row(f, self->own_store, self->own_rows, g_ptr_array_index(infos, i), true);
+    gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(self->own_store), 0, compare_own_rows, self, NULL);
+    sort_store(f, self->own_store);
+}
+
+static void refilter(SfeDirModel* self)
+{
+    if (self->folder == NULL || self->folder->store == NULL)
+        return;
+    rebuild_own(self);
+    g_signal_emit(self, signals[SIGNAL_LOADED], 0);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Loading                                                                   */
+/* ------------------------------------------------------------------------ */
+
+/* The pane's settings, given to a folder it shows; changes there are redone. */
+static void apply_settings(SfeDirModel* self, Folder* f);
+
+/* Shows `pending` (loaded) instead of the current folder. */
+static void switch_folder(SfeDirModel* self)
+{
+    Folder* old = self->folder;
+    self->folder = g_steal_pointer(&self->pending);
+    g_clear_handle_id(&self->switch_source, g_source_remove);
+    apply_settings(self, self->folder);
+    rebuild_own(self);
+    g_signal_emit(self, signals[SIGNAL_LOADED], 0);
+    if (old != NULL)
+        folder_detach(old, self);
+}
+
+static gboolean switch_later(gpointer data)
+{
+    SfeDirModel* self = data;
+    self->switch_source = 0;
+    if (self->pending != NULL && self->pending->store != NULL)
+        switch_folder(self);
+    return G_SOURCE_REMOVE;
+}
+
+typedef struct {
+    Folder* folder;
+    GCancellable* cancel;
+    GPtrArray* infos; /* GFileInfo* */
+} LoadJob;
+
+static void load_job_free(LoadJob* job)
+{
+    folder_unref(job->folder);
+    g_object_unref(job->cancel);
+    g_ptr_array_unref(job->infos);
+    g_free(job);
 }
 
 /* Builds the whole store at once, then sorts it once: much faster than
  * inserting rows one by one into a sorted, displayed model. */
 static void finish_load(LoadJob* job)
 {
-    SfeDirModel* self = job->self;
+    Folder* f = job->folder;
 
     if (g_cancellable_is_cancelled(job->cancel)) /* superseded by a newer load */
         return;
 
-    clear_contents(self);
-    g_set_object(&self->dir, job->dir);
-    g_set_object(&self->cancel, job->cancel);
-
-    self->store = new_store();
-    self->rows = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-    self->infos = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
-    self->thumbs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, thumb_unref);
-    self->building = true;
+    f->loading = false;
+    clear_contents(f);
+    f->store = new_store();
+    f->rows = new_rows();
+    f->infos = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_object_unref);
+    f->thumbs = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, thumb_unref);
+    f->building = true;
     for (guint i = 0; i < job->infos->len; i++)
-        add_or_update(self, g_ptr_array_index(job->infos, i));
-    self->building = false;
+        add_or_update(f, g_ptr_array_index(job->infos, i));
+    gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(f->store), 0, compare_folder_rows, f, NULL);
+    sort_store(f, f->store);
+    start_monitor(f);
+    f->building = false;
 
-    gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(self->store), 0, compare_rows, self, NULL);
-    apply_sort(self);
-
-    start_monitor(self);
-    g_signal_emit(self, signals[SIGNAL_LOADED], 0);
+    /* Every pane waiting for it shows it now; the ones showing it (a
+     * reload) get their own rows rebuilt. */
+    GList* models = NULL;
+    for (GList* l = f->models; l != NULL; l = l->next)
+        models = g_list_prepend(models, g_object_ref(l->data));
+    for (GList* l = models; l != NULL; l = l->next) {
+        SfeDirModel* m = l->data;
+        if (m->pending == f) {
+            switch_folder(m);
+        } else if (m->folder == f) {
+            rebuild_own(m);
+            g_signal_emit(m, signals[SIGNAL_LOADED], 0);
+        }
+    }
+    g_list_free_full(models, g_object_unref);
 }
 
 static void fail_load(LoadJob* job, GError* error)
 {
-    if (!g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
-        g_signal_emit(job->self, signals[SIGNAL_ERROR], 0, error);
+    Folder* f = job->folder;
+    if (!g_cancellable_is_cancelled(job->cancel)) {
+        f->loading = false;
+        folder_unlist(f); /* the next try reads it again */
+        GList* models = NULL;
+        for (GList* l = f->models; l != NULL; l = l->next)
+            models = g_list_prepend(models, g_object_ref(l->data));
+        for (GList* l = models; l != NULL; l = l->next) {
+            SfeDirModel* m = l->data;
+            if (m->pending == f) { /* keeps showing what it showed */
+                m->pending = NULL;
+                folder_detach(f, m);
+            }
+            if (!g_error_matches(error, G_IO_ERROR, G_IO_ERROR_CANCELLED))
+                g_signal_emit(m, signals[SIGNAL_ERROR], 0, error);
+        }
+        g_list_free_full(models, g_object_unref);
+    }
     load_job_free(job);
 }
 
@@ -566,27 +893,57 @@ static void on_enumerate(GObject* source, GAsyncResult* res, gpointer data)
         job->cancel, on_next_files, job);
 }
 
-void sfe_dir_model_load(SfeDirModel* self, GFile* dir)
+/* Reads the folder (again); a load still running is cancelled. */
+static void folder_load(Folder* f)
 {
     LoadJob* job = g_new0(LoadJob, 1);
 
-    if (self->cancel != NULL)
-        g_cancellable_cancel(self->cancel);
+    if (f->cancel != NULL)
+        g_cancellable_cancel(f->cancel);
+    g_clear_object(&f->cancel);
+    f->cancel = g_cancellable_new();
+    f->loading = true;
 
-    job->self = g_object_ref(self);
-    job->dir = g_object_ref(dir);
-    job->cancel = g_cancellable_new();
+    job->folder = folder_ref(f);
+    job->cancel = g_object_ref(f->cancel);
     job->infos = g_ptr_array_new_with_free_func(g_object_unref);
-    g_set_object(&self->cancel, job->cancel);
-
-    g_file_enumerate_children_async(dir, SFE_FILE_ATTRIBUTES, G_FILE_QUERY_INFO_NONE,
+    g_file_enumerate_children_async(f->dir, SFE_FILE_ATTRIBUTES, G_FILE_QUERY_INFO_NONE,
         G_PRIORITY_DEFAULT, job->cancel, on_enumerate, job);
+}
+
+void sfe_dir_model_load(SfeDirModel* self, GFile* dir)
+{
+    if (self->folder != NULL && self->pending == NULL && g_file_equal(self->folder->dir, dir)
+        && self->folder->uri != NULL) {
+        folder_load(self->folder); /* the same folder: read it again (every pane showing it) */
+        return;
+    }
+    if (self->pending != NULL && g_file_equal(self->pending->dir, dir))
+        return; /* already on its way */
+    if (self->pending != NULL) { /* superseded */
+        g_clear_handle_id(&self->switch_source, g_source_remove);
+        folder_detach(g_steal_pointer(&self->pending), self);
+    }
+
+    Folder* f = folder_get(dir);
+    f->models = g_list_prepend(f->models, self);
+    self->pending = f;
+    /* A folder another pane shows gets this pane's settings only when it is
+     * shown here (switch_folder): by then the scale factor is known, and a
+     * wrong one would redraw every icon of a big folder twice. */
+    if (f->store == NULL)
+        apply_settings(self, f);
+    if (f->store != NULL && !f->loading)
+        self->switch_source = g_idle_add(switch_later, self); /* already read: no disk access */
+    else if (!f->loading)
+        folder_load(f);
 }
 
 void sfe_dir_model_reload(SfeDirModel* self)
 {
-    if (self->dir != NULL)
-        sfe_dir_model_load(self, self->dir);
+    Folder* f = self->pending ? self->pending : self->folder;
+    if (f != NULL)
+        sfe_dir_model_load(self, f->dir);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -595,67 +952,7 @@ void sfe_dir_model_reload(SfeDirModel* self)
 
 GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self)
 {
-    return GTK_TREE_MODEL(self->store);
-}
-
-/* Refills the store from the remembered infos (used when the search query
- * changes: one bulk build is much faster than thousands of row updates in a
- * sorted store). Emits "loaded" so the views attach the new store. */
-/* Better match first; equal ones by name, so the cut is always the same. */
-static int best_first(gconstpointer pa, gconstpointer pb)
-{
-    GFileInfo* a = *(GFileInfo* const*)pa;
-    GFileInfo* b = *(GFileInfo* const*)pb;
-    int result = compare_numbers(g_file_info_get_attribute_int32(b, SCORE_ATTR),
-        g_file_info_get_attribute_int32(a, SCORE_ATTR));
-    return result != 0 ? result : g_strcmp0(g_file_info_get_name(a), g_file_info_get_name(b));
-}
-
-/* While searching, only the SFE_SEARCH_MAX_SHOWN best matches are shown:
- * GTK lays out every shown row again after each change (about 2 s for
- * 20,000), so a big folder froze at every key. Returns the infos to show. */
-static GList* best_matches(SfeDirModel* self, GList* infos)
-{
-    g_autoptr(GPtrArray) matches = g_ptr_array_new();
-    for (GList* l = infos; l != NULL; l = l->next) {
-        if (is_shown(self, l->data)) /* (scores it) */
-            g_ptr_array_add(matches, l->data);
-    }
-    self->matched = (int)matches->len;
-    if (matches->len > SFE_SEARCH_MAX_SHOWN) {
-        g_ptr_array_sort(matches, best_first);
-        g_ptr_array_set_size(matches, SFE_SEARCH_MAX_SHOWN);
-    }
-    GList* shown = NULL;
-    for (guint i = matches->len; i-- > 0;)
-        shown = g_list_prepend(shown, g_ptr_array_index(matches, i));
-    return shown;
-}
-
-static void rebuild_store(SfeDirModel* self)
-{
-    if (self->infos == NULL)
-        return;
-
-    GtkListStore* old_store = self->store;
-    GHashTable* old_rows = self->rows;
-    g_autoptr(GList) all = g_hash_table_get_values(self->infos);
-    g_autoptr(GList) infos = self->query != NULL ? best_matches(self, all) : g_list_copy(all);
-
-    self->store = new_store();
-    self->rows = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-    self->building = true;
-    for (GList* l = infos; l != NULL; l = l->next) {
-        g_autoptr(GFileInfo) info = g_object_ref(l->data);
-        add_or_update(self, info);
-    }
-    self->building = false;
-    gtk_tree_sortable_set_sort_func(GTK_TREE_SORTABLE(self->store), 0, compare_rows, self, NULL);
-    apply_sort(self);
-
-    g_signal_emit(self, signals[SIGNAL_LOADED], 0);
-    g_object_unref(old_store);
-    g_hash_table_unref(old_rows);
+    return GTK_TREE_MODEL(shown_store(self));
 }
 
 void sfe_dir_model_set_query(SfeDirModel* self, const char* query)
@@ -665,7 +962,7 @@ void sfe_dir_model_set_query(SfeDirModel* self, const char* query)
         return;
     g_free(self->query);
     self->query = g_strdup(q);
-    rebuild_store(self);
+    refilter(self);
 }
 
 const char* sfe_dir_model_get_query(SfeDirModel* self)
@@ -675,17 +972,17 @@ const char* sfe_dir_model_get_query(SfeDirModel* self)
 
 void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* matched, int* total)
 {
-    GHashTableIter it;
-    gpointer info;
-
-    *shown = self->rows ? (int)g_hash_table_size(self->rows) : 0;
+    GHashTable* rows = shown_rows(self);
+    *shown = rows ? (int)g_hash_table_size(rows) : 0;
     *matched = self->query != NULL ? MAX(self->matched, *shown) : *shown;
     *total = 0;
-    if (self->infos == NULL)
+    if (self->folder == NULL || self->folder->infos == NULL)
         return;
-    g_hash_table_iter_init(&it, self->infos);
+    GHashTableIter it;
+    gpointer info;
+    g_hash_table_iter_init(&it, self->folder->infos);
     while (g_hash_table_iter_next(&it, NULL, &info))
-        *total += passes_hidden(self, info);
+        *total += passes_hidden(self->folder, info);
 }
 
 void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter)
@@ -693,32 +990,75 @@ void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter)
     if (self->filter == filter)
         return;
     self->filter = filter;
-    rebuild_store(self);
+    refilter(self);
+}
+
+/* Hidden files appear or disappear in place, in every pane showing `f`. */
+static void folder_set_hidden(Folder* f, bool show)
+{
+    if (f->show_hidden == show)
+        return;
+    f->show_hidden = show;
+    if (f->infos == NULL)
+        return;
+    GList* models = shown_by(f);
+    GHashTableIter it;
+    gpointer info;
+    g_hash_table_iter_init(&it, f->infos);
+    while (g_hash_table_iter_next(&it, NULL, &info)) {
+        put_row(f, f->store, f->rows, info, passes_hidden(f, info));
+        for (GList* l = models; l != NULL; l = l->next) {
+            SfeDirModel* m = l->data;
+            if (m->own_store != NULL)
+                own_put(m, info);
+        }
+    }
+    for (GList* l = models; l != NULL; l = l->next)
+        g_signal_emit(l->data, signals[SIGNAL_FILES_CHANGED], 0); /* thumbnails for the new rows */
+    g_list_free_full(models, g_object_unref);
+}
+
+static void folder_set_sort(Folder* f, SfeSortKey key, GtkSortType order, bool dirs_first)
+{
+    if (f->sort_key == key && f->sort_order == order && f->dirs_first == dirs_first)
+        return;
+    f->sort_key = key;
+    f->sort_order = order;
+    f->dirs_first = dirs_first;
+    each_store(f, sort_store);
+}
+
+static void folder_set_icon_sizes(Folder* f, int grid, int list, int scale)
+{
+    if (f->grid_size == grid && f->list_size == list && f->scale == scale)
+        return;
+    f->grid_size = grid;
+    f->list_size = list;
+    f->scale = scale;
+    refresh_icons(f);
+}
+
+static void apply_settings(SfeDirModel* self, Folder* f)
+{
+    folder_set_hidden(f, self->show_hidden);
+    folder_set_sort(f, self->sort_key, self->sort_order, self->dirs_first);
+    folder_set_icon_sizes(f, self->grid_size, self->list_size, self->scale);
 }
 
 void sfe_dir_model_set_show_hidden(SfeDirModel* self, bool show)
 {
-    if (self->show_hidden == show)
-        return;
     self->show_hidden = show;
-    if (self->infos == NULL)
-        return;
-    /* Re-evaluate every file: hidden ones appear or disappear in place. */
-    g_autoptr(GList) infos = g_hash_table_get_values(self->infos);
-    for (GList* l = infos; l != NULL; l = l->next) {
-        g_autoptr(GFileInfo) info = g_object_ref(l->data);
-        add_or_update(self, info);
-    }
+    if (self->folder != NULL)
+        folder_set_hidden(self->folder, show);
 }
 
 void sfe_dir_model_set_sort(SfeDirModel* self, SfeSortKey key, GtkSortType order, bool dirs_first)
 {
-    if (self->sort_key == key && self->sort_order == order && self->dirs_first == dirs_first)
-        return;
     self->sort_key = key;
     self->sort_order = order;
     self->dirs_first = dirs_first;
-    apply_sort(self);
+    if (self->folder != NULL)
+        folder_set_sort(self->folder, key, order, dirs_first);
 }
 
 void sfe_dir_model_get_sort(SfeDirModel* self, SfeSortKey* key, GtkSortType* order)
@@ -729,63 +1069,74 @@ void sfe_dir_model_get_sort(SfeDirModel* self, SfeSortKey* key, GtkSortType* ord
 
 void sfe_dir_model_set_icon_sizes(SfeDirModel* self, int grid, int list, int scale)
 {
-    if (self->grid_size == grid && self->list_size == list && self->scale == scale)
-        return;
     self->grid_size = grid;
     self->list_size = list;
     self->scale = scale;
-    refresh_icons(self);
+    if (self->folder != NULL)
+        folder_set_icon_sizes(self->folder, grid, list, scale);
 }
 
 bool sfe_dir_model_wants_thumbnail(SfeDirModel* self, const char* name)
 {
-    return self->thumbs != NULL && !g_hash_table_contains(self->thumbs, name);
+    return self->folder != NULL && self->folder->thumbs != NULL && !g_hash_table_contains(self->folder->thumbs, name);
 }
 
 void sfe_dir_model_set_thumbnail(SfeDirModel* self, GFile* file, GdkPixbuf* pixbuf)
 {
+    Folder* f = self->folder;
     g_autoptr(GFile) parent = g_file_get_parent(file);
-    if (self->thumbs == NULL || self->dir == NULL || parent == NULL || !g_file_equal(parent, self->dir))
+    if (f == NULL || f->thumbs == NULL || parent == NULL || !g_file_equal(parent, f->dir))
         return; /* from a folder no longer shown */
     g_autofree char* name = g_file_get_basename(file);
-    g_hash_table_replace(self->thumbs, g_strdup(name), pixbuf ? g_object_ref(pixbuf) : NO_THUMB);
-    GtkTreeIter* iter = g_hash_table_lookup(self->rows, name);
-    GFileInfo* info = g_hash_table_lookup(self->infos, name);
-    if (iter != NULL && info != NULL && pixbuf != NULL)
-        set_icons(self, self->store, iter, info);
+    g_hash_table_replace(f->thumbs, g_strdup(name), pixbuf ? g_object_ref(pixbuf) : NO_THUMB);
+    GFileInfo* info = g_hash_table_lookup(f->infos, name);
+    if (info == NULL || pixbuf == NULL)
+        return;
+    GtkTreeIter* iter = g_hash_table_lookup(f->rows, name);
+    if (iter != NULL)
+        set_icons(f, f->store, iter, info);
+    for (GList* l = f->models; l != NULL; l = l->next) {
+        SfeDirModel* m = l->data;
+        iter = m->folder == f && m->own_store ? g_hash_table_lookup(m->own_rows, name) : NULL;
+        if (iter != NULL)
+            set_icons(f, m->own_store, iter, info);
+    }
 }
 
 void sfe_dir_model_clear_thumbnails(SfeDirModel* self)
 {
-    if (self->thumbs == NULL)
+    if (self->folder == NULL || self->folder->thumbs == NULL)
         return;
-    g_hash_table_remove_all(self->thumbs);
-    refresh_icons(self);
+    g_hash_table_remove_all(self->folder->thumbs);
+    refresh_icons(self->folder);
 }
 
 GtkTreePath* sfe_dir_model_find(SfeDirModel* self, const char* name)
 {
-    GtkTreeIter* iter = self->rows ? g_hash_table_lookup(self->rows, name) : NULL;
-    return iter ? gtk_tree_model_get_path(GTK_TREE_MODEL(self->store), iter) : NULL;
+    GHashTable* rows = shown_rows(self);
+    GtkTreeIter* iter = rows ? g_hash_table_lookup(rows, name) : NULL;
+    return iter ? gtk_tree_model_get_path(GTK_TREE_MODEL(shown_store(self)), iter) : NULL;
 }
 
 GFile* sfe_dir_model_file_at(SfeDirModel* self, GtkTreePath* path)
 {
+    GtkTreeModel* model = GTK_TREE_MODEL(shown_store(self));
     GtkTreeIter iter;
     GFile* file = NULL;
 
-    if (self->store != NULL && gtk_tree_model_get_iter(GTK_TREE_MODEL(self->store), &iter, path))
-        gtk_tree_model_get(GTK_TREE_MODEL(self->store), &iter, SFE_COL_FILE, &file, -1);
+    if (model != NULL && gtk_tree_model_get_iter(model, &iter, path))
+        gtk_tree_model_get(model, &iter, SFE_COL_FILE, &file, -1);
     return file;
 }
 
 GFileInfo* sfe_dir_model_info_at(SfeDirModel* self, GtkTreePath* path)
 {
+    GtkTreeModel* model = GTK_TREE_MODEL(shown_store(self));
     GtkTreeIter iter;
     GFileInfo* info = NULL;
 
-    if (self->store != NULL && gtk_tree_model_get_iter(GTK_TREE_MODEL(self->store), &iter, path))
-        gtk_tree_model_get(GTK_TREE_MODEL(self->store), &iter, SFE_COL_INFO, &info, -1);
+    if (model != NULL && gtk_tree_model_get_iter(model, &iter, path))
+        gtk_tree_model_get(model, &iter, SFE_COL_INFO, &info, -1);
     return info;
 }
 
@@ -793,22 +1144,18 @@ GFileInfo* sfe_dir_model_info_at(SfeDirModel* self, GtkTreePath* path)
 /* GObject                                                                   */
 /* ------------------------------------------------------------------------ */
 
-static void on_icon_theme_changed(GtkIconTheme* theme, gpointer data)
-{
-    (void)theme;
-    refresh_icons(data);
-}
-
 static void sfe_dir_model_dispose(GObject* object)
 {
     SfeDirModel* self = SFE_DIR_MODEL(object);
 
-    g_signal_handlers_disconnect_by_data(gtk_icon_theme_get_default(), self);
-    if (self->cancel != NULL)
-        g_cancellable_cancel(self->cancel);
-    clear_contents(self);
-    g_clear_object(&self->cancel);
-    g_clear_object(&self->dir);
+    g_clear_handle_id(&self->switch_source, g_source_remove);
+    g_clear_object(&self->own_store);
+    g_clear_pointer(&self->own_rows, g_hash_table_unref);
+    if (self->pending != NULL)
+        folder_detach(g_steal_pointer(&self->pending), self);
+    if (self->folder != NULL)
+        folder_detach(g_steal_pointer(&self->folder), self);
+    g_clear_pointer(&self->scores, g_hash_table_unref);
     g_clear_pointer(&self->query, g_free);
     G_OBJECT_CLASS(sfe_dir_model_parent_class)->dispose(object);
 }
@@ -833,13 +1180,12 @@ static void sfe_dir_model_class_init(SfeDirModelClass* klass)
 
 static void sfe_dir_model_init(SfeDirModel* self)
 {
+    self->scores = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     self->sort_order = GTK_SORT_ASCENDING;
     self->dirs_first = true;
     self->grid_size = 64;
     self->list_size = 16;
     self->scale = 1;
-    /* Connected "after" so the icon cache is already cleared. */
-    g_signal_connect_after(gtk_icon_theme_get_default(), "changed", G_CALLBACK(on_icon_theme_changed), self);
 }
 
 SfeDirModel* sfe_dir_model_new(void)

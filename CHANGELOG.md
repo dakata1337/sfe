@@ -7,6 +7,12 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Views of the same folder share its contents: a new split on a folder that
+  is already open no longer reads it again or keeps a second copy of its
+  files. A new split of a 100,000-file folder takes 8 MB more instead of
+  155 MB (list view; grid 63 MB instead of 211 MB) and appears without
+  waiting for the disk. Its layout still takes GTK most of the time. F5 in
+  one of them reloads all.
 - Enter in the search (Ctrl+F) keeps the matches as a filter of the view
   instead of opening the highlighted one: a badge in the corner shows the
   query and count, the files can be worked on as usual, and Esc (or the
