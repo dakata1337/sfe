@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+- The Save dialog no longer accepts "." or ".." as a file name (it returned
+  the folder itself, which the program then failed to write to).
 - Properties: the permission check boxes work on your own read-only files
   (mode 0444). They were greyed out unless the file was writable, though
   the owner may always change permissions; now they follow ownership.

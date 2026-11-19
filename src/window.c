@@ -778,8 +778,8 @@ static void accept(SfeWindow* win)
     }
     case SFE_CHOOSE_SAVE: {
         const char* name = gtk_entry_get_text(GTK_ENTRY(win->chooser_name));
-        if (*name == '\0' || strchr(name, '/') != NULL)
-            break;
+        if (*name == '\0' || strchr(name, '/') != NULL || strcmp(name, ".") == 0 || strcmp(name, "..") == 0)
+            break; /* not a file name: "." and ".." are the folders themselves */
         GFile* file = g_file_get_child_for_display_name(dir, name, NULL);
         if (file == NULL)
             break;
