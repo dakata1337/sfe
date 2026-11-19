@@ -2207,7 +2207,7 @@ static GtkWidget* build_list(SfePane* self)
     GtkCellRenderer* icon = gtk_cell_renderer_pixbuf_new();
     g_object_set(icon, "ypad", ROW_PADDING, "xpad", 4, NULL);
     GList* cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(name));
-    g_object_set(cells->data, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
+    g_object_set(cells->data, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
     gtk_cell_layout_set_cell_data_func(GTK_CELL_LAYOUT(name), cells->data, name_cell, self, NULL);
     g_list_free(cells);
     gtk_tree_view_column_pack_start(name, icon, FALSE);

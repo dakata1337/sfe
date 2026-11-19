@@ -7,6 +7,9 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Long names in the list view are shortened in the middle
+  ("holiday photo … final edit.jpg"), so the extension stays visible.
+
 ## 3.0.3
 
 - In a narrow window, where the views stack, `split absolute` offers them
