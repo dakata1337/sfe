@@ -12,7 +12,7 @@
 # Keep this list in sync with ../sfe-dev/PKGBUILD.
 
 pkgname=sfe
-pkgver=2.0.0
+pkgver=2.0.1
 pkgrel=1
 pkgdesc='Simple File Explorer - a minimal, Wayland-native GTK3 file manager'
 arch=('x86_64' 'aarch64' 'i686' 'armv7h')
@@ -53,7 +53,7 @@ makedepends=('meson' 'ninja')
 # validate the data files when they are installed.
 
 source=("${pkgname}-${pkgver}.tar.gz::${url}/archive/refs/tags/v${pkgver}.tar.gz")
-sha256sums=('56359df3551bf9394a026b7ce15f9fc7cc71864aa467602e2a1ce3975aa11b64')
+sha256sums=('e1e60b5347995baf497002c7549939e17758c929d9271395c8d5d76ce153894f')
 
 build() {
   arch-meson "${pkgname}-${pkgver}" build
