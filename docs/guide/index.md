@@ -581,7 +581,9 @@ back to its default.
 - **System**: make sfe the default file manager, [use it for other
   programs' Open / Save dialogs](#open-and-save-dialogs), see the
   [colours taken from the theme](#themes) (hover one for the theme colour
-  it came from), open `config.toml`.
+  it came from), open `config.toml`, and the version: sfe's version, the
+  build type and the git commit it was built from (selectable, for bug
+  reports).
 
 ![The Keys page](images/settings-keys.png)
 

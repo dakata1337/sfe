@@ -6,6 +6,14 @@ new version.
 
 ## Unreleased
 
+## 2.0.1
+
+- Settings → System shows the version, the build type (release / debug)
+  and the git commit sfe was built from, selectable to copy into bug
+  reports. Release tarballs carry their commit too.
+- The build and install instructions moved from the README to
+  `docs/install.md`.
+
 ## 2.0.0
 
 ### Breaking changes

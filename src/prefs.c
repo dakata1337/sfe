@@ -7,6 +7,8 @@
 #include "theme.h"
 #include "opener.h"
 #include "portalconf.h"
+#include "sfe-build.h"
+#include "sfe-commit.h"
 #include <math.h>
 #include <string.h>
 
@@ -582,6 +584,14 @@ static GtkWidget* system_page(void)
         note("Everything here is saved in ~/.config/sfe/config.toml, which can also be edited "
              "by hand; sfe reloads it when it changes."),
         0, row++, 2, 1);
+
+    /* Which sfe this is, for bug reports: selectable, to copy. */
+    g_autofree char* version = g_strdup_printf("%s (%s build, git %s)", SFE_VERSION, BUILD_TYPE, SFE_GIT_COMMIT);
+    GtkWidget* version_value = gtk_label_new(version);
+    gtk_label_set_selectable(GTK_LABEL(version_value), TRUE);
+    gtk_widget_set_halign(version_value, GTK_ALIGN_END);
+    add_row(GTK_GRID(grid), &row, gtk_label_new("Version"), version_value);
+
     return grid;
 }
 

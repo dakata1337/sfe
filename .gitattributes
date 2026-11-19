@@ -1,0 +1,2 @@
+# git archive (GitHub release tarballs) writes the commit into this file.
+data/git-commit export-subst
