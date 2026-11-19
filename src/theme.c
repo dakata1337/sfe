@@ -128,12 +128,15 @@ static const PaletteEntry palette[] = {
     { "sfe_sidebar_bg", { "sidebar_bg_color" }, "@sfe_bg" },
     { "sfe_accent", { "accent_bg_color", "theme_selected_bg_color" }, "#3584e4" },
     { "sfe_accent_fg", { "accent_fg_color", "theme_selected_fg_color" }, "#ffffff" },
-    { "sfe_error", { "error_color", "error_bg_color" }, "#e01b24" },
+    /* error_bg_color first: base themes (Adwaita) define error_color, which
+     * would win over a generated theme that only sets error_bg_color. */
+    { "sfe_error", { "error_bg_color", "error_color" }, "#e01b24" },
+    { "sfe_error_fg", { "error_fg_color", "destructive_fg_color" }, "#ffffff" },
 };
 
 /* What the palette was built from, for Settings → System. */
 static const char* const color_labels[] = { "Window", "Text", "View", "View text", "Sidebar", "Accent",
-    "Accent text", "Error" };
+    "Accent text", "Error", "Error text" };
 static SfeThemeColor colors[G_N_ELEMENTS(palette)];
 typedef struct {
     GtkWidget* widget;

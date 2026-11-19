@@ -7,6 +7,7 @@
  *   @sfe_sidebar_bg            sidebar
  *   @sfe_accent @sfe_accent_fg selection / focus
  *   @sfe_error                 invalid input
+ *   @sfe_error_fg              text on @sfe_error
  *
  * Everything is scoped to .sfe-window so dialogs keep the theme's look. */
 
@@ -416,7 +417,7 @@
 
 .sfe-dialog button.destructive-action {
     background-color: @sfe_error;
-    color: #ffffff;
+    color: @sfe_error_fg;
 }
 
 .sfe-dialog button:disabled {

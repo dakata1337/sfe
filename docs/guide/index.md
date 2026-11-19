@@ -618,8 +618,9 @@ instantly. The same window with the plain Adwaita theme:
 
 ![sfe with a light theme](images/theme-light.png)
 
-*Settings → System → Theme colours* shows the eight colours sfe uses:
-window, text, view, view text, sidebar, accent, accent text and error. Each
+*Settings → System → Theme colours* shows the nine colours sfe uses:
+window, text, view, view text, sidebar, accent, accent text, error and
+error text. Each
 comes from the first colour the theme defines out of the libadwaita name
 (`window_bg_color`, `accent_bg_color`, …) and the classic GTK 3 name
 (`theme_bg_color`, `theme_selected_bg_color`, …); hovering a swatch says

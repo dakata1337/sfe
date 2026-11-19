@@ -529,7 +529,7 @@ static void fill_colors(GtkWidget* grid)
         gtk_box_pack_start(GTK_BOX(cell), label, FALSE, FALSE, 0);
         if (c->source == NULL)
             gtk_style_context_add_class(gtk_widget_get_style_context(label), "sfe-placeholder");
-        gtk_grid_attach(GTK_GRID(grid), cell, (int)(i % 4), (int)(i / 4), 1, 1);
+        gtk_grid_attach(GTK_GRID(grid), cell, (int)(i % 3), (int)(i / 3), 1, 1);
     }
     gtk_widget_show_all(grid);
 }

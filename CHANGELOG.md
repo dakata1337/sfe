@@ -38,6 +38,10 @@ new version.
 - Rename… (F2 on one file), New Folder… and New File… open the command line
   (`:rename <file> <name>` with the stem selected, `:mkdir `, `:touch `)
   instead of a name popup.
+- Error messages follow generated themes (Noctalia, matugen): sfe now
+  prefers `error_bg_color` over the base theme's `error_color`, which gave
+  stock red; the text of destructive buttons uses the theme's
+  `error_fg_color` instead of white.
 
 ## 1.5.0
 
