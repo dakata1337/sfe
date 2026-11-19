@@ -6,6 +6,8 @@ new version.
 
 ## Unreleased
 
+## 2.0.2
+
 - `gg` (and other cursor keys) scroll back to the cursor when the view was
   scrolled into the empty space after the files; `gg` only selected the
   first item, or stopped a few lines up on fast screens.

@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.0.2" date="2026-11-19">
+      <description>
+        <p>Fixes: gg scrolls back to the first item from the empty space after the files, and thumbnails come back after reloading there.</p>
+      </description>
+    </release>
     <release version="2.0.1" date="2026-11-19">
       <description>
         <p>Settings → System shows the version, build type and git commit sfe was built from.</p>
