@@ -201,7 +201,8 @@ only goes down: `..` and `.` are not allowed.
 | Open the context menu | right-click, Menu key, Shift+F10 |
 
 - Copy and paste use the system clipboard, so they work between views,
-  between windows and with other file managers.
+  between windows and with other file managers. Pasted files become the
+  selection, so the next command acts on them.
 - **Open With** lists the applications installed for the file type.
 - Long operations show progress at the bottom, with a cancel button:
 
@@ -420,13 +421,14 @@ counted in the background, folders included).
 | `d` | `cut` | cut the selection |
 | `<Esc>` | `visual off` | leave visual mode |
 
-Other keys work as in normal mode, chords included: `dd` trashes the
-selection and `yy` yanks it, so `y` and `d` on their own wait a second for
-a possible second key before they run. `x` trashes the selection too, `r` / `R`
+`y` and `d` run at once; typing them twice out of habit (`yy`, `dd`) does
+the same, as the repeat is dropped. Other keys work as in normal mode:
+`x` trashes the selection, `r` / `R`
 rename it, `:` opens the command line for it. Anything that acts on the
-files ends visual mode, and so do going to another folder, switching the
-view, searching or clicking. Leaving visual mode never changes the
-selection.
+files ends visual mode and clears the selection (*Settings → General →
+Clear visual selection after use*, `visual_clear`, keeps it instead).
+Going to another folder, switching the view, searching or clicking end
+visual mode too, and `<Esc>` leaves it; those keep the selection.
 
 ### The command line
 
@@ -549,7 +551,8 @@ back to its default.
 - **General**, in three groups: *Window* (start folder, default view,
   window title bar), *Looks* (scale, icon size,
   [file icon style](#file-icons) with a preview of each) and *Files* (hidden
-  files, sorting, delete confirmation). *Scale* grows everything: text,
+  files, sorting, delete confirmation, clearing the visual selection after
+  use). *Scale* grows everything: text,
   icons, buttons and the sidebar.
 - **Thumbnails**: on or off, the size limit, and folder covers
   ([Thumbnails](#thumbnails)).

@@ -1285,9 +1285,10 @@ bool sfe_command_run(SfeWindow* window, const char* line, GError** error)
         return fail(error, "unknown command: %s", argv[0]);
     }
     /* Visual mode is for building a selection; any command that acts on it
-     * (yank, trash, :copy ...) ends it, keeping the selection. */
+     * (yank, trash, :copy ...) ends it, and clears the selection unless the
+     * visual_clear setting is off. */
     if (ok && !stays_visual(cmd) && sfe_window_get_active_pane(window) == pane)
-        sfe_pane_visual_end(pane);
+        sfe_pane_visual_finish(pane);
     return ok;
 }
 

@@ -26,7 +26,8 @@ struct _SfePane {
     GFile* dir;
     SfeViewMode view;
     char* select_after_load; /* name of the entry to select once listed */
-    char* reveal_name; /* a just-created file to select when it appears */
+    GHashTable* reveal_names; /* just-created files to select when they appear, or NULL */
+    bool reveal_replace; /* the next one revealed replaces the selection */
 
     /* Sort settings last applied from the config (every view sorts the
      * same way; column clicks change the config). */
@@ -1474,6 +1475,19 @@ void sfe_pane_visual_end(SfePane* self)
     g_signal_emit(self, signals[SIGNAL_VISUAL_CHANGED], 0);
 }
 
+void sfe_pane_visual_finish(SfePane* self)
+{
+    if (!self->visual)
+        return;
+    sfe_pane_visual_end(self);
+    if (!sfe_config()->visual_clear)
+        return;
+    if (self->view == SFE_VIEW_GRID)
+        gtk_icon_view_unselect_all(GTK_ICON_VIEW(self->grid));
+    else
+        gtk_tree_selection_unselect_all(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)));
+}
+
 void sfe_pane_center_cursor(SfePane* self)
 {
     GtkTreePath* path = NULL;
@@ -1518,28 +1532,55 @@ void sfe_pane_open_files(SfePane* self, GList* files)
     }
 }
 
-void sfe_pane_reveal(SfePane* self, const char* name)
+/* Selects `name` if it is listed: the first of a batch replaces the
+ * selection (and gets the cursor), the others are added to it. */
+static bool reveal_now(SfePane* self, const char* name)
+{
+    GtkTreePath* path = sfe_dir_model_find(self->model, name);
+    if (path == NULL)
+        return false;
+    if (self->reveal_replace) {
+        select_path(self, path);
+        self->reveal_replace = false;
+    } else if (self->view == SFE_VIEW_GRID) {
+        gtk_icon_view_select_path(GTK_ICON_VIEW(self->grid), path);
+    } else {
+        gtk_tree_selection_select_path(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)), path);
+    }
+    gtk_tree_path_free(path);
+    return true;
+}
+
+void sfe_pane_reveal_many(SfePane* self, char* const* names, guint n)
 {
     if (self->model == NULL) /* pane already closed */
         return;
-    GtkTreePath* path = sfe_dir_model_find(self->model, name);
-    if (path != NULL) {
-        select_path(self, path);
-        gtk_tree_path_free(path);
-        return;
+    g_clear_pointer(&self->reveal_names, g_hash_table_unref);
+    self->reveal_replace = true;
+    for (guint i = 0; i < n; i++) {
+        if (reveal_now(self, names[i]))
+            continue;
+        if (self->reveal_names == NULL)
+            self->reveal_names = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+        g_hash_table_add(self->reveal_names, g_strdup(names[i])); /* selected once the monitor sees it */
     }
-    g_free(self->reveal_name);
-    self->reveal_name = g_strdup(name); /* selected once the monitor sees it */
+}
+
+void sfe_pane_reveal(SfePane* self, const char* name)
+{
+    char* names[] = { (char*)name };
+    sfe_pane_reveal_many(self, names, 1);
 }
 
 static void on_file_added(SfeDirModel* model, const char* name, gpointer data)
 {
     (void)model;
     SfePane* self = data;
-    if (g_strcmp0(name, self->reveal_name) != 0)
+    if (self->reveal_names == NULL || !g_hash_table_remove(self->reveal_names, name))
         return;
-    g_clear_pointer(&self->reveal_name, g_free);
-    sfe_pane_reveal(self, name);
+    reveal_now(self, name);
+    if (g_hash_table_size(self->reveal_names) == 0)
+        g_clear_pointer(&self->reveal_names, g_hash_table_unref);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -2067,7 +2108,7 @@ static void sfe_pane_dispose(GObject* object)
     }
     g_clear_pointer(&self->history, sfe_history_free);
     g_clear_pointer(&self->select_after_load, g_free);
-    g_clear_pointer(&self->reveal_name, g_free);
+    g_clear_pointer(&self->reveal_names, g_hash_table_unref);
     g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
     g_clear_pointer(&self->visual_base, g_hash_table_unref);
     g_clear_object(&self->search_base);

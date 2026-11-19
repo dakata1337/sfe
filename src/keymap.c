@@ -405,12 +405,22 @@ SfeKeysResult sfe_keymap_lookup_layered(const SfeKeymap* first, const SfeKeymap*
     if (first != NULL)
         sfe_keymap_lookup(first, tokens, n, &a, &longer_a);
     sfe_keymap_lookup(then, tokens, n, &b, &longer_b);
+    /* An exact key of `first` runs without waiting for `then`'s longer ones
+     * (no delay on a visual "y" because of the normal "yy"). */
     const char* exact = a != NULL ? a : b;
+    bool longer = a != NULL ? longer_a : longer_a || longer_b;
     if (command != NULL)
         *command = exact;
     if (prefix != NULL)
-        *prefix = longer_a || longer_b;
+        *prefix = longer;
     if (exact != NULL)
         return SFE_KEYS_MATCH;
-    return longer_a || longer_b ? SFE_KEYS_PREFIX : SFE_KEYS_NONE;
+    return longer ? SFE_KEYS_PREFIX : SFE_KEYS_NONE;
+}
+
+bool sfe_keymap_repeat_shadowed(const SfeKeymap* then, const char* token)
+{
+    char* twice[] = { (char*)token, (char*)token, NULL };
+    bool prefix = false;
+    return sfe_keymap_lookup(then, twice, 2, NULL, &prefix) != SFE_KEYS_NONE;
 }

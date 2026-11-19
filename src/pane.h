@@ -100,6 +100,10 @@ void sfe_pane_visual_chunk(SfePane* self);
 /* The cursor jumps to the other end of the chunk (vim's "o"). */
 void sfe_pane_visual_swap(SfePane* self);
 void sfe_pane_visual_end(SfePane* self);
+
+/* After a command acted on the visual selection: leaves visual mode and,
+ * unless the visual_clear setting is off, clears the selection. */
+void sfe_pane_visual_finish(SfePane* self);
 bool sfe_pane_in_visual(SfePane* self);
 /* Whether a chunk is being drawn (rather than moving between chunks). */
 bool sfe_pane_visual_drawing(SfePane* self);
@@ -113,3 +117,7 @@ void sfe_pane_open_files(SfePane* self, GList* files);
 
 /* Selects the entry `name`, now or as soon as it appears (after creating it). */
 void sfe_pane_reveal(SfePane* self, const char* name);
+
+/* The same for several names (pasted files): they become the selection,
+ * each as soon as it is listed. */
+void sfe_pane_reveal_many(SfePane* self, char* const* names, guint n);

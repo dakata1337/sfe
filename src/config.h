@@ -84,6 +84,7 @@ typedef struct {
     int sort_order; /* SfeSortOrder */
     bool dirs_first;
     bool confirm_delete;
+    bool visual_clear; /* clear the selection after acting on a visual one */
     bool decorations;
 
     /* [preview] */

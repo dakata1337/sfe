@@ -70,12 +70,18 @@ typedef enum {
 SfeKeysResult sfe_keymap_lookup(const SfeKeymap* map, char* const* tokens, guint n, const char** command,
     bool* prefix);
 
-/* Two maps at once (visual mode: the visual keys, then the normal ones): an
- * exact binding of `first` wins over one of `then`, but a longer binding in
- * either still makes the caller wait, so a visual "d" does not swallow the
- * first key of the normal "dd". `first` may be NULL. */
+/* Two maps at once (visual mode: the visual keys, then the normal ones). An
+ * exact binding of `first` wins at once, waiting only for longer bindings of
+ * `first` itself; otherwise both maps' bindings count. So in visual mode
+ * "y" yanks without a delay, while "g" still waits for "gg". The caller
+ * swallows a repeat of such a key (sfe_keymap_repeat_shadowed) so the
+ * "yy" typed out of habit does not leave a "y" behind. `first` may be NULL. */
 SfeKeysResult sfe_keymap_lookup_layered(const SfeKeymap* first, const SfeKeymap* then, char* const* tokens,
     guint n, const char** command, bool* prefix);
+
+/* Whether `then` has a binding that is `token` twice ("yy" for "y"): after
+ * `first`'s "y" ran, a second "y" right away belongs to it and is dropped. */
+bool sfe_keymap_repeat_shadowed(const SfeKeymap* then, const char* token);
 
 /* A key that can follow a partly typed chord, for the suggestions list. */
 typedef struct {

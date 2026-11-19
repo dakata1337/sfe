@@ -71,6 +71,7 @@ static const SfeOption options[] = {
     { "general", "sort_order", SFE_OPT_ENUM, FIELD(sort_order), "Sort direction: ascending (A-Z, smallest, oldest first) | descending", .choices = order_names, .label = "Sort order" },
     { "general", "dirs_first", SFE_OPT_BOOL, FIELD(dirs_first), "List directories before files", .label = "Folders first" },
     { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },
+    { "general", "visual_clear", SFE_OPT_BOOL, FIELD(visual_clear), "After a command acts on a visual-mode selection (yank, trash, ...), clear the selection", .label = "Clear visual selection after use" },
     { "preview", "thumbnails", SFE_OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails", .label = "Thumbnails" },
     { "preview", "thumbnail_max_mb", SFE_OPT_INT, FIELD(thumbnail_max_mb), "Skip thumbnails for files larger than this (MiB)", .min = 1, .max = 1 << 20, .label = "Thumbnail size limit (MiB)" },
     { "preview", "folder_covers", SFE_OPT_BOOL, FIELD(folder_covers), "Show a folder's cover picture (cover.jpg, folder.png, front.jpg, ...) instead of its icon", .label = "Folder covers" },
@@ -155,6 +156,7 @@ SfeConfig* sfe_config_new(void)
     cfg->sort_order = SFE_SORT_ASCENDING;
     cfg->dirs_first = true;
     cfg->confirm_delete = true;
+    cfg->visual_clear = true;
     cfg->decorations = true;
 
     cfg->thumbnails = true;

@@ -54,6 +54,8 @@ struct _SfeWindow {
     GPtrArray* pending; /* tokens of the chord typed so far */
     char* chord_command; /* run if the chord times out (it is also a prefix) */
     guint chord_timeout;
+    char* swallow; /* a visual key that just ran: its repeat right after is dropped ("yy") */
+    gint64 swallow_until; /* monotonic time */
     gulong config_handler;
 };
 
@@ -438,6 +440,15 @@ static bool normal_mode_key(SfeWindow* win, const GdkEventKey* event, GtkWidget*
         return true;
     }
 
+    /* "yy" in visual mode: the first "y" yanked at once; the second is the
+     * habit of the normal-mode key, not the start of a new chord. */
+    if (win->pending->len == 0 && win->swallow != NULL && strcmp(token, win->swallow) == 0
+        && g_get_monotonic_time() < win->swallow_until) {
+        g_clear_pointer(&win->swallow, g_free);
+        return true;
+    }
+    g_clear_pointer(&win->swallow, g_free);
+
     g_ptr_array_add(win->pending, g_steal_pointer(&token));
     const char* command = NULL;
     bool prefix = false;
@@ -448,6 +459,11 @@ static bool normal_mode_key(SfeWindow* win, const GdkEventKey* event, GtkWidget*
 
     if (result == SFE_KEYS_MATCH && !prefix) {
         g_autofree char* line = g_strdup(command);
+        if (visual && win->pending->len == 1
+            && sfe_keymap_repeat_shadowed(win->keymap, g_ptr_array_index(win->pending, 0))) {
+            win->swallow = g_strdup(g_ptr_array_index(win->pending, 0));
+            win->swallow_until = g_get_monotonic_time() + G_USEC_PER_SEC; /* like a chord's second */
+        }
         drop_chord(win);
         run_command(win, line);
         return true;
@@ -580,6 +596,7 @@ static void sfe_window_dispose(GObject* object)
     if (win->pending != NULL)
         drop_chord(win);
     g_clear_pointer(&win->pending, g_ptr_array_unref);
+    g_clear_pointer(&win->swallow, g_free);
     g_clear_pointer(&win->keymap, sfe_keymap_free);
     g_clear_pointer(&win->visual_keymap, sfe_keymap_free);
     g_clear_pointer(&win->filters, g_ptr_array_unref);

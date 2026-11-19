@@ -311,6 +311,24 @@ static void on_cut_paste_done(SfeFileOp* op, GError* error, gpointer data)
         sfe_clipboard_clear_if_cut(); /* the files have moved */
 }
 
+/* The pasted files become the selection of every view showing the folder
+ * they went into. */
+static void select_pasted(SfeWindow* window, GList* files)
+{
+    SfeSplit* split = sfe_window_get_split(window);
+    for (int i = 0; i < sfe_split_get_n_panes(split); i++) {
+        SfePane* pane = sfe_split_get_pane(split, i);
+        g_autoptr(GPtrArray) names = g_ptr_array_new_with_free_func(g_free);
+        for (GList* l = files; l != NULL; l = l->next) {
+            g_autoptr(GFile) parent = g_file_get_parent(l->data);
+            if (parent != NULL && g_file_equal(parent, sfe_pane_get_dir(pane)))
+                g_ptr_array_add(names, g_file_get_basename(l->data));
+        }
+        if (names->len > 0)
+            sfe_pane_reveal_many(pane, (char* const*)names->pdata, names->len);
+    }
+}
+
 /* "Pasted 3 files (32 MB)": the new files, counted once they are there. */
 static void on_paste_done(SfeFileOp* op, GError* error, gpointer data)
 {
@@ -327,6 +345,7 @@ static void on_paste_done(SfeFileOp* op, GError* error, gpointer data)
     files = g_list_reverse(files);
     if (files != NULL)
         notify_files(window, sfe_file_op_get_kind(op) == SFE_OP_MOVE ? "Moved" : "Pasted", files);
+    select_pasted(window, files);
     g_list_free(files);
 }
 
@@ -731,6 +750,8 @@ static void on_activate(GSimpleAction* simple, GVariant* param, gpointer data)
     Binding* b = data;
     SfeActionTarget t = sfe_action_target_for(b->window);
     b->action->run(&t);
+    if ((b->action->menu & SFE_MENU_ITEMS) && t.pane != NULL) /* acted on the files: like a visual command */
+        sfe_pane_visual_finish(t.pane);
     sfe_action_target_clear(&t);
 }
 
