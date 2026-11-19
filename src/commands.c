@@ -143,7 +143,10 @@ static bool run_on_files(Ctx* c, const char* action, int argc, char** argv, GErr
 
 static bool run_cd(Ctx* c, int argc, char** argv, GError** error)
 {
-    g_autoptr(GFile) dir = argc > 1 ? resolve(c, argv[1]) : g_file_new_for_path(g_get_home_dir());
+    if (argc > 2)
+        return fail(error, "usage: cd [<folder>]");
+    /* Without a folder: the start folder from the settings. */
+    g_autoptr(GFile) dir = resolve(c, argc > 1 ? argv[1] : sfe_config()->start_path);
     if (!is_dir(dir)) {
         g_autofree char* name = display(dir);
         return fail(error, "%s is not a folder", name);
@@ -1092,7 +1095,7 @@ static void complete_undo(Ctx* c, int argi, char** argv, const char* query, cons
 #define NO_ALIAS { NULL }
 
 static const Command commands[] = {
-    { { "cd", NO_ALIAS, "[<folder>]", "go to a folder (home without one)" }, complete_dirs, run_cd, false },
+    { { "cd", NO_ALIAS, "[<folder>]", "go to a folder (the start folder without one)" }, complete_dirs, run_cd, false },
     { { "open", NO_ALIAS, "[<file>…]", "open files and folders (the selection without any)" }, complete_files, run_open, false },
     { { "open_with", NO_ALIAS, "[<application> [<file>…]]", "open with a chosen application (the chooser without one)" }, complete_open_with, run_open_with, false },
     { { "cp", { "copy", NULL }, "<file>… <destination>", "copy into a folder" }, complete_transfer, run_copy, false },

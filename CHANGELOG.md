@@ -6,6 +6,9 @@ new version.
 
 ## Unreleased
 
+- `:cd` without a folder goes to the start folder from the settings
+  (it went to the home folder).
+
 ## 1.5.0
 
 - Sort ascending or descending, saved in the config (`sort_order`, next to

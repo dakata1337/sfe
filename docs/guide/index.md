@@ -440,7 +440,7 @@ selection.
 
 | Command | Arguments | Does |
 |---|---|---|
-| `cd` | `[<folder>]` | go to a folder (home without one) |
+| `cd` | `[<folder>]` | go to a folder (the start folder from Settings → General without one) |
 | `open` | `[<file>…]` | open files and folders (the selection without any) |
 | `open_with` | `[<application> [<file>…]]` | open with an installed program (Tab lists them, the ones for the selected file's type first); the chooser without one |
 | `cp` (`copy`) | `<file>… <destination>` | copy into a folder |
