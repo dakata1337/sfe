@@ -376,7 +376,7 @@ once; one left alone without the list is dropped after a second.
 | `<C-o>` / `<C-i>` | `back` / `forward` | history |
 | `<Space>` | `select toggle` | select or unselect the item, move to the next |
 | `yy` | `yank` | copy the selection to the clipboard |
-| `dd` | `trash` | move to trash (cut is Ctrl+X or `:cut`) |
+| `dd` | `cut` | cut the selection |
 | `p` | `paste` | paste into this view |
 | `u` | `undo` | undo the last change to files ([Undo](#undo)) |
 | `x` / `X` | `trash` / `delete` | move to trash / delete permanently (asks) |
