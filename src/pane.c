@@ -892,6 +892,9 @@ static void measure_columns(SfePane* self)
                 w = MAX(w, text_width(layout, type));
         }
         self->column_width[key] = w + COLUMN_PADDING;
+        /* PROTOTYPE: the fixed-width columns get what was measured, so
+         * fit_columns() decides with the widths they really have. */
+        gtk_tree_view_column_set_fixed_width(self->columns[key], self->column_width[key]);
     }
     g_object_unref(layout);
 }
@@ -928,6 +931,12 @@ static void fit_columns(SfePane* self)
     }
     if (changed) /* the list keeps the old widths otherwise: the name stays squeezed */
         gtk_tree_view_columns_autosize(GTK_TREE_VIEW(self->list));
+    /* PROTOTYPE: with fixed widths GTK may hand the spare room to the last
+     * column instead of Name, so Name gets it here. */
+    int rest = width;
+    for (int i = 0; i < keep; i++)
+        rest -= self->column_width[extras[i]];
+    gtk_tree_view_column_set_fixed_width(self->columns[SFE_SORT_NAME], MAX(rest, name_needed / 2));
     self->columns_for_width = width;
 }
 
@@ -2218,6 +2227,25 @@ static GtkWidget* build_list(SfePane* self)
     add_text_column(self, list, "Size", SFE_COL_SIZE_TEXT, SFE_SORT_SIZE, 1.0f);
     add_text_column(self, list, "Modified", SFE_COL_MTIME_TEXT, SFE_SORT_MODIFIED, 0.0f);
     add_text_column(self, list, "Type", SFE_COL_TYPE_TEXT, SFE_SORT_TYPE, 0.0f);
+
+    /* PROTOTYPE: fixed-height mode. GtkTreeView then measures one row instead
+     * of all of them; every column needs a fixed width. */
+    static const struct { SfeSortKey key; const char* sample; int extra; } widths[] = {
+        { SFE_SORT_NAME, "Name", 0 },
+        { SFE_SORT_SIZE, "888.8 MB", 24 },
+        { SFE_SORT_MODIFIED, "8888-88-88 88:88", 24 },
+        { SFE_SORT_TYPE, "OpenDocument spreadsheet", 24 },
+    };
+    for (size_t i = 0; i < G_N_ELEMENTS(widths); i++) {
+        PangoLayout* layout = gtk_widget_create_pango_layout(list, widths[i].sample);
+        int w = 0;
+        pango_layout_get_pixel_size(layout, &w, NULL);
+        g_object_unref(layout);
+        GtkTreeViewColumn* c = self->columns[widths[i].key];
+        gtk_tree_view_column_set_sizing(c, GTK_TREE_VIEW_COLUMN_FIXED);
+        gtk_tree_view_column_set_fixed_width(c, w + widths[i].extra);
+    }
+    gtk_tree_view_set_fixed_height_mode(tree, TRUE);
 
     g_signal_connect(list, "row-activated", G_CALLBACK(on_list_activated), self);
     g_signal_connect(gtk_tree_view_get_selection(tree), "changed", G_CALLBACK(on_selection_changed), self);
