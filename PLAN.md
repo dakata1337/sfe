@@ -172,14 +172,14 @@ Every important feature is reachable from the keyboard. Mouse users lose nothing
 |---|---|---|
 | Ctrl+W `v` | `:split vertical` | split side by side, with the same rules as the ◫ button (below) |
 | Ctrl+W `s` | `:split horizontal` | split top / bottom, with the same rules as the ⊟ button (below) |
-| Shift+`h`/`j`/`k`/`l` | `:split left/down/up/right` | move focus to the view in that direction |
+| Shift+`j` / Shift+`k` | `:split next` / `:split previous` | move focus clockwise / counter-clockwise: left → right-top → right-bottom → left (changed 2026-11-19; H / L dropped) |
 | Shift+`W` | `:split next` | cycle focus clockwise: left → right-top → right-bottom |
-| Ctrl+Shift+`h`/`j`/`k`/`l` | `:split move left/down/up/right` | swap the active view with the one in that direction |
+| Ctrl+Shift+`j` / Ctrl+Shift+`k` | `:split move next` / `:split move previous` | move the active view clockwise / counter-clockwise (swap with the next view) |
 | Ctrl+W `q` | `:q` | close the active view (the window if it is the last) |
 
 - Split rules (shared by the keys, the buttons and Ctrl+\\ / Ctrl+-): one view splits either way; two views side by side split top / bottom and two stacked views split side by side, and then the view being split becomes right-top, the new one right-bottom and the other one moves left. Three views do not split. Where a split is not allowed the chord does nothing (the command line says why).
 - `:split absolute left|right|right-top|right-bottom|top|bottom` focuses a position. Only positions that exist are offered: `left` / `right` side by side, `top` / `bottom` stacked, `left` / `right-top` / `right-bottom` with three views.
-- Directions (`H`/`J`/`K`/`L`, `split move …`) follow the views on screen, so they also work in a narrow window where the views stack. At the edge they wrap around to the farthest view the other way (TODO, 2026-11-15); with no other view on that line they do nothing, without an error.
+- Moving between views goes round the views in a fixed order (clockwise: left, right-top, right-bottom), so it works the same in a narrow window where the views stack, and from every view (2026-11-19: replaced the on-screen directions, which did nothing from the left view for up / down).
 - Ctrl+W becomes a chord prefix, so the old Ctrl+W (close view) moves to Ctrl+W `q`.
 
 ### Key bindings are data

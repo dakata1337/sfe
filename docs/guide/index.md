@@ -150,6 +150,11 @@ The layout always stays one of these:
 - **Three views** cannot split further; the buttons that do nothing are
   greyed out.
 
+The views go round clockwise: left → right-top → right-bottom → left (with
+two: left → right, or top → bottom). `J` moves the focus clockwise and `K`
+counter-clockwise; `Ctrl+J` / `Ctrl+K` move the active view itself the same
+way. This works the same in a narrow window where the views stack.
+
 Right-click a place, bookmark, drive or folder in the tree → *Open in
 Split* to open it in a new view: a new right view, or a new right-bottom
 view if there is a right one (with three views, right-bottom goes there).
@@ -394,8 +399,8 @@ once; one left alone without the list is dropped after a second.
 | `<C-w>v` / `<C-w>s` | `split vertical` / `split horizontal` | split side by side / top and bottom (same rules as the buttons) |
 | `<C-w>q` | `q` | close the view (the window if it is the last) |
 | `W` | `split next` | next view: left, right-top, right-bottom |
-| `H` `J` `K` `L` | `split left` / `down` / `up` / `right` | focus the view in that direction; at the edge it wraps around to the far side |
-| `<C-H>` `<C-J>` `<C-K>` `<C-L>` | `split move left` / … | swap the active view with the one in that direction (wrapping around too) |
+| `J` / `K` | `split next` / `split previous` | focus the next view clockwise / counter-clockwise: left → right-top → right-bottom → left |
+| `<C-J>` / `<C-K>` | `split move next` / `split move previous` | move the active view clockwise / counter-clockwise (it swaps places with that view and keeps the focus) |
 
 ### Visual mode
 
@@ -484,7 +489,7 @@ visual mode too, and `<Esc>` leaves it; those keep the selection.
 | `mount` | `<device>` | mount a drive and open it |
 | `unmount` | `<device>` | unmount a drive |
 | `eject` | `<device>` | unmount and power off a removable drive |
-| `split` | `move\|next\|vertical\|horizontal\|left\|right\|up\|down\|absolute` | the split commands above; `absolute left\|right\|right-top\|right-bottom\|top\|bottom` focuses a position, offering only the ones that exist |
+| `split` | `next\|previous\|move\|vertical\|horizontal\|absolute` | the split commands above; `move next\|previous` moves the view; `absolute left\|right\|right-top\|right-bottom\|top\|bottom` focuses a position, offering only the ones that exist |
 | `q` (`quit`) | | close the active view (the window if it is the last) |
 | `bookmark` | `[<folder>…]` | bookmark folders: the ones given, else the selected folders, else this one |
 | `unbookmark` | `[<bookmark>…]` | remove sfe's bookmarks the same way |

@@ -4,7 +4,7 @@
  *
  * Every row of the action table is a command too ("paste", "preferences",
  * "show_hidden", ...: dashes become underscores); the commands here add
- * arguments: ":copy a b ~/backup", ":cd ~/Projects", ":split move left".
+ * arguments: ":copy a b ~/backup", ":cd ~/Projects", ":split move next".
  * Normal-mode keys run commands through the same function. */
 
 #include "cmdline.h"

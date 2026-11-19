@@ -34,14 +34,10 @@ static const SfeKeyBinding defaults[] = {
     { "<C-w>s", "split horizontal", "split top / bottom" },
     { "<C-w>q", "q", "close the view (the window if it is the last)" },
     { "W", "split next", "next view: left, right-top, right-bottom" },
-    { "H", "split left", "focus the view on the left" },
-    { "J", "split down", "focus the view below" },
-    { "K", "split up", "focus the view above" },
-    { "L", "split right", "focus the view on the right" },
-    { "<C-H>", "split move left", "swap with the view on the left" },
-    { "<C-J>", "split move down", "swap with the view below" },
-    { "<C-K>", "split move up", "swap with the view above" },
-    { "<C-L>", "split move right", "swap with the view on the right" },
+    { "J", "split next", "focus the next view clockwise" },
+    { "K", "split previous", "focus the next view counter-clockwise" },
+    { "<C-J>", "split move next", "move the view clockwise (swap with the next one)" },
+    { "<C-K>", "split move previous", "move the view counter-clockwise" },
 };
 
 /* Visual mode: these first, then the keys above. */

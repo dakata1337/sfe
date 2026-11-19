@@ -5,7 +5,7 @@
  *   "j"        -> "cursor down"
  *   "gg"       -> "cursor first"
  *   "<C-w>v"   -> "split vertical"
- *   "<C-H>"    -> "split move left"     (Ctrl+Shift+h)
+ *   "<C-J>"    -> "split move next"     (Ctrl+Shift+j)
  *
  * A sequence is a string of keys, vim style: a plain character stands for
  * itself; <...> holds modifiers C- (Ctrl), A- (Alt), S- (Shift) and a key,

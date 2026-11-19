@@ -197,7 +197,7 @@ static void run_close_pane(const SfeActionTarget* t)
 
 static void run_next_pane(const SfeActionTarget* t)
 {
-    sfe_split_focus_next(sfe_window_get_split(t->window));
+    sfe_split_focus_step(sfe_window_get_split(t->window), 1);
 }
 
 /* ------------------------------------------------------------------------ */

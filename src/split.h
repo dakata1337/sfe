@@ -49,29 +49,16 @@ void sfe_split_close(SfeSplit* self, SfePane* pane);
 /* Makes the pane containing `widget` active (call when the focus moves). */
 void sfe_split_track_focus(SfeSplit* self, GtkWidget* widget);
 
-/* Moves the focus to the next pane (left → right-top → right-bottom). */
-void sfe_split_focus_next(SfeSplit* self);
-
-typedef enum {
-    SFE_DIRECTION_LEFT,
-    SFE_DIRECTION_RIGHT,
-    SFE_DIRECTION_UP,
-    SFE_DIRECTION_DOWN,
-} SfeDirection;
-
-/* The pane next to `pane` in that direction on screen (so narrow, stacked
- * windows work too). At the edge it wraps around to the farthest pane the
- * other way (left from the left view: the right one). NULL when no other
- * pane is on that line. */
-SfePane* sfe_split_neighbor(SfeSplit* self, SfePane* pane, SfeDirection direction);
+/* Moves the focus `step` panes on: 1 clockwise (left → right-top →
+ * right-bottom → left), -1 counter-clockwise; it wraps around. */
+void sfe_split_focus_step(SfeSplit* self, int step);
 
 /* Makes `pane` active and focuses its view. */
 void sfe_split_focus(SfeSplit* self, SfePane* pane);
 
-/* Swaps the active pane with its neighbor in that direction (wrapping
- * around like sfe_split_neighbor()); it stays active. False if there is
- * none. */
-bool sfe_split_swap(SfeSplit* self, SfeDirection direction);
+/* Swaps the active pane with the one `step` places on (1 clockwise, -1
+ * counter-clockwise, wrapping around); it stays active. False with one pane. */
+bool sfe_split_swap(SfeSplit* self, int step);
 
 /* The name of the pane at `index`: "left" with one pane; "left" / "right"
  * side by side or "top" / "bottom" stacked with two; "left", "right-top",

@@ -80,10 +80,11 @@ static void test_lookup(void)
     g_assert_cmpint(lookup(map, "<C-w>v", &command, NULL), ==, SFE_KEYS_MATCH);
     g_assert_cmpstr(command, ==, "split vertical");
     g_assert_cmpint(lookup(map, "<C-w>x", NULL, NULL), ==, SFE_KEYS_NONE);
-    g_assert_cmpint(lookup(map, "<S-h>", &command, NULL), ==, SFE_KEYS_MATCH);
-    g_assert_cmpstr(command, ==, "split left");
-    g_assert_cmpint(lookup(map, "<C-S-l>", &command, NULL), ==, SFE_KEYS_MATCH);
-    g_assert_cmpstr(command, ==, "split move right");
+    g_assert_cmpint(lookup(map, "<S-j>", &command, NULL), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "split next");
+    g_assert_cmpint(lookup(map, "<C-S-k>", &command, NULL), ==, SFE_KEYS_MATCH);
+    g_assert_cmpstr(command, ==, "split move previous");
+    g_assert_cmpint(lookup(map, "<S-h>", NULL, NULL), ==, SFE_KEYS_NONE); /* H / L dropped */
     g_assert_cmpint(lookup(map, "q", NULL, NULL), ==, SFE_KEYS_NONE);
 }
 

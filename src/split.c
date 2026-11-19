@@ -192,9 +192,17 @@ void sfe_split_track_focus(SfeSplit* self, GtkWidget* widget)
         set_active(self, SFE_PANE(pane));
 }
 
-void sfe_split_focus_next(SfeSplit* self)
+/* The pane `step` places on from the active one, clockwise (the panes are
+ * kept in that order: left, right-top, right-bottom), wrapping around. */
+static int step_index(SfeSplit* self, int step)
 {
-    int next = (index_of(self, self->active) + 1) % self->n_panes;
+    int n = self->n_panes;
+    return ((index_of(self, self->active) + step) % n + n) % n;
+}
+
+void sfe_split_focus_step(SfeSplit* self, int step)
+{
+    int next = step_index(self, step);
     set_active(self, self->panes[next]);
     sfe_pane_focus_view(self->panes[next]);
 }
@@ -207,79 +215,13 @@ void sfe_split_focus(SfeSplit* self, SfePane* pane)
     sfe_pane_focus_view(pane);
 }
 
-/* The pane's rectangle in the split's coordinates. */
-static GdkRectangle pane_rect(SfeSplit* self, SfePane* pane)
+bool sfe_split_swap(SfeSplit* self, int step)
 {
-    GtkAllocation a;
-    GdkRectangle r = { 0, 0, 0, 0 };
-    gtk_widget_get_allocation(GTK_WIDGET(pane), &a);
-    gtk_widget_translate_coordinates(GTK_WIDGET(pane), GTK_WIDGET(self), 0, 0, &r.x, &r.y);
-    r.width = a.width;
-    r.height = a.height;
-    return r;
-}
-
-static int overlap(int a0, int a1, int b0, int b1)
-{
-    return MIN(a1, b1) - MAX(a0, b0);
-}
-
-SfePane* sfe_split_neighbor(SfeSplit* self, SfePane* pane, SfeDirection direction)
-{
-    if (index_of(self, pane) < 0)
-        return NULL;
-    GdkRectangle from = pane_rect(self, pane);
-    SfePane* best = NULL;
-    int best_distance = G_MAXINT;
-    SfePane* wrapped = NULL; /* the farthest the other way, for wrapping around */
-    int wrapped_distance = 0;
-
-    /* Beside it in that direction (paned handles leave a small gap) and
-     * overlapping it across; the nearest wins, the first pane on a tie. */
-    for (int i = 0; i < self->n_panes; i++) {
-        SfePane* other = self->panes[i];
-        if (other == pane)
-            continue;
-        GdkRectangle to = pane_rect(self, other);
-        int distance;
-        bool across;
-        switch (direction) {
-        case SFE_DIRECTION_LEFT:
-            distance = from.x - (to.x + to.width);
-            across = overlap(from.y, from.y + from.height, to.y, to.y + to.height) > 0;
-            break;
-        case SFE_DIRECTION_RIGHT:
-            distance = to.x - (from.x + from.width);
-            across = overlap(from.y, from.y + from.height, to.y, to.y + to.height) > 0;
-            break;
-        case SFE_DIRECTION_UP:
-            distance = from.y - (to.y + to.height);
-            across = overlap(from.x, from.x + from.width, to.x, to.x + to.width) > 0;
-            break;
-        default:
-            distance = to.y - (from.y + from.height);
-            across = overlap(from.x, from.x + from.width, to.x, to.x + to.width) > 0;
-            break;
-        }
-        if (across && distance > -8 && distance < best_distance) {
-            best = other;
-            best_distance = distance;
-        }
-        if (across && distance <= -8 && (wrapped == NULL || distance < wrapped_distance)) {
-            wrapped = other;
-            wrapped_distance = distance;
-        }
-    }
-    return best ? best : wrapped;
-}
-
-bool sfe_split_swap(SfeSplit* self, SfeDirection direction)
-{
-    SfePane* other = sfe_split_neighbor(self, self->active, direction);
-    if (other == NULL)
+    if (self->n_panes < 2)
         return false;
     int a = index_of(self, self->active);
-    int b = index_of(self, other);
+    int b = step_index(self, step);
+    SfePane* other = self->panes[b];
     self->panes[a] = other;
     self->panes[b] = self->active;
     relayout(self);

@@ -456,31 +456,22 @@ static bool run_eject(Ctx* c, int argc, char** argv, GError** error)
 
 /* ---- Splits ------------------------------------------------------------- */
 
-static const struct {
-    const char* name;
-    SfeDirection direction;
-} directions[] = {
-    { "left", SFE_DIRECTION_LEFT },
-    { "right", SFE_DIRECTION_RIGHT },
-    { "up", SFE_DIRECTION_UP },
-    { "down", SFE_DIRECTION_DOWN },
-};
-
-static bool parse_direction(const char* name, SfeDirection* direction)
+/* "next" (clockwise: left, right-top, right-bottom) is 1, "previous" -1. */
+static bool parse_step(const char* name, int* step)
 {
-    for (size_t i = 0; i < G_N_ELEMENTS(directions); i++) {
-        if (g_strcmp0(directions[i].name, name) == 0) {
-            *direction = directions[i].direction;
-            return true;
-        }
-    }
-    return false;
+    if (g_strcmp0(name, "next") == 0)
+        *step = 1;
+    else if (g_strcmp0(name, "previous") == 0)
+        *step = -1;
+    else
+        return false;
+    return true;
 }
 
 static bool run_split(Ctx* c, int argc, char** argv, GError** error)
 {
     const char* sub = argc > 1 ? argv[1] : "";
-    SfeDirection direction;
+    int step;
 
     if (strcmp(sub, "vertical") == 0 || strcmp(sub, "horizontal") == 0) {
         int before = sfe_split_get_n_panes(c->split);
@@ -489,22 +480,14 @@ static bool run_split(Ctx* c, int argc, char** argv, GError** error)
             return fail(error, "this view cannot split %s", sub[0] == 'v' ? "side by side" : "top / bottom");
         return true;
     }
-    if (strcmp(sub, "next") == 0) {
-        sfe_split_focus_next(c->split);
-        return true;
-    }
-    if (parse_direction(sub, &direction)) {
-        /* Wraps around at the edge; with no other view on that line there
-         * is simply nothing to do (no error: the keys are pressed blindly). */
-        SfePane* other = sfe_split_neighbor(c->split, c->pane, direction);
-        if (other != NULL)
-            sfe_split_focus(c->split, other);
+    if (parse_step(sub, &step)) {
+        sfe_split_focus_step(c->split, step);
         return true;
     }
     if (strcmp(sub, "move") == 0) {
-        if (argc != 3 || !parse_direction(argv[2], &direction))
-            return fail(error, "usage: split move left|right|up|down");
-        sfe_split_swap(c->split, direction); /* (wraps; nothing to swap with is no error) */
+        if (argc != 3 || !parse_step(argv[2], &step))
+            return fail(error, "usage: split move next|previous");
+        sfe_split_swap(c->split, step); /* (one view: nothing to swap with, no error) */
         return true;
     }
     if (strcmp(sub, "absolute") == 0) {
@@ -514,7 +497,7 @@ static bool run_split(Ctx* c, int argc, char** argv, GError** error)
         sfe_split_focus(c->split, pane);
         return true;
     }
-    return fail(error, "usage: split move|next|vertical|horizontal|left|right|up|down|absolute");
+    return fail(error, "usage: split next|previous|move|vertical|horizontal|absolute");
 }
 
 /* ---- Bookmarks ---------------------------------------------------------- */
@@ -1058,24 +1041,18 @@ static void complete_split(Ctx* c, int argi, char** argv, const char* query, con
             const char* word;
             const char* help;
         } subs[] = {
-            { "move", "move: swap the view with a neighbour (left|right|up|down)" },
-            { "next", "focus: the next view (left, right-top, right-bottom)" },
+            { "next", "focus: the next view clockwise (left, right-top, right-bottom)" },
+            { "previous", "focus: the next view counter-clockwise" },
+            { "move", "move: swap the view with the next one (next|previous)" },
             { "vertical", "new view: split side by side" },
             { "horizontal", "new view: split top / bottom" },
-            { "left", "focus: the view on the left" },
-            { "right", "focus: the view on the right" },
-            { "up", "focus: the view above" },
-            { "down", "focus: the view below" },
             { "absolute", "focus: the view at a position (left, right-top, …)" },
         };
         for (size_t i = 0; i < G_N_ELEMENTS(subs); i++)
-            add(out, subs[i].word, NULL, subs[i].help, i < 2 ? 0 : 1);
+            add(out, subs[i].word, NULL, subs[i].help, i < 3 ? 0 : 1);
     } else if (argi == 2 && strcmp(argv[1], "move") == 0) {
-        /* All four, the ones with a view to swap with first. */
-        for (size_t i = 0; i < G_N_ELEMENTS(directions); i++) {
-            bool there = sfe_split_neighbor(c->split, c->pane, directions[i].direction) != NULL;
-            add(out, directions[i].name, NULL, there ? NULL : "no view there", there ? 0 : 1);
-        }
+        add(out, "next", NULL, "swap with the next view clockwise", 0);
+        add(out, "previous", NULL, "swap with the next view counter-clockwise", 0);
     } else if (argi == 2 && strcmp(argv[1], "absolute") == 0) {
         for (int i = 0; sfe_split_position_name(c->split, i) != NULL; i++)
             add(out, sfe_split_position_name(c->split, i), NULL, NULL, 0);
@@ -1160,7 +1137,7 @@ static const Command commands[] = {
     { { "mount", NO_ALIAS, "<device>", "mount a drive and open it" }, complete_devices, run_mount, false },
     { { "unmount", NO_ALIAS, "<device>", "unmount a drive" }, complete_devices, run_unmount, false },
     { { "eject", NO_ALIAS, "<device>", "unmount and power off a removable drive" }, complete_devices, run_eject, false },
-    { { "split", NO_ALIAS, "<sub-command>", "move|next|vertical|horizontal|left|right|up|down|absolute" }, complete_split, run_split, false },
+    { { "split", NO_ALIAS, "<sub-command>", "next|previous|move|vertical|horizontal|absolute" }, complete_split, run_split, false },
     { { "q", { "quit", NULL }, "", "close the active view (the window if it is the last)" }, NULL, run_q, false },
     { { "bookmark", NO_ALIAS, "[<folder>…]", "bookmark folders (the selected ones, else this one)" }, complete_folders, run_bookmark, false },
     { { "unbookmark", NO_ALIAS, "[<bookmark>…]", "remove bookmarks (the selected folders, else this one)" }, complete_unbookmark, run_unbookmark, false },

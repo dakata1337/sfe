@@ -7,6 +7,14 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Moving between split views goes round them clockwise: `J` focuses the next
+  view clockwise (left → right-top → right-bottom → left) and `K` the next
+  counter-clockwise; `Ctrl+J` / `Ctrl+K` move the active view the same way.
+  It works from every view (up / down did nothing from the left view
+  before). `H`, `L`, `Ctrl+H` and `Ctrl+L` are gone, and so are the
+  sub-commands `split left|right|up|down` and `split move left|right|up|down`:
+  use `split next|previous` and `split move next|previous` (key bindings in
+  `config.toml` that use the old ones need the new names).
 - The Save dialog no longer accepts "." or ".." as a file name (it returned
   the folder itself, which the program then failed to write to).
 - Properties: the permission check boxes work on your own read-only files
