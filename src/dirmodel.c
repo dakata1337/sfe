@@ -174,20 +174,23 @@ static cairo_surface_t* with_folder_badge(cairo_surface_t* cover, GFileInfo* inf
 }
 
 /* The row's picture: its thumbnail if it has one, else the theme icon.
- * Returns a new reference. A thumbnail is scaled once per size and kept on
- * the pixbuf, since rows are drawn from this on every paint. */
+ * Returns a new reference. A thumbnail is scaled once and kept on the
+ * pixbuf, since rows are drawn from this on every paint: one copy for the
+ * grid and one for the list, replaced when the size or scale changes. */
 static cairo_surface_t* icon_for(Folder* f, GFileInfo* info, int size)
 {
+    static cairo_user_data_key_t made_for; /* size * 16 + scale */
     gpointer thumb = f->thumbs ? g_hash_table_lookup(f->thumbs, g_file_info_get_name(info)) : NULL;
     if (thumb != NULL && thumb != NO_THUMB) {
-        char key[32];
-        g_snprintf(key, sizeof key, "sfe-%d@%d", size, f->scale);
+        const char* key = size == f->grid_size ? "sfe-grid" : "sfe-list";
+        int tag = size * 16 + f->scale;
         cairo_surface_t* surface = g_object_get_data(thumb, key);
-        if (surface == NULL) {
+        if (surface == NULL || GPOINTER_TO_INT(cairo_surface_get_user_data(surface, &made_for)) != tag) {
             surface = thumb_surface(thumb, size, f->scale);
             if (info_is_dir(info))
                 surface = with_folder_badge(surface, info, f->dir, size, f->scale);
-            g_object_set_data_full(thumb, key, surface, (GDestroyNotify)cairo_surface_destroy);
+            cairo_surface_set_user_data(surface, &made_for, GINT_TO_POINTER(tag), NULL);
+            g_object_set_data_full(thumb, key, surface, (GDestroyNotify)cairo_surface_destroy); /* drops the old */
         }
         return cairo_surface_reference(surface);
     }

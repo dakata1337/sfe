@@ -2340,22 +2340,11 @@ static GtkWidget* build_list(SfePane* self)
     add_text_column(self, list, "Type", SFE_SORT_TYPE, 0.0f);
 
     /* PROTOTYPE: fixed-height mode. GtkTreeView then measures one row instead
-     * of all of them; every column needs a fixed width. */
-    static const struct { SfeSortKey key; const char* sample; int extra; } widths[] = {
-        { SFE_SORT_NAME, "Name", 0 },
-        { SFE_SORT_SIZE, "888.8 MB", 24 },
-        { SFE_SORT_MODIFIED, "8888-88-88 88:88", 24 },
-        { SFE_SORT_TYPE, "OpenDocument spreadsheet", 24 },
-    };
-    for (size_t i = 0; i < G_N_ELEMENTS(widths); i++) {
-        PangoLayout* layout = gtk_widget_create_pango_layout(list, widths[i].sample);
-        int w = 0;
-        pango_layout_get_pixel_size(layout, &w, NULL);
-        g_object_unref(layout);
-        GtkTreeViewColumn* c = self->columns[widths[i].key];
-        gtk_tree_view_column_set_sizing(c, GTK_TREE_VIEW_COLUMN_FIXED);
-        gtk_tree_view_column_set_fixed_width(c, w + widths[i].extra);
-    }
+     * of all of them; every column needs a fixed width. measure_columns()
+     * and fit_columns() set them (before the first paint). */
+    for (size_t i = 0; i < G_N_ELEMENTS(self->columns); i++)
+        gtk_tree_view_column_set_sizing(self->columns[i], GTK_TREE_VIEW_COLUMN_FIXED);
+    gtk_tree_view_column_set_expand(name, FALSE); /* fit_columns() gives Name the rest; GTK's expand overshoots */
     gtk_tree_view_set_fixed_height_mode(tree, TRUE);
 
     g_signal_connect(list, "row-activated", G_CALLBACK(on_list_activated), self);
