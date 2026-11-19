@@ -15,6 +15,9 @@ new version.
   folder “Hello World!” (it made two folders).
 - `:split close` is gone in favour of `:q` / `:quit` (`<C-w>q` runs `q`);
   the old name still works for now, with a note.
+- `:split` completion says what each sub-command does, and whether it makes
+  a view, moves the focus or moves the view; `:split move` offers all four
+  directions.
 
 ## 1.5.0
 

@@ -1050,10 +1050,24 @@ static void complete_split(Ctx* c, int argi, char** argv, const char* query, con
 {
     (void)query, (void)rank;
     if (argi == 1) {
-        static const char* const first[] = { "move", "next", NULL };
-        static const char* const rest[] = { "vertical", "horizontal", "left", "right", "up", "down", "absolute", NULL };
-        add_words(out, first, 0);
-        add_words(out, rest, 1);
+        /* What each does, saying whether it makes a view, moves the focus
+         * or moves the view. */
+        static const struct {
+            const char* word;
+            const char* help;
+        } subs[] = {
+            { "move", "move: swap the view with a neighbour (left|right|up|down)" },
+            { "next", "focus: the next view (left, right-top, right-bottom)" },
+            { "vertical", "new view: split side by side" },
+            { "horizontal", "new view: split top / bottom" },
+            { "left", "focus: the view on the left" },
+            { "right", "focus: the view on the right" },
+            { "up", "focus: the view above" },
+            { "down", "focus: the view below" },
+            { "absolute", "focus: the view at a position (left, right-top, …)" },
+        };
+        for (size_t i = 0; i < G_N_ELEMENTS(subs); i++)
+            add(out, subs[i].word, NULL, subs[i].help, i < 2 ? 0 : 1);
     } else if (argi == 2 && strcmp(argv[1], "move") == 0) {
         /* All four, the ones with a view to swap with first. */
         for (size_t i = 0; i < G_N_ELEMENTS(directions); i++) {
