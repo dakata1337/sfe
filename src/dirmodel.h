@@ -65,6 +65,7 @@ void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter);
  * refilled store. The query stays when another folder is loaded (the
  * search walks into folders); the pane clears it when navigating. */
 void sfe_dir_model_set_query(SfeDirModel* self, const char* query);
+const char* sfe_dir_model_get_query(SfeDirModel* self); /* NULL when none */
 
 /* While searching, at most this many (the best) matches are shown. */
 #define SFE_SEARCH_MAX_SHOWN 1000
@@ -83,8 +84,8 @@ void sfe_dir_model_set_icon_sizes(SfeDirModel* self, int grid, int list, int sca
  * file `name` still needs one; the thumbnail of `file`, or NULL when there
  * is none to be had (not asked again until the file changes); forgetting
  * them all (thumbnails switched off). Rows show their thumbnail instead of
- * the icon, at both sizes. "files-changed" says that new or changed files
- * may need one. */
+ * the icon, at both sizes. "files-changed" says that files appeared, changed
+ * (they may need one) or went. */
 bool sfe_dir_model_wants_thumbnail(SfeDirModel* self, const char* name);
 void sfe_dir_model_set_thumbnail(SfeDirModel* self, GFile* file, GdkPixbuf* pixbuf);
 void sfe_dir_model_clear_thumbnails(SfeDirModel* self);

@@ -20,7 +20,7 @@ struct _SfeDirModel {
     GHashTable* thumbs; /* file name -> GdkPixbuf*, or NO_THUMB (none to be had) */
     bool building; /* filling a fresh store, not reacting to changes */
     char* query; /* search filter, NULL when not searching */
-    int matched; /* files the query matched at the last rebuild (may exceed the rows) */
+    int matched; /* files the query matches (may exceed the rows); kept up to date as files come and go */
     const SfeFileFilter* filter; /* a file dialog's type filter (borrowed), or NULL */
     GFileMonitor* monitor;
     GCancellable* cancel; /* cancels the load and monitor queries of `dir` */
@@ -212,6 +212,8 @@ static void remove_row(SfeDirModel* self, const char* name)
     if (iter != NULL) {
         gtk_list_store_remove(self->store, iter);
         g_hash_table_remove(self->rows, name);
+        if (self->query != NULL)
+            self->matched--;
     }
 }
 
@@ -238,6 +240,8 @@ static void add_or_update(SfeDirModel* self, GFileInfo* info)
     if (insert) {
         iter = g_new(GtkTreeIter, 1);
         g_hash_table_insert(self->rows, g_strdup(name), iter);
+        if (self->query != NULL && !self->building)
+            self->matched++;
     }
     store_row(self, self->store, iter, insert, file, info);
     if (insert && !self->building)
@@ -249,6 +253,7 @@ static void forget_file(SfeDirModel* self, const char* name)
     remove_row(self, name);
     g_hash_table_remove(self->infos, name);
     g_hash_table_remove(self->thumbs, name);
+    g_signal_emit(self, signals[SIGNAL_FILES_CHANGED], 0);
 }
 
 static void refresh_icons(SfeDirModel* self)
@@ -663,6 +668,11 @@ void sfe_dir_model_set_query(SfeDirModel* self, const char* query)
     rebuild_store(self);
 }
 
+const char* sfe_dir_model_get_query(SfeDirModel* self)
+{
+    return self->query;
+}
+
 void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* matched, int* total)
 {
     GHashTableIter it;
@@ -815,7 +825,8 @@ static void sfe_dir_model_class_init(SfeDirModelClass* klass)
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
     signals[SIGNAL_FILE_ADDED] = g_signal_new("file-added", G_TYPE_FROM_CLASS(klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 1, G_TYPE_STRING);
-    /* A file appeared or changed after loading (thumbnails are due). */
+    /* A file appeared, changed or went after loading (thumbnails are due,
+     * counts change). */
     signals[SIGNAL_FILES_CHANGED] = g_signal_new("files-changed", G_TYPE_FROM_CLASS(klass),
         G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
 }

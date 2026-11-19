@@ -7,6 +7,12 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Enter in the search (Ctrl+F) keeps the matches as a filter of the view
+  instead of opening the highlighted one: a badge in the corner shows the
+  query and count, the files can be worked on as usual, and Esc (or the
+  badge's ✕) shows all files again. The letters that matched are marked in
+  the names while searching or filtered. (Enter used to open the highlighted
+  match; now Enter, then Enter again.)
 - Memory goes back down after leaving or closing a view of a big folder:
   glibc kept the freed memory for reuse, so sfe stayed at its peak (about
   200 MB after visiting a folder of 100,000 files; 630 MB with three

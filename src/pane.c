@@ -5,6 +5,7 @@
 #include "ctxmenu.h"
 #include "dialogs.h"
 #include "dirmodel.h"
+#include "fuzzy.h"
 #include "history.h"
 #include "opener.h"
 #include "pathentry.h"
@@ -47,6 +48,9 @@ struct _SfePane {
     GtkWidget* overlay; /* stack + floating search bar */
     SfeSearchBar* search;
     GFile* search_base; /* where the search started (it may walk into folders) */
+    char* filter; /* the query kept after Enter in the search, NULL when not filtered */
+    GtkWidget* filter_badge; /* "Filtered: …" over the files, with a clear button */
+    GtkWidget* filter_label;
     GtkWidget* grid; /* GtkIconView */
     GtkWidget* list; /* GtkTreeView */
     GtkWidget* message; /* GtkLabel for errors */
@@ -229,6 +233,8 @@ static void show_dir(SfePane* self, GFile* dir)
     g_signal_emit(self, signals[SIGNAL_DIRECTORY_CHANGED], 0);
 }
 
+static void end_filter(SfePane* self, bool keep);
+
 /* Shows `dir` without touching the history; a new folder starts unfiltered. */
 static void go_to(SfePane* self, GFile* dir)
 {
@@ -237,6 +243,7 @@ static void go_to(SfePane* self, GFile* dir)
         sfe_search_bar_reset(self->search);
         g_clear_object(&self->search_base);
     }
+    end_filter(self, false);
     sfe_dir_model_set_query(self->model, NULL);
     show_dir(self, dir);
 }
@@ -365,8 +372,14 @@ static void update_search_count(SfePane* self)
 void sfe_pane_start_search(SfePane* self)
 {
     sfe_pane_visual_end(self);
-    if (!searching(self))
+    if (!searching(self)) {
         g_set_object(&self->search_base, self->dir);
+        if (self->filter != NULL) { /* the filter goes back into the search */
+            g_autofree char* text = g_steal_pointer(&self->filter);
+            gtk_widget_hide(self->filter_badge);
+            sfe_search_bar_set_text(self->search, text);
+        }
+    }
     sfe_search_bar_focus(self->search);
 }
 
@@ -472,33 +485,88 @@ static void on_search_close(SfeSearchBar* bar, gpointer data)
     end_search(SFE_PANE(data), true);
 }
 
-/* Enter: opens the highlighted match. A folder opens in this pane (which
- * ends the search); a file opens and stays selected in the full listing. */
+static void update_filter_badge(SfePane* self)
+{
+    if (self->filter == NULL)
+        return;
+    int shown, matched, total;
+    sfe_dir_model_get_counts(self->model, &shown, &matched, &total);
+    g_autofree char* count = matched > shown ? g_strdup_printf("best %d of %d", shown, matched)
+                                             : g_strdup_printf("%d / %d", shown, total);
+    g_autofree char* markup = g_markup_printf_escaped("Filtered: <b>%s</b>  <span alpha=\"60%%\">%s · Esc</span>",
+        self->filter, count);
+    gtk_label_set_markup(GTK_LABEL(self->filter_label), markup);
+}
+
+/* Shows every file again. With `keep`, the selected files stay selected in
+ * the full listing. */
+static void end_filter(SfePane* self, bool keep)
+{
+    if (self->filter == NULL)
+        return;
+    g_clear_pointer(&self->filter, g_free);
+    gtk_widget_hide(self->filter_badge);
+    if (!keep)
+        return;
+    GList* files = sfe_pane_get_selected_files(self);
+    g_autoptr(GPtrArray) names = g_ptr_array_new_with_free_func(g_free);
+    for (GList* l = files; l != NULL; l = l->next)
+        g_ptr_array_add(names, g_file_get_basename(l->data));
+    g_list_free_full(files, g_object_unref);
+    sfe_dir_model_set_query(self->model, NULL);
+    sfe_pane_reveal_many(self, (char* const*)names->pdata, names->len);
+}
+
+static void on_filter_clear(GtkButton* button, gpointer data)
+{
+    (void)button;
+    SfePane* self = data;
+    end_filter(self, true);
+    sfe_pane_focus_view(self);
+}
+
+/* Enter: the matches stay as a filter of this view (the files can be worked
+ * on as usual; Esc shows all again), the highlighted one selected. With
+ * nothing typed, the search just closes where it is. */
 static void search_activate(SfePane* self)
 {
-    GtkTreePath* path = highlighted(self);
-    if (path == NULL)
-        return;
-    g_autoptr(GFile) file = sfe_dir_model_file_at(self->model, path);
-    g_autoptr(GFileInfo) info = sfe_dir_model_info_at(self->model, path);
-    gtk_tree_path_free(path);
-    if (file == NULL || info == NULL)
-        return;
+    const char* query = NULL;
+    g_autoptr(GFile) dir = resolve_search_dir(self->search_base ? self->search_base : self->dir,
+        sfe_search_bar_get_text(self->search), &query);
+    g_autofree char* filter = g_strdup(query);
 
     /* After walking into folders, Back returns to where the search started. */
     if (self->search_base != NULL && !g_file_equal(self->search_base, self->dir))
         sfe_history_push(self->history, self->search_base);
-    if (g_file_info_get_file_type(info) != G_FILE_TYPE_DIRECTORY)
+    if (*filter == '\0') {
         end_search_full(self, true, false);
-    activate_file(self, file, info);
+        return;
+    }
+    g_clear_object(&self->search_base);
+    gtk_widget_hide(GTK_WIDGET(self->search));
+    sfe_search_bar_reset(self->search); /* the model keeps the query */
+    self->filter = g_steal_pointer(&filter);
+    update_filter_badge(self);
+    gtk_widget_show(self->filter_badge);
+    sfe_pane_focus_view(self);
 }
 
-/* Places the search card centred in the bottom third of the pane. */
+/* Places the search card centred in the bottom third of the pane, the
+ * filter badge in the bottom right corner. */
 static gboolean on_overlay_position(GtkOverlay* overlay, GtkWidget* child, GdkRectangle* alloc, gpointer data)
 {
-    (void)data;
+    SfePane* self = data;
     int w = gtk_widget_get_allocated_width(GTK_WIDGET(overlay));
     int h = gtk_widget_get_allocated_height(GTK_WIDGET(overlay));
+    if (child == self->filter_badge) { /* bottom right, clear of the scroll bar */
+        GtkRequisition nat;
+        gtk_widget_get_preferred_size(child, NULL, &nat);
+        alloc->width = MIN(nat.width, w);
+        alloc->height = nat.height;
+        alloc->x = MAX(0, w - alloc->width - 16);
+        alloc->y = MAX(0, h - alloc->height - 8);
+        return TRUE;
+    }
     int width = CLAMP(w * 6 / 10, MIN(300, w), 600);
     int min_h, nat_h;
 
@@ -538,6 +606,7 @@ static void on_loaded(SfeDirModel* model, gpointer data)
             select_index(self, 0);
         update_search_count(self);
     }
+    update_filter_badge(self);
     if (had_focus)
         gtk_widget_grab_focus(view);
     schedule_thumbnails(self);
@@ -1024,6 +1093,7 @@ static void on_files_changed(SfeDirModel* model, gpointer data)
     (void)model;
     schedule_thumbnails(data);
     names_changed(data);
+    update_filter_badge(data);
 }
 
 static void apply_config(SfePane* self)
@@ -1828,6 +1898,8 @@ static gboolean on_view_key_press(GtkWidget* view, GdkEventKey* event, gpointer 
     if (event->keyval == GDK_KEY_Escape && mods == 0) {
         if (searching(SFE_PANE(data)))
             end_search(SFE_PANE(data), true);
+        else if (SFE_PANE(data)->filter != NULL)
+            end_filter(SFE_PANE(data), true);
         else if (GTK_IS_ICON_VIEW(view))
             gtk_icon_view_unselect_all(GTK_ICON_VIEW(view));
         else
@@ -1884,6 +1956,75 @@ static void on_selection_changed(gpointer view_or_selection, gpointer data)
         self->selection_source = g_idle_add(emit_selection_changed, self);
 }
 
+/* While a query is set (searching or filtered), the letters of a name that
+ * matched it: in the accent colour, bold and underlined in a selected row. */
+static void name_cell(GtkCellLayout* layout, GtkCellRenderer* cell, GtkTreeModel* model, GtkTreeIter* iter,
+    gpointer data)
+{
+    (void)layout;
+    SfePane* self = data;
+    PangoAttrList* base = g_object_get_data(G_OBJECT(cell), "sfe-base-attributes");
+    const char* query = sfe_dir_model_get_query(self->model);
+    g_autofree char* name = NULL;
+    g_autoptr(GArray) at = g_array_new(FALSE, FALSE, sizeof(int));
+
+    if (query != NULL)
+        gtk_tree_model_get(model, iter, SFE_COL_NAME, &name, -1);
+    if (name == NULL || sfe_fuzzy_match(query, name, at) == SFE_FUZZY_NO_MATCH || at->len == 0) {
+        g_object_set(cell, "attributes", base, NULL);
+        return;
+    }
+    bool grid = cell == self->grid_text;
+    bool selected;
+    if (grid) {
+        g_autoptr(GtkTreePath) path = gtk_tree_model_get_path(model, iter);
+        selected = gtk_icon_view_path_is_selected(GTK_ICON_VIEW(self->grid), path);
+    } else {
+        selected = gtk_tree_selection_iter_is_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(self->list)), iter);
+    }
+    GdkRGBA accent = { 0.3, 0.5, 0.9, 1 };
+    gtk_style_context_lookup_color(gtk_widget_get_style_context(grid ? self->grid : self->list), "sfe_accent", &accent);
+
+    PangoAttrList* attrs = base ? pango_attr_list_copy(base) : pango_attr_list_new();
+    for (guint i = 0; i < at->len; i++) {
+        int start = g_array_index(at, int, i);
+        int end = g_utf8_next_char(name + start) - name;
+        PangoAttribute* marks[2] = { pango_attr_weight_new(PANGO_WEIGHT_BOLD),
+            selected ? pango_attr_underline_new(PANGO_UNDERLINE_SINGLE)
+                     : pango_attr_foreground_new(accent.red * 65535, accent.green * 65535, accent.blue * 65535) };
+        for (int k = 0; k < 2; k++) {
+            marks[k]->start_index = start;
+            marks[k]->end_index = end;
+            pango_attr_list_insert(attrs, marks[k]);
+        }
+    }
+    g_object_set(cell, "attributes", attrs, NULL);
+    pango_attr_list_unref(attrs);
+}
+
+static GtkWidget* build_filter_badge(SfePane* self)
+{
+    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    GtkWidget* icon = sfe_scaled_icon_new("system-search-symbolic", 16);
+    GtkWidget* clear = gtk_button_new_from_icon_name("window-close-symbolic", GTK_ICON_SIZE_MENU);
+
+    gtk_style_context_add_class(gtk_widget_get_style_context(box), "sfe-filter-badge");
+    gtk_button_set_relief(GTK_BUTTON(clear), GTK_RELIEF_NONE);
+    gtk_widget_set_tooltip_text(clear, "Show all files (Esc)");
+    gtk_widget_set_can_focus(clear, FALSE);
+    g_signal_connect(clear, "clicked", G_CALLBACK(on_filter_clear), self);
+    self->filter_label = gtk_label_new(NULL);
+    gtk_label_set_ellipsize(GTK_LABEL(self->filter_label), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_box_pack_start(GTK_BOX(box), icon, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), self->filter_label, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box), clear, FALSE, FALSE, 0);
+    gtk_widget_show_all(box);
+    gtk_widget_set_no_show_all(box, TRUE);
+    gtk_widget_hide(box);
+    self->filter_badge = box;
+    return box;
+}
+
 static GtkWidget* build_grid(SfePane* self)
 {
     GtkWidget* grid = gtk_icon_view_new();
@@ -1906,10 +2047,12 @@ static GtkWidget* build_grid(SfePane* self)
      * their icon instead of being centred with space above and below. */
     g_object_set(text, "xalign", 0.5, "yalign", 0.0, "alignment", PANGO_ALIGN_CENTER,
         "wrap-mode", PANGO_WRAP_WORD_CHAR, "attributes", attrs, NULL);
-    pango_attr_list_unref(attrs);
     gtk_cell_layout_pack_start(layout, text, FALSE);
     gtk_cell_layout_add_attribute(layout, text, "text", SFE_COL_NAME);
     self->grid_text = text;
+    g_object_set_data_full(G_OBJECT(text), "sfe-base-attributes", attrs, /* takes our reference */
+        (GDestroyNotify)pango_attr_list_unref);
+    gtk_cell_layout_set_cell_data_func(layout, text, name_cell, self, NULL);
 
     g_signal_connect(grid, "item-activated", G_CALLBACK(on_grid_activated), self);
     g_signal_connect(grid, "selection-changed", G_CALLBACK(on_selection_changed), self);
@@ -1954,6 +2097,7 @@ static GtkWidget* build_list(SfePane* self)
     g_object_set(icon, "ypad", ROW_PADDING, "xpad", 4, NULL);
     GList* cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(name));
     g_object_set(cells->data, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
+    gtk_cell_layout_set_cell_data_func(GTK_CELL_LAYOUT(name), cells->data, name_cell, self, NULL);
     g_list_free(cells);
     gtk_tree_view_column_pack_start(name, icon, FALSE);
     gtk_tree_view_column_add_attribute(name, icon, "surface", SFE_COL_ICON_SMALL);
@@ -2146,6 +2290,7 @@ static void sfe_pane_dispose(GObject* object)
     g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
     g_clear_pointer(&self->visual_base, g_hash_table_unref);
     g_clear_object(&self->search_base);
+    g_clear_pointer(&self->filter, g_free);
     g_clear_object(&self->dir);
     G_OBJECT_CLASS(sfe_pane_parent_class)->dispose(object);
 }
@@ -2229,7 +2374,8 @@ static void sfe_pane_init(SfePane* self)
     self->overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(self->overlay), self->stack);
     gtk_overlay_add_overlay(GTK_OVERLAY(self->overlay), GTK_WIDGET(self->search));
-    g_signal_connect(self->overlay, "get-child-position", G_CALLBACK(on_overlay_position), NULL);
+    gtk_overlay_add_overlay(GTK_OVERLAY(self->overlay), build_filter_badge(self));
+    g_signal_connect(self->overlay, "get-child-position", G_CALLBACK(on_overlay_position), self);
     gtk_box_pack_start(GTK_BOX(self), self->overlay, TRUE, TRUE, 0);
 
     g_signal_connect(self, "button-press-event", G_CALLBACK(on_button_press), self);

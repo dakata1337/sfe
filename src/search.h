@@ -5,7 +5,7 @@
  * does the filtering; this widget only reports what the user does:
  *
  *   "query-changed" (const char*)   the text changed
- *   "activate"                      Enter: open the highlighted match
+ *   "activate"                      Enter: keep the matches as a filter
  *   "move" (int)                    Up / Down: highlight another match
  *   "close"                         Esc */
 
@@ -18,6 +18,10 @@ GtkWidget* sfe_search_bar_new(void);
 
 /* Shows the bar (if hidden) and puts the cursor in it, text selected. */
 void sfe_search_bar_focus(SfeSearchBar* self);
+
+/* The text typed; setting it emits "query-changed". */
+const char* sfe_search_bar_get_text(SfeSearchBar* self);
+void sfe_search_bar_set_text(SfeSearchBar* self, const char* text);
 
 /* Clears the text without emitting "query-changed". */
 void sfe_search_bar_reset(SfeSearchBar* self);

@@ -579,6 +579,21 @@ menu.sfe-menu {
     color: alpha(@sfe_fg, 0.5);
 }
 
+/* The search kept as a filter (Enter): a small card in the corner. */
+.sfe-window .sfe-filter-badge {
+    background-color: @sfe_bg;
+    border: 1px solid alpha(@sfe_accent, 0.6);
+    border-radius: 10px;
+    padding: 2px 4px 2px 10px;
+    box-shadow: 0 4px 12px alpha(black, 0.3);
+}
+
+.sfe-window .sfe-filter-badge button {
+    min-height: 20px;
+    min-width: 20px;
+    padding: 2px;
+}
+
 /* The ":" command line, across the bottom of the views. */
 .sfe-window .sfe-cmdbar {
     background-color: @sfe_bg;

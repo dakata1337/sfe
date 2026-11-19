@@ -189,11 +189,23 @@ Type a folder name followed by `/` to search inside that folder: `src/pa`
 looks for "pa" in `src`, and `docs/guide/` walks down two levels. The search
 only goes down: `..` and `.` are not allowed.
 
+The letters that matched are marked in each name.
+
 | Key | Action |
 |---|---|
 | Up / Down | highlight the previous / next match |
-| Enter | open the highlighted match (Back returns to where the search started) |
+| Enter | keep the matches as a filter (below), the highlighted one selected; with nothing typed, just close the search (after walking into folders, Back returns to where the search started) |
 | Esc | show all files again, keeping the match selected; after walking into folders, return to where the search started |
+
+![Search kept as a filter: the badge in the corner](images/search-filter.png)
+
+**Filter.** After Enter, the view keeps showing only the matches and a badge
+in its bottom right corner says so (`Filtered: no  1 / 7`). The filtered
+files are ordinary files: select them, use visual mode, copy, cut, paste,
+rename, trash, drag or open them as usual. The badge's count follows files
+that come and go. **Esc** (or the badge's ✕) shows all files again and
+keeps the selection; Ctrl+F puts the filter back into the search to change
+it; going to another folder ends it.
 
 ## Working with files
 
@@ -716,7 +728,7 @@ Every shortcut in one place. The single-letter keys of normal mode are in
 | Delete | move to trash |
 | Shift+Delete | delete permanently |
 | Ctrl+A | select all |
-| Esc | clear the selection / close the search |
+| Esc | clear the selection / close the search / end the filter |
 | Ctrl+Shift+N | new folder |
 | F2 | rename |
 | Shift+F2 | rename with a pattern |

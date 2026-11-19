@@ -153,8 +153,9 @@ stop_sfe() {
 }
 
 # Goes UPS folders up, then down PATH through the search (it walks into
-# folders at each "/"; Return opens the match). Not the path bar: its inline
-# completion needs real keyboard focus, which a hidden window never has.
+# folders at each "/"; Return keeps the matches as a filter, a second Return
+# opens the selected one). Not the path bar: its inline completion needs real
+# keyboard focus, which a hidden window never has.
 goto() { # UPS PATH
     for _ in $(seq "$1"); do
         key ALT Up
@@ -162,6 +163,8 @@ goto() { # UPS PATH
     done
     key CTRL f
     type_text "$2"
+    sleep 0.4
+    key "" Return
     sleep 0.4
     key "" Return
     sleep 0.8
@@ -334,7 +337,7 @@ launch Projects/website
 key CTRL backslash
 sleep 0.6
 goto 2 Documents
-key SHIFT h
+key SHIFT k   # the left view (counter-clockwise)
 key SHIFT semicolon
 type_text "copy index.html "
 sleep 0.8
@@ -362,6 +365,9 @@ key CTRL f
 type_text "no"
 sleep 0.6
 shot search
+key "" Return   # the matches stay as a filter
+sleep 0.6
+shot search-filter
 key "" Escape
 
 # "Already exists": copy Downloads/manual.pdf into a folder that has one.

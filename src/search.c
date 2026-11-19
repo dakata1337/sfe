@@ -58,6 +58,16 @@ void sfe_search_bar_focus(SfeSearchBar* self)
     gtk_widget_grab_focus(self->entry); /* selects the text */
 }
 
+const char* sfe_search_bar_get_text(SfeSearchBar* self)
+{
+    return gtk_entry_get_text(GTK_ENTRY(self->entry));
+}
+
+void sfe_search_bar_set_text(SfeSearchBar* self, const char* text)
+{
+    gtk_entry_set_text(GTK_ENTRY(self->entry), text);
+}
+
 void sfe_search_bar_reset(SfeSearchBar* self)
 {
     self->resetting = TRUE;
