@@ -644,7 +644,8 @@ If the file has a syntax error, or an entry sfe cannot use (an unknown
 option, a wrong type), you get a desktop notification with the line
 number. A broken file is never overwritten: sfe keeps the previous settings
 (or the defaults at start) until you fix it, and skips just the bad entries
-otherwise. Notifications use `notify-send` (libnotify) when it is installed.
+otherwise. Changes made in sfe meanwhile (Settings, sorting, bookmarks)
+apply but are not saved, and a notification says so. Notifications use `notify-send` (libnotify) when it is installed.
 
 ## Themes
 

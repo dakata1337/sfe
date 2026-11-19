@@ -7,6 +7,12 @@ release: see the top of that script).
 
 ## Unreleased
 
+- A `config.toml` with a syntax error is no longer overwritten. Any change
+  made in sfe (a column header click, a bookmark, Settings) used to replace
+  the broken file with the defaults, losing bookmarks, keys and custom
+  commands; now such changes apply without being saved, with a
+  notification, until the file is fixed.
+
 ## 2.1.1
 
 - NTFS drives the kernel's driver refuses (Windows Fast Startup or

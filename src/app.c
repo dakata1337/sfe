@@ -19,6 +19,7 @@ struct _SfeApplication {
     SfeConfig* config;
     char* config_path;
     char* last_written; /* text of our own last save, to ignore its echo */
+    bool config_broken; /* config.toml does not parse: never write over it */
     GFileMonitor* config_monitor;
     guint reload_source;
     SfeChooser* chooser; /* chooser mode (--choose), or NULL */
@@ -78,10 +79,20 @@ void sfe_application_set_sort(SfeApplication* app, SfeSortKey key, SfeSortOrder 
     sfe_application_set_config(app, cfg);
 }
 
+static void notify(SfeApplication* app, const char* title, const char* body);
+
 void sfe_application_set_config(SfeApplication* app, SfeConfig* cfg)
 {
     g_autoptr(GError) error = NULL;
 
+    if (app->config_broken && !g_file_test(app->config_path, G_FILE_TEST_EXISTS))
+        app->config_broken = false; /* the broken file was removed: a fresh one is fine */
+    if (app->config_broken) { /* saving would replace the user's file, typo and all, with this */
+        notify(app, "sfe: settings not saved",
+            "config.toml has an error. The change applies for now; fix the file to save settings again.");
+        replace_config(app, cfg);
+        return;
+    }
     g_free(app->last_written);
     app->last_written = sfe_config_to_string(cfg);
     if (!sfe_config_save(cfg, app->config_path, &error))
@@ -153,6 +164,7 @@ static void load_initial_config(SfeApplication* app)
         g_warning("%s: %s; using defaults", app->config_path, error->message);
         report_config(app, NULL, error, "Using the default settings until it is fixed.");
         app->config = sfe_config_new();
+        app->config_broken = true;
         return;
     }
     report_config(app, app->config, NULL, NULL);
@@ -180,8 +192,10 @@ static gboolean reload_config(gpointer data)
     if (cfg == NULL) {
         g_warning("%s: %s; keeping the previous config", app->config_path, error->message);
         report_config(app, NULL, error, "The previous settings stay in use until it is fixed.");
+        app->config_broken = true;
         return G_SOURCE_REMOVE;
     }
+    app->config_broken = false;
     report_config(app, cfg, NULL, NULL);
     g_debug("reloaded %s", app->config_path);
     replace_config(app, cfg);
