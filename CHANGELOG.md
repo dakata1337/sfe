@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.0.0
+
 - Split views of the same folder hide Size, Modified and Type at the same
   window width. Each view learned a column's width only once it had shown
   it and guessed 90 px before, so a split opened narrow (Type never shown)

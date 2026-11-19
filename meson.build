@@ -1,7 +1,7 @@
 project(
     'sfe',
     'c',
-    version: '2.1.2',
+    version: '3.0.0',
     meson_version: '>= 1.0',
     default_options: [
         # Optimized (-O3), no debug info, NDEBUG; for development:

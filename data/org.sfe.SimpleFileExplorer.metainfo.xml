@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="3.0.0" date="2026-11-20">
+      <description>
+        <p>Search results can stay as a filter, splits on the same folder share their data, and big folders are much faster to work in.</p>
+      </description>
+    </release>
     <release version="2.1.2" date="2026-11-19">
       <description>
         <p>Fixes data loss: a config.toml with a syntax error is no longer overwritten, and Replace keeps the old file until the new one is complete.</p>
