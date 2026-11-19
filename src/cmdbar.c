@@ -231,8 +231,8 @@ static void insert_candidate(SfeCommandBar* self, int i)
  * recomputed, so Tab after "Projects/" goes on inside Projects. */
 static void cycle(SfeCommandBar* self, int step)
 {
-    if (self->candidates == NULL)
-        refresh(self);
+    if (self->candidates == NULL || self->refresh_source != 0)
+        refresh(self); /* for the text as typed, not the last list */
     int n = (int)self->candidates->len;
     if (n == 0) {
         gtk_widget_error_bell(self->entry);
@@ -360,7 +360,10 @@ static void on_changed(GtkEditable* editable, gpointer data)
     (void)editable;
     SfeCommandBar* self = data;
     if (!self->inserting && self->refresh_source == 0)
-        self->refresh_source = g_idle_add(refresh_later, self);
+        /* Above GTK's own idle work: after loading a big folder the list view
+         * measures its rows in idle time at a higher priority for many
+         * seconds, and a default-priority idle would not run until then. */
+        self->refresh_source = g_idle_add_full(G_PRIORITY_HIGH_IDLE, refresh_later, self, NULL);
 }
 
 void sfe_command_bar_start(SfeCommandBar* self, const char* text)

@@ -7,6 +7,11 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Command-line completion works right after a big folder loads. The list
+  view measures its rows in the background after loading (about 30 s for
+  100,000 files), and the completion update waited behind that work: the
+  list stayed unfiltered and Tab cycled through the stale list. The update
+  now runs ahead of it, and Tab always completes the text as typed.
 - In a folder of very many files, the command line (and search) responds at
   once: opening or closing it moved the keyboard focus, which restyled the
   grid, and GTK then measured every icon again (about 7 s to open and 10 s
