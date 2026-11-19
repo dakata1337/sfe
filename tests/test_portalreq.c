@@ -1,6 +1,7 @@
 #include "filefilter.h"
 #include "portalreq.h"
 
+#include <glib/gstdio.h>
 #include <string.h>
 
 /* The value after `option` in the arguments, or NULL. */
@@ -159,6 +160,31 @@ static void test_save_files(void)
     g_free(uris);
 }
 
+/* Files the program would write over get free names instead. */
+static void test_save_files_keep_existing(void)
+{
+    g_autofree char* dir = g_dir_make_tmp("sfe-portal-XXXXXX", NULL);
+    g_autofree char* existing = g_build_filename(dir, "a.txt", NULL);
+    g_assert_true(g_file_set_contents(existing, "mine", -1, NULL));
+    g_autoptr(SfePortalRequest) r = request("SaveFiles", "{'files': <[b'a.txt', b'/x/a.txt', b'b']>}");
+    g_autoptr(GFile) folder = g_file_new_for_path(dir);
+    g_autofree char* folder_uri = g_file_get_uri(folder);
+    g_autofree char* output = g_strconcat(folder_uri, "\n", NULL);
+    g_autoptr(GVariant) results = sfe_portal_request_results(r, output);
+    const char** uris = NULL;
+    g_assert_true(g_variant_lookup(results, "uris", "^a&s", &uris));
+    g_assert_cmpuint(g_strv_length((char**)uris), ==, 3);
+    const char* expected[] = { "a (2).txt", "a (3).txt", "b" }; /* existing, then the first one's name */
+    for (int i = 0; i < 3; i++) {
+        g_autoptr(GFile) f = g_file_new_for_uri(uris[i]);
+        g_autofree char* base = g_file_get_basename(f);
+        g_assert_cmpstr(base, ==, expected[i]);
+    }
+    g_free(uris);
+    g_remove(existing);
+    g_rmdir(dir);
+}
+
 static void test_results(void)
 {
     g_autoptr(SfePortalRequest) r = request("OpenFile",
@@ -195,6 +221,7 @@ int main(int argc, char** argv)
     g_test_add_func("/portalreq/current-filter-added", test_current_filter_added);
     g_test_add_func("/portalreq/save", test_save);
     g_test_add_func("/portalreq/save-files", test_save_files);
+    g_test_add_func("/portalreq/save-files-keep-existing", test_save_files_keep_existing);
     g_test_add_func("/portalreq/results", test_results);
     return g_test_run();
 }

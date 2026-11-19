@@ -125,6 +125,26 @@ void sfe_portal_request_free(SfePortalRequest* r)
     g_free(r);
 }
 
+/* `name` in `folder`, or "name (2).ext", "name (3).ext" ... when that exists
+ * or is in `taken` (names already handed out; the result is added). */
+static GFile* free_child(GFile* folder, const char* name, GHashTable* taken)
+{
+    const char* dot = strrchr(name, '.');
+    if (dot == name)
+        dot = NULL; /* ".bashrc": no extension */
+    g_autofree char* stem = dot ? g_strndup(name, dot - name) : g_strdup(name);
+    const char* ext = dot ? dot : "";
+    for (int n = 1;; n++) {
+        g_autofree char* candidate = n == 1 ? g_strdup(name) : g_strdup_printf("%s (%d)%s", stem, n, ext);
+        GFile* file = g_file_get_child(folder, candidate);
+        if (!g_hash_table_contains(taken, candidate) && !g_file_query_exists(file, NULL)) {
+            g_hash_table_add(taken, g_steal_pointer(&candidate));
+            return file;
+        }
+        g_object_unref(file);
+    }
+}
+
 GVariant* sfe_portal_request_results(const SfePortalRequest* r, const char* output)
 {
     GVariantBuilder uris, choices;
@@ -154,10 +174,13 @@ GVariant* sfe_portal_request_results(const SfePortalRequest* r, const char* outp
             g_variant_builder_add(&uris, "s", lines[i]);
             continue;
         }
-        /* SaveFiles: the user chose a folder; each file goes into it */
+        /* SaveFiles: the user chose a folder; each file goes into it, under a
+         * free name: the program writes without asking, so an existing file
+         * (or an earlier one of the same name) gets "name (2).ext". */
         g_autoptr(GFile) folder = g_file_new_for_uri(lines[i]);
+        g_autoptr(GHashTable) taken = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
         for (guint k = 0; k < r->save_names->len; k++) {
-            g_autoptr(GFile) file = g_file_get_child(folder, g_ptr_array_index(r->save_names, k));
+            g_autoptr(GFile) file = free_child(folder, g_ptr_array_index(r->save_names, k), taken);
             g_autofree char* uri = g_file_get_uri(file);
             g_variant_builder_add(&uris, "s", uri);
         }

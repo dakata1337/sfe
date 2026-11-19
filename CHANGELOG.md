@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Saving several files at once through sfe's file dialog (the portal's
+  SaveFiles) no longer lets the program overwrite files already in the
+  chosen folder: those get free names such as `photo (2).jpg`, as when
+  copying.
 - Files renamed right after they appear (a browser download's `.part`
   becoming the finished file) no longer leave a ghost entry under the old
   name, which could not be opened until the folder was reloaded.
