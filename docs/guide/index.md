@@ -508,10 +508,23 @@ selection, like the menu. `:cp` and `:mv` always need a destination
 folder: `:cp notes.txt ~/Backup`. For the second and later arguments the
 other views' folders are offered first.
 
-Older names (`toggle_hidden`, `view_grid`, `split_vertical`,
-`close_pane`, `split close`, `paste_into`, `toggle_sidebar`, …) still work for now, so
-key bindings in `config.toml` keep working, but each use says which
-command replaces it. They will be removed in a later version.
+sfe 2.0 removed the old command names that a command now covers. Key
+bindings in `config.toml` that use them say “unknown command” and need the
+new name:
+
+| Old name | Now |
+|---|---|
+| `toggle_hidden` | `hidden toggle` |
+| `toggle_sidebar` / `toggle_tree` | `sidebar toggle` / `tree toggle` |
+| `view_grid` / `view_list` | `view grid` / `view list` |
+| `split_vertical` / `split_horizontal` | `split vertical` / `split horizontal` |
+| `close_pane`, `split close` | `q` |
+| `next_pane` | `split next` |
+| `select_all` | `select all` |
+| `paste_into` | `paste <folder>` |
+| `bookmark_folder` / `bookmark_selection` | `bookmark` |
+| `unbookmark_folder` / `unbookmark_selection` | `unbookmark` |
+| `open_with_other` | `open_with` |
 
 ### Changing the keys
 

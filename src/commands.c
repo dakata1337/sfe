@@ -493,10 +493,6 @@ static bool run_split(Ctx* c, int argc, char** argv, GError** error)
         sfe_split_focus_next(c->split);
         return true;
     }
-    if (strcmp(sub, "close") == 0) { /* TODO: remove with deprecated_names (deprecated 2026-11-19) */
-        sfe_window_show_message(c->window, "“split close” is an old name and will go away: use :q", false);
-        return run_action(c, "close-pane", NULL, error);
-    }
     if (parse_direction(sub, &direction)) {
         /* Wraps around at the edge; with no other view on that line there
          * is simply nothing to do (no error: the keys are pressed blindly). */
@@ -1181,39 +1177,29 @@ static const Command commands[] = {
     { { "command_line", NO_ALIAS, "", "open the command line" }, NULL, run_command_line, true },
 };
 
-/* Old names, still run (with a note) so key bindings in config files keep
- * working. TODO: remove them in a later release (deprecated 2026-11-15),
- * together with deprecated() and its use in sfe_command_run(). */
-static const struct {
-    const char* old;
-    const char* now;
-} deprecated_names[] = {
-    { "toggle_hidden", "hidden toggle" },
-    { "view_grid", "view grid" },
-    { "view_list", "view list" },
-    { "split_vertical", "split vertical" },
-    { "split_horizontal", "split horizontal" },
-    { "close_pane", "q" },
-    { "next_pane", "split next" },
-    { "select_all", "select all" },
-    { "paste_into", "paste <folder>" },
-    { "bookmark_folder", "bookmark" },
-    { "bookmark_selection", "bookmark" },
-    { "unbookmark_folder", "unbookmark" },
-    { "unbookmark_selection", "unbookmark" },
-    { "open_with_other", "open_with" },
-    { "toggle_sidebar", "sidebar toggle" },
-    { "toggle_tree", "tree toggle" },
+/* Actions that a command covers ("toggle-hidden" is :hidden toggle): they
+ * stay in the menus and keep their shortcuts, but are not commands. Their
+ * command names were removed in 2.0. */
+static const char* const covered_actions[] = {
+    "toggle-hidden", "view-grid", "view-list", "split-vertical", "split-horizontal", "close-pane", "next-pane",
+    "select-all", "paste-into", "bookmark-folder", "bookmark-selection", "unbookmark-folder",
+    "unbookmark-selection", "open-with-other", "toggle-sidebar", "toggle-tree",
 };
 
-/* The replacement for an old command name, or NULL. */
-static const char* deprecated(const char* name)
+static bool covered(const SfeAction* action)
 {
-    for (size_t i = 0; i < G_N_ELEMENTS(deprecated_names); i++) {
-        if (strcmp(deprecated_names[i].old, name) == 0)
-            return deprecated_names[i].now;
+    for (size_t i = 0; action != NULL && i < G_N_ELEMENTS(covered_actions); i++) {
+        if (strcmp(action->name, covered_actions[i]) == 0)
+            return true;
     }
-    return NULL;
+    return false;
+}
+
+/* The action a command name runs ("empty_trash"), unless a command covers it. */
+static const SfeAction* command_action(const char* name)
+{
+    const SfeAction* a = find_action(name);
+    return covered(a) ? NULL : a;
 }
 
 static SfeCommandInfo infos[G_N_ELEMENTS(commands)];
@@ -1272,15 +1258,10 @@ bool sfe_command_run(SfeWindow* window, const char* line, GError** error)
     bool ok;
     if (cmd != NULL) {
         ok = cmd->run(&c, argc, argv, error);
-    } else if (find_action(argv[0]) != NULL) {
+    } else if (command_action(argv[0]) != NULL) {
         if (argc > 1)
             return fail(error, "%s takes no arguments", argv[0]);
         ok = run_action(&c, argv[0], NULL, error);
-        const char* now = deprecated(argv[0]);
-        if (ok && now != NULL) {
-            g_autofree char* text = g_strdup_printf("“%s” is an old name and will go away: use :%s", argv[0], now);
-            sfe_window_show_message(window, text, false);
-        }
     } else {
         return fail(error, "unknown command: %s", argv[0]);
     }
@@ -1305,7 +1286,7 @@ static char* action_help(const char* label)
 /* Command names, one row per command with its aliases ("mkdir |
  * new_directory | new_folder"), the arguments and what it does; then the
  * actions that no command covers; the key-binding helpers last, dimmed.
- * Old names (deprecated()) still run but are not offered. */
+ * Actions that a command covers are not commands (covered()). */
 static void add_command_names(GPtrArray* out)
 {
     for (size_t i = 0; i < G_N_ELEMENTS(commands); i++) {
@@ -1321,7 +1302,7 @@ static void add_command_names(GPtrArray* out)
     for (size_t i = 0; i < n; i++) {
         g_autofree char* name = g_strdup(table[i].name);
         g_strdelimit(name, "-", '_');
-        if (find_command(name) == NULL && deprecated(name) == NULL) {
+        if (find_command(name) == NULL && !covered(&table[i])) {
             g_autofree char* help = action_help(table[i].label);
             add(out, name, NULL, help, 0);
         }

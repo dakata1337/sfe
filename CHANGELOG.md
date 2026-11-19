@@ -20,8 +20,10 @@ new version.
   argument; it no longer takes file names. `R` does the same.
 - `:mkdir` and `:touch` take one name: `:mkdir Hello World!` makes the
   folder “Hello World!” (it made two folders).
-- `:split close` is gone in favour of `:q` / `:quit` (`<C-w>q` runs `q`);
-  the old name still works for now, with a note.
+- `:split close` is gone in favour of `:q` / `:quit` (`<C-w>q` runs `q`).
+- The old command names deprecated since 1.0.0 (`toggle_hidden`,
+  `close_pane`, `paste_into`, …) are removed; key bindings using them need
+  the new names (a table is in the guide).
 - `:split` completion says what each sub-command does, and whether it makes
   a view, moves the focus or moves the view; `:split move` offers all four
   directions.
