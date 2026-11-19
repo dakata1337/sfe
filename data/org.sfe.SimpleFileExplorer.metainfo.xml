@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.0.1" date="2026-11-19">
+      <description>
+        <p>Settings → System shows the version, build type and git commit sfe was built from.</p>
+      </description>
+    </release>
     <release version="2.0.0" date="2026-11-19">
       <description>
         <p>Folder covers, a status corner with yank and paste reports, grouped Settings with reset by double-click and the theme's colours, and rename and new folders on the command line. Breaking: the command names deprecated since 1.0.0 and :split close are removed; :mass_rename, :mkdir, :touch and :cd changed; visual mode clears the selection after use.</p>
