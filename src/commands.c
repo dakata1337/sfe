@@ -1053,9 +1053,10 @@ static void complete_split(Ctx* c, int argi, char** argv, const char* query, con
         add_words(out, first, 0);
         add_words(out, rest, 1);
     } else if (argi == 2 && strcmp(argv[1], "move") == 0) {
+        /* All four, the ones with a view to swap with first. */
         for (size_t i = 0; i < G_N_ELEMENTS(directions); i++) {
-            if (sfe_split_neighbor(c->split, c->pane, directions[i].direction) != NULL)
-                add(out, directions[i].name, NULL, NULL, 0);
+            bool there = sfe_split_neighbor(c->split, c->pane, directions[i].direction) != NULL;
+            add(out, directions[i].name, NULL, there ? NULL : "no view there", there ? 0 : 1);
         }
     } else if (argi == 2 && strcmp(argv[1], "absolute") == 0) {
         for (int i = 0; sfe_split_position_name(c->split, i) != NULL; i++)
