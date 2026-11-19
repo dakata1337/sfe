@@ -1202,16 +1202,6 @@ static const SfeAction* command_action(const char* name)
     return covered(a) ? NULL : a;
 }
 
-static SfeCommandInfo infos[G_N_ELEMENTS(commands)];
-
-const SfeCommandInfo* sfe_commands_info(size_t* n)
-{
-    for (size_t i = 0; i < G_N_ELEMENTS(commands); i++)
-        infos[i] = commands[i].info;
-    *n = G_N_ELEMENTS(commands);
-    return infos;
-}
-
 static bool stays_visual(const Command* cmd)
 {
     static const char* const keep[] = { "cursor", "select", "visual", "center", "split" };

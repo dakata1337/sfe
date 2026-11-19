@@ -25,8 +25,6 @@ void sfe_command_bar_start(SfeCommandBar* self, const char* text);
  * them). */
 void sfe_command_bar_start_selected(SfeCommandBar* self, const char* text, int start, int end);
 
-bool sfe_command_bar_is_active(SfeCommandBar* self);
-
 /* Shows `message` in the error colour until sfe_command_bar_dismiss(). */
 void sfe_command_bar_show_error(SfeCommandBar* self, const char* message);
 

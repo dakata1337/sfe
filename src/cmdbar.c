@@ -388,11 +388,6 @@ void sfe_command_bar_start_selected(SfeCommandBar* self, const char* text, int s
     gtk_editable_select_region(GTK_EDITABLE(self->entry), start, end);
 }
 
-bool sfe_command_bar_is_active(SfeCommandBar* self)
-{
-    return self->active;
-}
-
 static void show_text(SfeCommandBar* self, const char* message, bool failed)
 {
     self->active = false;

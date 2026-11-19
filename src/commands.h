@@ -19,9 +19,6 @@ typedef struct {
     const char* help;
 } SfeCommandInfo;
 
-/* The commands with arguments (n receives the count). */
-const SfeCommandInfo* sfe_commands_info(size_t* n);
-
 /* Runs one command line in `window`; false with `error` set (shown in the
  * command bar). */
 bool sfe_command_run(SfeWindow* window, const char* line, GError** error);

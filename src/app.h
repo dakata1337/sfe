@@ -22,9 +22,8 @@ const SfeConfig* sfe_config(void);
 /* Takes ownership of `cfg`, writes it to disk and emits "config-changed". */
 void sfe_application_set_config(SfeApplication* app, SfeConfig* cfg);
 
-/* Chooser mode (sfe --choose, see chooser.h): its options, or NULL; the
- * exit status (0 chosen, 1 cancelled), which main() returns. */
-const SfeChooser* sfe_application_get_chooser(SfeApplication* app);
+/* Chooser mode (sfe --choose, see chooser.h): the exit status (0 chosen,
+ * 1 cancelled), which main() returns. */
 void sfe_application_set_exit_status(SfeApplication* app, int status);
 /* Writes one line of the chooser's answer to the real standard output. */
 void sfe_application_answer(SfeApplication* app, const char* line);

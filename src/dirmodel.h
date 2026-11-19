@@ -50,8 +50,6 @@ SfeDirModel* sfe_dir_model_new(void);
 void sfe_dir_model_load(SfeDirModel* self, GFile* dir);
 void sfe_dir_model_reload(SfeDirModel* self);
 
-GFile* sfe_dir_model_get_dir(SfeDirModel* self);
-
 /* The model the views display (owned by the dir model). */
 GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self);
 
@@ -67,7 +65,6 @@ void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter);
  * refilled store. The query stays when another folder is loaded (the
  * search walks into folders); the pane clears it when navigating. */
 void sfe_dir_model_set_query(SfeDirModel* self, const char* query);
-const char* sfe_dir_model_get_query(SfeDirModel* self);
 
 /* Rows shown now, and rows that would be shown without the query. */
 void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* total);

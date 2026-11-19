@@ -261,11 +261,6 @@ static int scaled(int base)
     return (int)lround(base * ui_scale);
 }
 
-double sfe_theme_get_scale(void)
-{
-    return ui_scale;
-}
-
 int sfe_theme_scaled(int base_px)
 {
     return scaled(base_px);

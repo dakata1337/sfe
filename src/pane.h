@@ -93,7 +93,6 @@ void sfe_pane_toggle_cursor_item(SfePane* self);
  * Leaving visual mode never changes the selection; going to another folder,
  * switching the view, searching, clicking or another view becoming active
  * leave it. Emits "visual-changed". */
-void sfe_pane_visual_start(SfePane* self);
 /* Ends the chunk being drawn, or starts a new one at the cursor (enters
  * visual mode if needed). */
 void sfe_pane_visual_chunk(SfePane* self);

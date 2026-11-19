@@ -12,7 +12,6 @@ void sfe_theme_init(void);
 /* Scales all text (and, through font-relative sizes, most of the UI), the
  * icons made with sfe_scaled_icon_new() and the pixel sizes in style.css. */
 void sfe_theme_set_scale(double scale);
-double sfe_theme_get_scale(void);
 
 /* `base_px` times the scale. */
 int sfe_theme_scaled(int base_px);

@@ -1452,7 +1452,7 @@ static void finish_chunk(SfePane* self)
     g_clear_pointer(&self->visual_anchor, gtk_tree_row_reference_free);
 }
 
-void sfe_pane_visual_start(SfePane* self)
+static void visual_start(SfePane* self)
 {
     if (self->visual || self->single || n_rows(self) == 0)
         return;
@@ -1468,7 +1468,7 @@ void sfe_pane_visual_chunk(SfePane* self)
     if (self->single)
         return;
     if (!self->visual) {
-        sfe_pane_visual_start(self);
+        visual_start(self);
         return;
     }
     if (self->visual_anchor != NULL && anchor_index(self) >= 0)

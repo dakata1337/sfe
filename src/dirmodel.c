@@ -555,11 +555,6 @@ void sfe_dir_model_reload(SfeDirModel* self)
 /* Public accessors                                                          */
 /* ------------------------------------------------------------------------ */
 
-GFile* sfe_dir_model_get_dir(SfeDirModel* self)
-{
-    return self->dir;
-}
-
 GtkTreeModel* sfe_dir_model_get_model(SfeDirModel* self)
 {
     return GTK_TREE_MODEL(self->store);
@@ -601,11 +596,6 @@ void sfe_dir_model_set_query(SfeDirModel* self, const char* query)
     g_free(self->query);
     self->query = g_strdup(q);
     rebuild_store(self);
-}
-
-const char* sfe_dir_model_get_query(SfeDirModel* self)
-{
-    return self->query;
 }
 
 void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* total)

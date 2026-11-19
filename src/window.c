@@ -1034,8 +1034,3 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
             dot && dot != text ? (int)g_utf8_pointer_to_offset(text, dot) : -1);
     }
 }
-
-bool sfe_window_is_chooser(SfeWindow* win)
-{
-    return win->chooser != NULL;
-}

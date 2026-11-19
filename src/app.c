@@ -406,11 +406,6 @@ SfeApplication* sfe_application_new(void)
         NULL);
 }
 
-const SfeChooser* sfe_application_get_chooser(SfeApplication* app)
-{
-    return app->chooser;
-}
-
 void sfe_application_set_exit_status(SfeApplication* app, int status)
 {
     app->exit_status = status;

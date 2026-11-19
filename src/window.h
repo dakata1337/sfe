@@ -33,7 +33,6 @@ bool sfe_window_undo(SfeWindow* win, guint id);
  * when the window is not a chooser or `file` is a folder (walk into it). */
 void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser);
 bool sfe_window_chooser_pick(SfeWindow* win, GFile* file);
-bool sfe_window_is_chooser(SfeWindow* win);
 
 /* Opens the ":" command line, with `text` typed in (or empty). */
 void sfe_window_show_command_line(SfeWindow* win, const char* text);
