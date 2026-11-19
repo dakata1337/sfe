@@ -2,7 +2,8 @@
 
 What changed in each release of sfe. Changes waiting for the next release
 are collected under *Unreleased*; when releasing, that heading becomes the
-new version.
+new version (`tools/release.sh X.Y.Z` does this, and the rest of a
+release: see the top of that script).
 
 ## Unreleased
 

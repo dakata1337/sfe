@@ -5,8 +5,8 @@
 # Build & install from this directory:
 #   makepkg -si
 #
-# For a new release: set pkgver, reset pkgrel to 1 and update the checksum
-# (updpkgsums, or sha256sum of the tarball).
+# For a new release, tools/release.sh sets pkgver, resets pkgrel to 1 and
+# updates the checksum (by hand: updpkgsums, or sha256sum of the tarball).
 #
 # Dependencies are annotated with the source module that needs them.
 # Keep this list in sync with ../sfe-dev/PKGBUILD.
