@@ -24,6 +24,9 @@ new version.
   `:cut`).
 - `:open_with <program>` with nothing selected opens the current folder in
   it (it said there was nothing to open).
+- Settings: the General options are grouped (Window, Looks, Files); options
+  you changed are in bold italics, and double-clicking an option's name
+  resets it; Close sits in a footer with room around it.
 
 ## 1.5.0
 

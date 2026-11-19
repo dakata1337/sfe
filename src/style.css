@@ -733,6 +733,12 @@ menu.sfe-menu {
     min-height: 1px;
 }
 
+/* An option that is not at its default (double-click resets it). */
+.sfe-settings label.sfe-changed {
+    font-weight: bold;
+    font-style: italic;
+}
+
 /* Hint and Close under the pages. */
 .sfe-settings .sfe-settings-footer {
     padding: 10px 16px 12px 18px;

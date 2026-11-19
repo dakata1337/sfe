@@ -524,10 +524,15 @@ are saved to `config.toml`.
 
 ![Settings](images/settings.png)
 
-- **General**: start folder, hidden files, scale, default view, icon size,
-  [file icon style](#file-icons) (with a preview of each), sorting, delete
-  confirmation and the window title bar. *Scale* grows
-  everything: text, icons, buttons and the sidebar.
+On the General, Thumbnails and Sidebar pages, options you changed have
+their name in bold italics, and double-clicking an option's name puts it
+back to its default.
+
+- **General**, in three groups: *Window* (start folder, default view,
+  window title bar), *Looks* (scale, icon size,
+  [file icon style](#file-icons) with a preview of each) and *Files* (hidden
+  files, sorting, delete confirmation). *Scale* grows everything: text,
+  icons, buttons and the sidebar.
 - **Thumbnails**: on or off, and the size limit ([Thumbnails](#thumbnails)).
 - **Sidebar**: which [devices](#drives) are listed, and GTK bookmarks.
 - **Keys**: every key with its command and what it does. Double-click a

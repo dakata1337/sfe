@@ -7,6 +7,7 @@
 #include "theme.h"
 #include "opener.h"
 #include "portalconf.h"
+#include <math.h>
 #include <string.h>
 
 #define DIALOG_KEY "sfe-preferences"
@@ -305,8 +306,95 @@ static GtkWidget* group_heading(const char* title, bool first)
     return box;
 }
 
-/* The options of one config section, built from the option table. */
-static GtkWidget* options_page(const char* section, const char* text)
+/* ---- Changed options: marked, and reset by double-clicking the name ----- */
+
+static const SfeConfig* defaults(void)
+{
+    static SfeConfig* cfg;
+    if (cfg == NULL)
+        cfg = sfe_config_new();
+    return cfg;
+}
+
+static bool differs_from_default(const SfeOption* opt)
+{
+    const void* now = sfe_config_field(sfe_config(), opt);
+    const void* def = sfe_config_field((SfeConfig*)defaults(), opt);
+    switch (opt->type) {
+    case SFE_OPT_BOOL: return *(const bool*)now != *(const bool*)def;
+    case SFE_OPT_INT:
+    case SFE_OPT_ENUM: return *(const int*)now != *(const int*)def;
+    case SFE_OPT_DOUBLE: return fabs(*(const double*)now - *(const double*)def) > 1e-9;
+    case SFE_OPT_STRING: return g_strcmp0(*(char* const*)now, *(char* const*)def) != 0;
+    }
+    return false;
+}
+
+/* Bold italics on the name of every option that is not at its default. */
+static void update_marks(GPtrArray* labels)
+{
+    for (guint i = 0; i < labels->len; i++) {
+        GtkWidget* label = g_ptr_array_index(labels, i);
+        GtkStyleContext* ctx = gtk_widget_get_style_context(label);
+        if (differs_from_default(option_of(G_OBJECT(label))))
+            gtk_style_context_add_class(ctx, "sfe-changed");
+        else
+            gtk_style_context_remove_class(ctx, "sfe-changed");
+    }
+}
+
+/* Puts the default into the option's widget; the widget's own handler then
+ * saves it, as if the user had set it. */
+static void reset_option(const SfeOption* opt, GtkWidget* widget)
+{
+    const void* def = sfe_config_field((SfeConfig*)defaults(), opt);
+    if (strcmp(opt->key, "file_icons") == 0) { /* the cards: a box of radio buttons */
+        g_autoptr(GList) cards = gtk_container_get_children(GTK_CONTAINER(widget));
+        GList* card = g_list_nth(cards, *(const int*)def);
+        if (card != NULL)
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(card->data), TRUE);
+        return;
+    }
+    switch (opt->type) {
+    case SFE_OPT_BOOL: gtk_switch_set_active(GTK_SWITCH(widget), *(const bool*)def); break;
+    case SFE_OPT_INT: gtk_spin_button_set_value(GTK_SPIN_BUTTON(widget), *(const int*)def); break;
+    case SFE_OPT_DOUBLE: gtk_spin_button_set_value(GTK_SPIN_BUTTON(widget), *(const double*)def); break;
+    case SFE_OPT_ENUM: gtk_combo_box_set_active(GTK_COMBO_BOX(widget), *(const int*)def); break;
+    case SFE_OPT_STRING:
+        gtk_entry_set_text(GTK_ENTRY(widget), *(char* const*)def ? *(char* const*)def : "");
+        commit_entry(GTK_ENTRY(widget));
+        break;
+    }
+}
+
+static gboolean on_name_pressed(GtkWidget* box, GdkEventButton* event, gpointer widget)
+{
+    if (event->type != GDK_2BUTTON_PRESS || event->button != GDK_BUTTON_PRIMARY)
+        return FALSE;
+    reset_option(option_of(G_OBJECT(box)), widget);
+    return TRUE;
+}
+
+/* The option's name, double-clickable. */
+static GtkWidget* option_name(const SfeOption* opt, GtkWidget* widget, GPtrArray* labels)
+{
+    GtkWidget* label = gtk_label_new(opt->label ? opt->label : opt->key);
+    g_autofree char* tip = g_strdup_printf("%s\n(%s.%s in config.toml; double-click to reset)", opt->help, opt->section, opt->key);
+    gtk_widget_set_tooltip_text(label, tip);
+    gtk_label_set_xalign(GTK_LABEL(label), 0);
+    g_object_set_data(G_OBJECT(label), "sfe-option", (gpointer)opt);
+    g_ptr_array_add(labels, label);
+    GtkWidget* box = gtk_event_box_new();
+    gtk_event_box_set_visible_window(GTK_EVENT_BOX(box), FALSE);
+    gtk_container_add(GTK_CONTAINER(box), label);
+    g_object_set_data(G_OBJECT(box), "sfe-option", (gpointer)opt);
+    g_signal_connect(box, "button-press-event", G_CALLBACK(on_name_pressed), widget);
+    return box;
+}
+
+/* The options of one config section, built from the option table; their
+ * names go into `labels` (for update_marks()). */
+static GtkWidget* options_page(const char* section, const char* text, GPtrArray* labels)
 {
     GtkWidget* grid = page_grid();
     size_t n = 0;
@@ -322,17 +410,20 @@ static GtkWidget* options_page(const char* section, const char* text)
             GtkWidget* heading = group_heading(opts[i].group, row == 0);
             gtk_grid_attach(GTK_GRID(grid), heading, 0, row++, 2, 1);
         }
-        GtkWidget* label = gtk_label_new(opts[i].label ? opts[i].label : opts[i].key);
-        g_autofree char* tip = g_strdup_printf("%s\n(%s.%s in config.toml)", opts[i].help, opts[i].section, opts[i].key);
-        gtk_widget_set_tooltip_text(label, tip);
         if (strcmp(opts[i].key, "file_icons") == 0) { /* previews need the whole width */
-            gtk_label_set_xalign(GTK_LABEL(label), 0);
-            gtk_grid_attach(GTK_GRID(grid), label, 0, row++, 2, 1);
-            gtk_grid_attach(GTK_GRID(grid), file_icons_chooser(&opts[i]), 0, row++, 2, 1);
+            GtkWidget* chooser = file_icons_chooser(&opts[i]);
+            gtk_grid_attach(GTK_GRID(grid), option_name(&opts[i], chooser, labels), 0, row++, 2, 1);
+            gtk_grid_attach(GTK_GRID(grid), chooser, 0, row++, 2, 1);
             continue;
         }
-        add_row(GTK_GRID(grid), &row, label, widget_for(&opts[i]));
+        GtkWidget* widget = widget_for(&opts[i]);
+        GtkWidget* name = option_name(&opts[i], widget, labels);
+        gtk_widget_set_hexpand(name, TRUE);
+        gtk_widget_set_valign(widget, GTK_ALIGN_CENTER);
+        gtk_grid_attach(GTK_GRID(grid), name, 0, row, 1, 1);
+        gtk_grid_attach(GTK_GRID(grid), widget, 1, row++, 1, 1);
     }
+    update_marks(labels);
     return grid;
 }
 
@@ -935,6 +1026,7 @@ typedef struct {
     GtkListStore* keys;
     GtkListStore* actions;
     GtkListStore* programs;
+    GPtrArray* labels; /* the option names (GtkLabel*), for update_marks() */
     gulong handler;
 } Lists;
 
@@ -944,6 +1036,7 @@ static void on_config_changed(SfeApplication* app, gpointer data)
 {
     (void)app;
     Lists* l = data;
+    update_marks(l->labels); /* our own saves too */
     if (applying)
         return;
     fill_keys(l->keys);
@@ -957,6 +1050,7 @@ static void on_dialog_destroy(GtkWidget* dialog, gpointer data)
     GtkWidget* window = g_object_get_data(G_OBJECT(dialog), "sfe-window");
     g_signal_handler_disconnect(sfe_app(), l->handler);
     g_object_set_data(G_OBJECT(window), DIALOG_KEY, NULL);
+    g_ptr_array_unref(l->labels);
     g_free(l);
 }
 
@@ -983,7 +1077,7 @@ static GtkWidget* footer(GtkWidget* dialog)
 {
     GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     gtk_style_context_add_class(gtk_widget_get_style_context(box), "sfe-settings-footer");
-    GtkWidget* hint = note("");
+    GtkWidget* hint = note("Double-click an option's name to reset it; changed ones are in bold italics.");
     gtk_label_set_max_width_chars(GTK_LABEL(hint), -1);
     gtk_label_set_ellipsize(GTK_LABEL(hint), PANGO_ELLIPSIZE_END);
     gtk_label_set_line_wrap(GTK_LABEL(hint), FALSE);
@@ -994,6 +1088,18 @@ static GtkWidget* footer(GtkWidget* dialog)
     gtk_box_pack_start(GTK_BOX(box), hint, TRUE, TRUE, 0);
     gtk_box_pack_end(GTK_BOX(box), close, FALSE, FALSE, 0);
     return box;
+}
+
+/* The hint is about the option pages; the list pages and System have none. */
+static void on_page_changed(GtkStack* stack, GParamSpec* pspec, gpointer hint)
+{
+    (void)pspec;
+    static const char* const option_pages[] = { "general", "thumbnails", "sidebar" };
+    const char* page = gtk_stack_get_visible_child_name(stack);
+    bool show = false;
+    for (size_t i = 0; i < G_N_ELEMENTS(option_pages); i++)
+        show |= g_strcmp0(page, option_pages[i]) == 0;
+    gtk_widget_set_child_visible(hint, show); /* (keeps its place: Close stays put) */
 }
 
 static const char* const page_names[] = { "general", "thumbnails", "sidebar", "keys", "commands", "programs", "system", NULL };
@@ -1028,17 +1134,20 @@ void sfe_show_preferences_page(GtkWidget* parent, const char* page)
     dialog = sfe_dialog_new(parent, "Settings");
     gtk_window_set_default_size(GTK_WINDOW(dialog), 820, 560);
     Lists* lists = g_new0(Lists, 1);
+    lists->labels = g_ptr_array_new();
 
     GtkWidget* stack = gtk_stack_new();
     gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_CROSSFADE);
-    add_page(GTK_STACK(stack), options_page("general", NULL), "general", "General", true);
+    add_page(GTK_STACK(stack), options_page("general", NULL, lists->labels), "general", "General", true);
     add_page(GTK_STACK(stack),
         options_page("preview", "Pictures, videos and documents show a small preview instead of their icon. "
-                                "Thumbnails are shared with other file managers in ~/.cache/thumbnails."),
+                                "Thumbnails are shared with other file managers in ~/.cache/thumbnails.",
+                     lists->labels),
         "thumbnails", "Thumbnails", true);
     add_page(GTK_STACK(stack),
         options_page("sidebar", "Bookmarks are added with Ctrl+D or the menus, reordered by dragging and removed "
-                                "from their right-click menu."),
+                                "from their right-click menu.",
+                     lists->labels),
         "sidebar", "Sidebar", true);
     add_page(GTK_STACK(stack), keys_page(&lists->keys), "keys", "Keys", false);
     add_page(GTK_STACK(stack), actions_page(&lists->actions), "commands", "Custom Commands", false);
@@ -1066,6 +1175,8 @@ void sfe_show_preferences_page(GtkWidget* parent, const char* page)
     g_signal_connect(dialog, "destroy", G_CALLBACK(on_dialog_destroy), lists);
     g_object_set_data(G_OBJECT(window), DIALOG_KEY, dialog);
     g_object_set_data(G_OBJECT(dialog), "sfe-stack", stack);
+    g_signal_connect(stack, "notify::visible-child-name", G_CALLBACK(on_page_changed),
+        g_object_get_data(G_OBJECT(dialog), "sfe-hint"));
     gtk_widget_show_all(dialog);
     show_page(dialog, page);
 }
