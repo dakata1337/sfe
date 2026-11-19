@@ -573,6 +573,8 @@ static void work(gpointer data, gpointer user_data)
 
     g_mutex_lock(&q->lock);
     bool skip = all_cancelled(job); /* scrolled away before its turn */
+    if (skip && g_hash_table_lookup(q->jobs, job->key) == job)
+        g_hash_table_remove(q->jobs, job->key); /* a request from now on starts its own job, not this skipped one */
     g_mutex_unlock(&q->lock);
 
     if (!skip && job->folder) {

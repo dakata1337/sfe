@@ -7,6 +7,9 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Thumbnails no longer go missing after scrolling away and quickly back: a
+  new request could join a thumbnail job that had just been skipped and get
+  "no thumbnail", leaving the plain icon until the folder was reloaded.
 - Searching a folder of thousands of files no longer freezes at every key:
   when more than 1,000 files match, only the best 1,000 are listed, and the
   count says "best 1000 of 15000". In a 20,000-file folder a keystroke went
