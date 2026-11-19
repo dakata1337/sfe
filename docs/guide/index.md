@@ -385,7 +385,7 @@ and the shortcuts below keep working as before.
 
 ### Normal-mode keys
 
-`<C-w>v` means Ctrl+W, then V; `H` is Shift+H and `<C-H>` Ctrl+Shift+H.
+`<C-w>v` means Ctrl+W, then V; `J` is Shift+J and `<C-J>` Ctrl+Shift+J.
 While a chord is unfinished its keys show in the bottom-right corner. After
 half a second a list of the keys that can follow appears above them, with
 what each does; the chord then waits for your next key. Esc drops a chord at
