@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-static GHashTable* cache; /* "style@icon-string@size@scale" -> cairo_surface_t* */
+static GHashTable* cache; /* "style@content-type-or-special-icon@size@scale" -> cairo_surface_t* */
 
 static void on_theme_changed(GtkIconTheme* theme, gpointer data)
 {
@@ -173,22 +173,69 @@ static GdkPixbuf* load_pixbuf(GIcon* icon, int size, int scale, int style)
     return pixbuf;
 }
 
-cairo_surface_t* sfe_icon_for_info(GFileInfo* info, int size, int scale)
+/* The home folder and the XDG folders (Downloads, Pictures, ...) have icons
+ * of their own, as GIO gives them; NULL for any other path. */
+static const char* special_icon_name(const char* path)
 {
-    bool symbolic = sfe_config()->file_icons == SFE_FILE_ICONS_SYMBOLIC
-        && g_file_info_has_attribute(info, G_FILE_ATTRIBUTE_STANDARD_SYMBOLIC_ICON);
-    GIcon* icon = symbolic ? g_file_info_get_symbolic_icon(info)
-        : g_file_info_has_attribute(info, G_FILE_ATTRIBUTE_STANDARD_ICON) ? g_file_info_get_icon(info)
-                                                                         : NULL;
-    g_autofree char* icon_str = icon ? g_icon_to_string(icon) : g_strdup("");
-    g_autofree char* key = g_strdup_printf("%d@%s@%d@%d", sfe_config()->file_icons, icon_str, size, scale);
+    static const struct {
+        GUserDirectory dir;
+        const char* icon;
+    } specials[] = {
+        { G_USER_DIRECTORY_DESKTOP, "user-desktop" },
+        { G_USER_DIRECTORY_DOCUMENTS, "folder-documents" },
+        { G_USER_DIRECTORY_DOWNLOAD, "folder-download" },
+        { G_USER_DIRECTORY_MUSIC, "folder-music" },
+        { G_USER_DIRECTORY_PICTURES, "folder-pictures" },
+        { G_USER_DIRECTORY_PUBLIC_SHARE, "folder-publicshare" },
+        { G_USER_DIRECTORY_TEMPLATES, "folder-templates" },
+        { G_USER_DIRECTORY_VIDEOS, "folder-videos" },
+    };
+    if (g_strcmp0(path, g_get_home_dir()) == 0)
+        return "user-home";
+    for (size_t i = 0; i < G_N_ELEMENTS(specials); i++) {
+        if (g_strcmp0(path, g_get_user_special_dir(specials[i].dir)) == 0)
+            return specials[i].icon;
+    }
+    return NULL;
+}
+
+/* The icon GIO would give the file: its type's icon, or a special folder's.
+ * Not read from the file info: those GIcons cost about 850 bytes per file. */
+static GIcon* icon_of(const char* type, const char* special, bool symbolic)
+{
+    if (special != NULL) {
+        g_autofree char* name = symbolic ? g_strconcat(special, "-symbolic", NULL) : g_strdup(special);
+        const char* names[] = { name, symbolic ? "folder-symbolic" : "folder", NULL };
+        return g_themed_icon_new_from_names((char**)names, -1);
+    }
+    return symbolic ? g_content_type_get_symbolic_icon(type) : g_content_type_get_icon(type);
+}
+
+cairo_surface_t* sfe_icon_for_info(GFileInfo* info, GFile* parent, int size, int scale)
+{
+    int style = sfe_config()->file_icons;
+    const char* type = g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE);
+    if (type == NULL)
+        type = g_file_info_get_content_type(info);
+    if (type == NULL)
+        type = "application/octet-stream";
+    const char* special = NULL;
+    if (parent != NULL && g_file_info_get_file_type(info) == G_FILE_TYPE_DIRECTORY) {
+        g_autofree char* dir = g_file_get_path(parent);
+        g_autofree char* path = dir ? g_build_filename(dir, g_file_info_get_name(info), NULL) : NULL;
+        special = special_icon_name(path);
+    }
+    /* One entry per type (or special folder), size and scale. */
+    char key[256];
+    g_snprintf(key, sizeof key, "%d@%s@%d@%d", style, special ? special : type, size, scale);
 
     ensure_cache();
     cairo_surface_t* surface = g_hash_table_lookup(cache, key);
     if (surface == NULL) {
-        g_autoptr(GdkPixbuf) pixbuf = load_pixbuf(icon, size, scale, sfe_config()->file_icons);
+        g_autoptr(GIcon) icon = icon_of(type, special, style == SFE_FILE_ICONS_SYMBOLIC);
+        g_autoptr(GdkPixbuf) pixbuf = load_pixbuf(icon, size, scale, style);
         surface = gdk_cairo_surface_create_from_pixbuf(pixbuf, scale, NULL);
-        g_hash_table_insert(cache, g_steal_pointer(&key), surface);
+        g_hash_table_insert(cache, g_strdup(key), surface);
     }
     return cairo_surface_reference(surface);
 }

@@ -33,7 +33,7 @@ enum {
 /* Attributes queried for every file. */
 #define SFE_FILE_ATTRIBUTES                                                   \
     "standard::name,standard::display-name,standard::type,standard::size,"   \
-    "standard::icon,standard::symbolic-icon,standard::fast-content-type,"    \
+    "standard::fast-content-type,"                                           \
     "standard::is-hidden,"                                                   \
     "standard::is-backup,standard::is-symlink,standard::symlink-target,"     \
     "time::modified,access::can-read,access::can-write,unix::mode"

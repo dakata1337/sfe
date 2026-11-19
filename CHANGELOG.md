@@ -7,6 +7,11 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Lighter on big folders: about 800 bytes less memory per file (16 MB
+  for 20,000 files) and about 12% less CPU to open them, with the same
+  icons. sfe picks a file's icon from its type instead of keeping the
+  icons GIO looked up for every file.
+
 ## 2.0.2
 
 - `gg` (and other cursor keys) scroll back to the cursor when the view was

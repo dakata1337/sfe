@@ -103,7 +103,7 @@ static cairo_surface_t* thumb_surface(GdkPixbuf* pixbuf, int size, int scale)
 
 /* A folder's cover with a small folder icon in its bottom-right corner, so
  * it does not pass for a picture file. Takes `cover`. */
-static cairo_surface_t* with_folder_badge(cairo_surface_t* cover, GFileInfo* info, int size, int scale)
+static cairo_surface_t* with_folder_badge(cairo_surface_t* cover, GFileInfo* info, GFile* parent, int size, int scale)
 {
     if (size < 32) /* (list view: too small for a badge) */
         return cover;
@@ -116,7 +116,7 @@ static cairo_surface_t* with_folder_badge(cairo_surface_t* cover, GFileInfo* inf
     cairo_t* cr = cairo_create(out);
     cairo_set_source_surface(cr, cover, 0, 0);
     cairo_paint(cr);
-    cairo_surface_t* badge = sfe_icon_for_info(info, badge_size, scale);
+    cairo_surface_t* badge = sfe_icon_for_info(info, parent, badge_size, scale);
     cairo_set_source_surface(cr, badge, MAX(0, w - badge_size), MAX(0, h - badge_size));
     cairo_paint(cr);
     cairo_surface_destroy(badge);
@@ -131,9 +131,9 @@ static cairo_surface_t* icon_for(SfeDirModel* self, GFileInfo* info, int size)
     gpointer thumb = self->thumbs ? g_hash_table_lookup(self->thumbs, g_file_info_get_name(info)) : NULL;
     if (thumb != NULL && thumb != NO_THUMB) {
         cairo_surface_t* surface = thumb_surface(thumb, size, self->scale);
-        return info_is_dir(info) ? with_folder_badge(surface, info, size, self->scale) : surface;
+        return info_is_dir(info) ? with_folder_badge(surface, info, self->dir, size, self->scale) : surface;
     }
-    return sfe_icon_for_info(info, size, self->scale);
+    return sfe_icon_for_info(info, self->dir, size, self->scale);
 }
 
 static void set_icons(SfeDirModel* self, GtkListStore* store, GtkTreeIter* iter, GFileInfo* info)

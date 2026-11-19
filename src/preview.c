@@ -107,7 +107,8 @@ static void on_info(GObject* source, GAsyncResult* result, gpointer data)
     }
 
     int scale = gtk_widget_get_scale_factor(GTK_WIDGET(self));
-    cairo_surface_t* icon = sfe_icon_for_info(info, sfe_theme_scaled(ICON_SIZE), scale);
+    g_autoptr(GFile) parent = g_file_get_parent(file);
+    cairo_surface_t* icon = sfe_icon_for_info(info, parent, sfe_theme_scaled(ICON_SIZE), scale);
     gtk_image_set_from_surface(GTK_IMAGE(self->image), icon);
     cairo_surface_destroy(icon);
 
