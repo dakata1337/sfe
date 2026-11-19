@@ -739,6 +739,11 @@ menu.sfe-menu {
     font-style: italic;
 }
 
+.sfe-settings label link:link,
+.sfe-settings label link:visited {
+    color: @sfe_accent;
+}
+
 /* Hint and Close under the pages. */
 .sfe-settings .sfe-settings-footer {
     padding: 10px 16px 12px 18px;

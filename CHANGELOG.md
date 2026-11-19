@@ -27,6 +27,8 @@ new version.
 - Settings: the General options are grouped (Window, Looks, Files); options
   you changed are in bold italics, and double-clicking an option's name
   resets it; Close sits in a footer with room around it.
+- Settings → System links to the guide's *Open and save dialogs* section
+  instead of naming the Firefox setting.
 
 ## 1.5.0
 

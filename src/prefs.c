@@ -11,6 +11,7 @@
 #include <string.h>
 
 #define DIALOG_KEY "sfe-preferences"
+#define SFE_DIALOGS_DOCS "https://github.com/dakata1337/sfe/blob/master/docs/guide/index.md#open-and-save-dialogs"
 
 #include "keymap.h"
 
@@ -483,10 +484,11 @@ static GtkWidget* system_page(void)
     GtkWidget* dialogs_label = gtk_label_new("Use sfe for Open / Save dialogs");
     gtk_widget_set_tooltip_text(dialogs_label, "Other programs' file dialogs (browsers, Flatpak apps) open in sfe");
     add_row(GTK_GRID(grid), &row, dialogs_label, file_dialogs_switch());
-    gtk_grid_attach(GTK_GRID(grid),
-        note("Programs that ask the desktop portal for a file dialog get sfe instead. Firefox and Zen ask "
-             "it only with about:config → widget.use-xdg-desktop-portal.file-picker set to 1."),
-        0, row++, 2, 1);
+    GtkWidget* dialogs_note = note(NULL);
+    gtk_label_set_markup(GTK_LABEL(dialogs_note),
+        "Programs that ask the desktop portal for a file dialog get sfe instead. Some need a setting of "
+        "their own first: see <a href=\"" SFE_DIALOGS_DOCS "\">Open and save dialogs</a> in the guide.");
+    gtk_grid_attach(GTK_GRID(grid), dialogs_note, 0, row++, 2, 1);
 
     GtkWidget* open = gtk_button_new_with_label("Open config.toml");
     g_signal_connect(open, "clicked", G_CALLBACK(on_open_config), NULL);
