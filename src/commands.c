@@ -246,9 +246,28 @@ static bool run_rename(Ctx* c, int argc, char** argv, GError** error)
     return true;
 }
 
+static GList* chosen_selection(Ctx* c);
+
+/* `:mass_rename [all|files|directories]`: the items chosen on purpose (in
+ * visual mode, or several), else the whole folder; the argument sets the
+ * dialog's Include switch. */
 static bool run_mass_rename(Ctx* c, int argc, char** argv, GError** error)
 {
-    return run_on_files(c, "mass-rename", argc, argv, error);
+    static const char* const kinds[] = { "all", "files", "directories" };
+    SfeRenameInclude include = SFE_RENAME_ALL;
+    bool known = argc == 1;
+    for (int i = 0; argc == 2 && i < 3; i++) {
+        if (strcmp(argv[1], kinds[i]) == 0) {
+            include = (SfeRenameInclude)i;
+            known = true;
+        }
+    }
+    if (argc > 2 || !known)
+        return fail(error, "usage: mass_rename [all|files|directories]");
+    GList* files = chosen_selection(c);
+    sfe_actions_mass_rename(c->window, c->pane, files, include);
+    g_list_free_full(files, g_object_unref);
+    return true;
 }
 
 /* new_file / new_directory: names in the active folder ("a/b" makes the
@@ -497,18 +516,26 @@ static bool run_split(Ctx* c, int argc, char** argv, GError** error)
 
 /* ---- Bookmarks ---------------------------------------------------------- */
 
-/* The selected folders, when the selection was made on purpose: in visual
- * mode or with several items (the cursor's item alone does not count, since
- * j / k select whatever they land on). */
-static GList* chosen_folders(Ctx* c)
+/* The selection, when it was made on purpose: in visual mode or with
+ * several items (the cursor's item alone does not count, since j / k select
+ * whatever they land on); else NULL. */
+static GList* chosen_selection(Ctx* c)
 {
     GList* selected = sfe_pane_get_selected_files(c->pane);
+    if (sfe_pane_in_visual(c->pane) || g_list_length(selected) > 1)
+        return selected;
+    g_list_free_full(selected, g_object_unref);
+    return NULL;
+}
+
+/* The folders among chosen_selection(). */
+static GList* chosen_folders(Ctx* c)
+{
+    GList* selected = chosen_selection(c);
     GList* folders = NULL;
-    if (sfe_pane_in_visual(c->pane) || g_list_length(selected) > 1) {
-        for (GList* l = selected; l != NULL; l = l->next) {
-            if (is_dir(l->data))
-                folders = g_list_prepend(folders, g_object_ref(l->data));
-        }
+    for (GList* l = selected; l != NULL; l = l->next) {
+        if (is_dir(l->data))
+            folders = g_list_prepend(folders, g_object_ref(l->data));
     }
     g_list_free_full(selected, g_object_unref);
     return g_list_reverse(folders);
@@ -1067,6 +1094,7 @@ static void complete_sort(Ctx* c, int argi, char** argv, const char* query, cons
     if (argi == 1 || argi == 2)
         add_words(out, orders, 0);
 }
+WORDS_COMPLETER(complete_mass_rename, "all", "files", "directories")
 WORDS_COMPLETER(complete_cursor, "down", "up", "first", "last", "previous", "next")
 WORDS_COMPLETER(complete_select, "toggle", "all")
 WORDS_COMPLETER(complete_visual, "off", "swap")
@@ -1102,7 +1130,7 @@ static const Command commands[] = {
     { { "mv", { "move", NULL }, "<file>… <destination>", "move into a folder" }, complete_transfer, run_move, false },
     { { "ln", { "symlink", NULL }, "<target>… <folder or link name>", "make symbolic links" }, complete_transfer, run_symlink, false },
     { { "rename", NO_ALIAS, "[<file> <new name>]", "rename (the dialog without arguments)" }, complete_rename, run_rename, false },
-    { { "mass_rename", NO_ALIAS, "[<file>…]", "rename with a pattern" }, complete_files, run_mass_rename, false },
+    { { "mass_rename", NO_ALIAS, "[all|files|directories]", "rename with a pattern: the selection, else the whole folder" }, complete_mass_rename, run_mass_rename, false },
     { { "touch", { "new_file", NULL }, "[<name>…]", "create empty files (the dialog without a name)" }, NULL, run_new_file, false },
     { { "mkdir", { "new_directory", "new_folder" }, "[<name>…]", "create folders (the dialog without a name)" }, NULL, run_new_directory, false },
     { { "trash", NO_ALIAS, "[<file>…]", "move to the trash" }, complete_files, run_trash, false },

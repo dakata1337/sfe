@@ -8,6 +8,9 @@ new version.
 
 - `:cd` without a folder goes to the start folder from the settings
   (it went to the home folder).
+- `:mass_rename [all|files|directories]` renames the selected items (in
+  visual mode or several), else the whole folder, with *Include* set to the
+  argument; it no longer takes file names. `R` does the same.
 
 ## 1.5.0
 

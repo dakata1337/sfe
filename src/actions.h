@@ -9,6 +9,7 @@
  * adding one row and one function in actions.c. */
 
 #include "pane.h"
+#include "renamedlg.h"
 #include "window.h"
 #include <stdbool.h>
 
@@ -61,6 +62,10 @@ const SfeUserAction* sfe_find_user_action(const char* name, unsigned kind);
 void sfe_actions_paste_into(SfeWindow* window, GFile* dest);
 
 /* Opens `files` (GFile*) with `app`; errors are shown in a dialog. */
+/* The mass rename dialog for `files`, or for every item of `pane`'s folder
+ * when NULL (always with the Include switch then). */
+void sfe_actions_mass_rename(SfeWindow* window, SfePane* pane, GList* files, SfeRenameInclude include);
+
 void sfe_actions_open_with(SfeWindow* window, GAppInfo* app, GList* files);
 
 /* Builds the target for `window`'s active pane (free with the function below). */

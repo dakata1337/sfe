@@ -131,16 +131,9 @@ enum {
     N_COLS,
 };
 
-/* "Include" switch, shown when renaming a whole folder. */
-typedef enum {
-    INCLUDE_ALL,
-    INCLUDE_FILES,
-    INCLUDE_FOLDERS,
-} Include;
-
 typedef struct {
     Request* req;
-    Include include;
+    SfeRenameInclude include;
     GFile** files; /* the included subset of req->files (borrowed) */
     gboolean* is_dir;
     int n;
@@ -265,7 +258,7 @@ static void apply_include(Many* m)
     gtk_list_store_clear(m->store);
     for (int i = 0; i < m->req->n; i++) {
         bool dir = m->req->is_dir[i];
-        if ((m->include == INCLUDE_FILES && dir) || (m->include == INCLUDE_FOLDERS && !dir))
+        if ((m->include == SFE_RENAME_FILES && dir) || (m->include == SFE_RENAME_FOLDERS && !dir))
             continue;
         m->files[m->n] = m->req->files[i];
         m->is_dir[m->n] = dir;
@@ -299,6 +292,8 @@ static GtkWidget* build_include_switch(Many* m)
         GtkWidget* b = gtk_radio_button_new_with_label_from_widget(first ? GTK_RADIO_BUTTON(first) : NULL, labels[i]);
         gtk_toggle_button_set_mode(GTK_TOGGLE_BUTTON(b), FALSE); /* a segmented button, no dot */
         g_object_set_data(G_OBJECT(b), "sfe-include", GINT_TO_POINTER(i));
+        if ((int)m->include == i) /* (before the handler: the preview does not exist yet) */
+            gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(b), TRUE);
         g_signal_connect(b, "toggled", G_CALLBACK(on_include_toggled), m);
         gtk_box_pack_start(GTK_BOX(box), b, FALSE, FALSE, 0);
         first = first ? first : b;
@@ -359,7 +354,7 @@ static GtkWidget* build_preview(Many* m)
     return sw;
 }
 
-void sfe_rename_many(GtkWidget* parent, GList* files, bool include_switch, SfeRenamedFunc done,
+void sfe_rename_many(GtkWidget* parent, GList* files, SfeRenameInclude include, SfeRenamedFunc done,
     gpointer data, GDestroyNotify destroy)
 {
     Many* m = g_new0(Many, 1);
@@ -375,7 +370,8 @@ void sfe_rename_many(GtkWidget* parent, GList* files, bool include_switch, SfeRe
     gtk_grid_set_column_spacing(GTK_GRID(grid), 12);
     int row = 0;
 
-    if (include_switch)
+    m->include = include == SFE_RENAME_NO_SWITCH ? SFE_RENAME_ALL : include;
+    if (include != SFE_RENAME_NO_SWITCH)
         labeled(GTK_GRID(grid), row++, "Include", build_include_switch(m));
 
     m->template_ = labeled(GTK_GRID(grid), row++, "New name", gtk_entry_new());

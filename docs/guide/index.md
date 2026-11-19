@@ -447,7 +447,7 @@ selection.
 | `mv` (`move`) | `<file>… <destination>` | move into a folder |
 | `ln` (`symlink`) | `<target>… <folder or link name>` | make symbolic links |
 | `rename` | `[<file> <new name>]` | rename (the dialog without arguments) |
-| `mass_rename` | `[<file>…]` | rename with a pattern |
+| `mass_rename` | `[all\|files\|directories]` | rename with a pattern: the selected items (in visual mode or several), else the whole folder; the argument picks what *Include* starts on (`all` without one) |
 | `touch` (`new_file`) | `[<name>…]` | create empty files (the dialog without a name) |
 | `mkdir` (`new_directory`, `new_folder`) | `[<name>…]` | create folders, with the folders on the way (the dialog without a name) |
 | `trash` | `[<file>…]` | move to the trash (the selection without any) |

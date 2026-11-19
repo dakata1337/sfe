@@ -550,18 +550,23 @@ static void run_rename(const SfeActionTarget* t)
     if (t->files->next == NULL)
         sfe_rename_one(widget_of(t), t->files->data, on_renamed, g_object_ref(t->pane), g_object_unref);
     else
-        sfe_rename_many(widget_of(t), t->files, false, on_renamed, g_object_ref(t->pane), g_object_unref);
+        sfe_rename_many(widget_of(t), t->files, SFE_RENAME_NO_SWITCH, on_renamed, g_object_ref(t->pane), g_object_unref);
+}
+
+void sfe_actions_mass_rename(SfeWindow* window, SfePane* pane, GList* files, SfeRenameInclude include)
+{
+    GList* all = files ? NULL : sfe_pane_get_all_files(pane);
+    if (files == NULL && include == SFE_RENAME_NO_SWITCH)
+        include = SFE_RENAME_ALL; /* a whole folder: let the user pick files / folders */
+    if (files != NULL || all != NULL)
+        sfe_rename_many(GTK_WIDGET(window), files ? files : all, include, on_renamed, g_object_ref(pane), g_object_unref);
+    g_list_free_full(all, g_object_unref);
 }
 
 /* With nothing selected, every file shown in the folder is renamed. */
 static void run_mass_rename(const SfeActionTarget* t)
 {
-    GList* all = t->files ? NULL : sfe_pane_get_all_files(t->pane);
-    GList* files = t->files ? t->files : all;
-
-    if (files != NULL) /* a whole folder: let the user pick files / folders */
-        sfe_rename_many(widget_of(t), files, t->files == NULL, on_renamed, g_object_ref(t->pane), g_object_unref);
-    g_list_free_full(all, g_object_unref);
+    sfe_actions_mass_rename(t->window, t->pane, t->files, SFE_RENAME_NO_SWITCH);
 }
 
 static void run_properties(const SfeActionTarget* t)
