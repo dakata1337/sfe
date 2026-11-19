@@ -1201,6 +1201,34 @@ static void move_cursor(SfePane* self, GtkMovementStep step, int count, bool mod
     g_list_free_full(keep, (GDestroyNotify)gtk_tree_path_free);
 }
 
+/* The cursor to row `index` alone, selecting only it like j / k do (or, in
+ * visual mode, keeping the selection). Not through "move-cursor": the views
+ * read Shift from the current event, so "G" would select every row on the
+ * way. */
+static void jump_cursor(SfePane* self, int index, bool visual)
+{
+    if (index < 0)
+        return;
+    GtkTreePath* path = gtk_tree_path_new_from_indices(index, -1);
+    GList* keep = visual ? selected_paths(self) : NULL;
+    gtk_widget_grab_focus(active_view(self));
+    if (self->view == SFE_VIEW_GRID) {
+        GtkIconView* grid = GTK_ICON_VIEW(self->grid);
+        gtk_icon_view_set_cursor(grid, path, NULL, FALSE);
+        if (!visual) {
+            gtk_icon_view_unselect_all(grid);
+            gtk_icon_view_select_path(grid, path);
+        }
+        gtk_icon_view_scroll_to_path(grid, path, FALSE, 0, 0);
+    } else {
+        gtk_tree_view_set_cursor(GTK_TREE_VIEW(self->list), path, NULL, FALSE); /* selects only this row */
+    }
+    if (visual)
+        select_paths(self, keep);
+    g_list_free_full(keep, (GDestroyNotify)gtk_tree_path_free);
+    gtk_tree_path_free(path);
+}
+
 static void apply_visual(SfePane* self);
 
 void sfe_pane_move_cursor(SfePane* self, SfeCursorMove move)
@@ -1212,8 +1240,8 @@ void sfe_pane_move_cursor(SfePane* self, SfeCursorMove move)
     switch (move) {
     case SFE_CURSOR_DOWN: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, 1, visual); break;
     case SFE_CURSOR_UP: move_cursor(self, GTK_MOVEMENT_DISPLAY_LINES, -1, visual); break;
-    case SFE_CURSOR_FIRST: move_cursor(self, GTK_MOVEMENT_BUFFER_ENDS, -1, visual); break;
-    case SFE_CURSOR_LAST: move_cursor(self, GTK_MOVEMENT_BUFFER_ENDS, 1, visual); break;
+    case SFE_CURSOR_FIRST: jump_cursor(self, n_rows(self) > 0 ? 0 : -1, visual); break;
+    case SFE_CURSOR_LAST: jump_cursor(self, n_rows(self) - 1, visual); break;
     case SFE_CURSOR_PREVIOUS:
     case SFE_CURSOR_NEXT:
         move_cursor(self, self->view == SFE_VIEW_GRID ? GTK_MOVEMENT_VISUAL_POSITIONS : GTK_MOVEMENT_DISPLAY_LINES,

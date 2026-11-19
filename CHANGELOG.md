@@ -18,6 +18,8 @@ new version.
 - `:split` completion says what each sub-command does, and whether it makes
   a view, moves the focus or moves the view; `:split move` offers all four
   directions.
+- `G` jumps to the last item without selecting every item on the way (in
+  the grid too); `gg` the same for the first.
 
 ## 1.5.0
 
