@@ -7,6 +7,12 @@ release: see the top of that script).
 
 ## Unreleased
 
+- In a folder of very many files, the command line (and search) responds at
+  once: opening or closing it moved the keyboard focus, which restyled the
+  grid, and GTK then measured every icon again (about 7 s to open and 10 s
+  to close in a folder of 100,000 files, with completion stuck meanwhile).
+  The grid no longer changes style with focus; a selected icon keeps the
+  same tint whether or not the grid has the focus.
 - Thumbnails no longer go missing after scrolling away and quickly back: a
   new request could join a thumbnail job that had just been skipped and get
   "no thumbnail", leaving the plain icon until the folder was reloaded.

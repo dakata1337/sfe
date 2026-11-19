@@ -24,8 +24,11 @@
     -gtk-icon-shadow: none;
 }
 
-/* Keyboard focus (GTK only draws it while navigating with the keyboard). */
-.sfe-window *:focus {
+/* Keyboard focus (GTK only draws it while navigating with the keyboard).
+ * Not on the grid: any style change there (its :focus state flips whenever
+ * the command line or search opens or closes) makes GtkIconView measure
+ * every icon again, about 10 s in a folder of 100,000 files. */
+.sfe-window *:not(iconview):focus {
     outline-color: alpha(@sfe_accent, 0.7);
     outline-style: solid;
     outline-width: 1px;
@@ -266,8 +269,7 @@
     color: @sfe_view_fg;
 }
 
-.sfe-window iconview:selected:focus,
-.sfe-window treeview.view:selected:focus {
+.sfe-window treeview.view:selected:focus { /* (not the grid: see *:focus above) */
     background-color: alpha(@sfe_accent, 0.32);
 }
 
