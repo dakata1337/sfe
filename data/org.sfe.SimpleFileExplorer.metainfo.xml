@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="2.1.1" date="2026-11-19">
+      <description>
+        <p>NTFS drives that Windows left unclean (Fast Startup, hibernation) are mounted with ntfs-3g when the kernel driver refuses them.</p>
+      </description>
+    </release>
     <release version="2.1.0" date="2026-11-19">
       <description>
         <p>Lighter on big folders: less memory per file and faster loading, with the same icons.</p>

@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 2.1.1
+
 - NTFS drives the kernel's driver refuses (Windows Fast Startup or
   hibernation leaves them unclean, and udisks reported only "wrong fs type,
   bad option, bad superblock") are mounted with ntfs-3g when it is
