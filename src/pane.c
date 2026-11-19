@@ -169,9 +169,20 @@ static void forget_anchor(SfePane* self)
     g_clear_pointer(&self->grid_anchor, gtk_tree_row_reference_free);
 }
 
+/* The cursor is about to move by the keyboard (or to a new file): the view
+ * may scroll to it a moment later, outside the key event, which
+ * on_scroll_value() would otherwise take for the view pulling itself back
+ * from the empty space after the files, and undo (gg would select the first
+ * row without scrolling up to it). */
+static void cursor_scrolls(SfePane* self)
+{
+    self->scroll_wanted[0] = self->scroll_wanted[1] = 0;
+}
+
 static void select_path(SfePane* self, GtkTreePath* path)
 {
     forget_anchor(self);
+    cursor_scrolls(self);
     if (self->view == SFE_VIEW_GRID) {
         gtk_icon_view_unselect_all(GTK_ICON_VIEW(self->grid));
         gtk_icon_view_set_cursor(GTK_ICON_VIEW(self->grid), path, NULL, FALSE);
@@ -607,8 +618,21 @@ static void request_thumbnails(SfePane* self)
     bool visible = self->view == SFE_VIEW_GRID
         ? gtk_icon_view_get_visible_range(GTK_ICON_VIEW(self->grid), &start, &end)
         : gtk_tree_view_get_visible_range(GTK_TREE_VIEW(self->list), &start, &end);
-    if (!visible)
+    if (!visible && self->view == SFE_VIEW_LIST && n_rows(self) > 0) {
+        /* The list gives no range when the bottom of the page is past its
+         * last row (scrolled into the empty space): the rows on screen run
+         * from the top one to the last. */
+        gtk_tree_path_free(start);
+        gtk_tree_path_free(end);
+        start = end = NULL;
+        visible = gtk_tree_view_get_visible_range(GTK_TREE_VIEW(self->list), &start, NULL);
+        end = gtk_tree_path_new_from_indices(n_rows(self) - 1, -1);
+    }
+    if (!visible) {
+        gtk_tree_path_free(start);
+        gtk_tree_path_free(end);
         return;
+    }
     int first = MAX(0, gtk_tree_path_get_indices(start)[0] - THUMB_MARGIN);
     int last = gtk_tree_path_get_indices(end)[0] + THUMB_MARGIN;
     gtk_tree_path_free(start);
@@ -1207,6 +1231,7 @@ static void move_cursor(SfePane* self, GtkMovementStep step, int count, bool mod
     g_signal_query(g_signal_lookup("move-cursor", G_OBJECT_TYPE(view)), &query);
     GList* keep = modify ? selected_paths(self) : NULL;
 
+    cursor_scrolls(self);
     gtk_widget_grab_focus(view);
     if (query.n_params >= 4)
         g_signal_emit_by_name(view, "move-cursor", step, count, FALSE, modify, &handled);
@@ -1227,6 +1252,7 @@ static void jump_cursor(SfePane* self, int index, bool visual)
         return;
     GtkTreePath* path = gtk_tree_path_new_from_indices(index, -1);
     GList* keep = visual ? selected_paths(self) : NULL;
+    cursor_scrolls(self);
     gtk_widget_grab_focus(active_view(self));
     if (self->view == SFE_VIEW_GRID) {
         GtkIconView* grid = GTK_ICON_VIEW(self->grid);

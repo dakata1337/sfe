@@ -6,6 +6,13 @@ new version.
 
 ## Unreleased
 
+- `gg` (and other cursor keys) scroll back to the cursor when the view was
+  scrolled into the empty space after the files; `gg` only selected the
+  first item.
+- Thumbnails come back after F5 in the list view while it is scrolled into
+  the empty space after the files (they showed plain icons until the view
+  was scrolled).
+
 ## 2.0.1
 
 - Settings → System shows the version, the build type (release / debug)
