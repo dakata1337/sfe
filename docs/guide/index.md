@@ -96,6 +96,15 @@ instead of their icon, in the grid and the list.
   and sets the size limit: bigger files keep their icon (50 MiB by default).
   Only local files get thumbnails.
 
+**Folder covers**: a folder holding a picture named `cover`, `folder`,
+`front`, `albumart…`, `album` or `.folder` (`.jpg`, `.png`, `.webp`, …, any
+case) shows that picture instead of the folder icon, with a small folder
+in the corner, which suits music albums and photo sets. When there are
+several, they are preferred in that order. Switch it off with *Settings →
+Thumbnails → Folder covers* (`folder_covers` in `[preview]`).
+
+![Album folders showing their covers](images/folder-covers.png)
+
 ## Sidebar
 
 ![Sidebar with places, bookmarks, drives and the folder tree](images/sidebar.png)
@@ -542,7 +551,8 @@ back to its default.
   [file icon style](#file-icons) with a preview of each) and *Files* (hidden
   files, sorting, delete confirmation). *Scale* grows everything: text,
   icons, buttons and the sidebar.
-- **Thumbnails**: on or off, and the size limit ([Thumbnails](#thumbnails)).
+- **Thumbnails**: on or off, the size limit, and folder covers
+  ([Thumbnails](#thumbnails)).
 - **Sidebar**: which [devices](#drives) are listed, and GTK bookmarks.
 - **Keys**: every key with its command and what it does. Double-click a
   command to change it (any command line works, with arguments); *Add…*

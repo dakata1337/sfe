@@ -73,6 +73,7 @@ static const SfeOption options[] = {
     { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },
     { "preview", "thumbnails", SFE_OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails", .label = "Thumbnails" },
     { "preview", "thumbnail_max_mb", SFE_OPT_INT, FIELD(thumbnail_max_mb), "Skip thumbnails for files larger than this (MiB)", .min = 1, .max = 1 << 20, .label = "Thumbnail size limit (MiB)" },
+    { "preview", "folder_covers", SFE_OPT_BOOL, FIELD(folder_covers), "Show a folder's cover picture (cover.jpg, folder.png, front.jpg, ...) instead of its icon", .label = "Folder covers" },
     { "sidebar", "devices", SFE_OPT_ENUM, FIELD(devices), "Devices listed: all (removable drives and disks) | removable (only what can be unplugged: flash drives, SD cards)", .choices = device_names, .label = "Devices" },
     { "sidebar", "show_gtk_bookmarks", SFE_OPT_BOOL, FIELD(show_gtk_bookmarks), "Also list bookmarks from ~/.config/gtk-3.0/bookmarks", .label = "Show GTK bookmarks" },
 };
@@ -158,6 +159,7 @@ SfeConfig* sfe_config_new(void)
 
     cfg->thumbnails = true;
     cfg->thumbnail_max_mb = 50;
+    cfg->folder_covers = true;
 
     cfg->bookmarks = g_ptr_array_new_with_free_func(g_free);
     cfg->show_gtk_bookmarks = true;

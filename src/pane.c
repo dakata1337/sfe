@@ -58,6 +58,7 @@ struct _SfePane {
     GCancellable* thumb_cancel; /* the requests for what was on screen last */
     guint thumb_source; /* a pending look at what is on screen */
     int cfg_thumbnails; /* the config value last applied, -1 at first */
+    int cfg_folder_covers; /* the same */
     int thumb_size; /* SfeThumbSize in use, -1 at first */
 
     /* Room after the files, to right-click empty space. Per view (grid, list): */
@@ -625,8 +626,16 @@ static void request_thumbnails(SfePane* self)
         g_autoptr(GFileInfo) info = NULL;
         gboolean is_dir = FALSE;
         gtk_tree_model_get(model, &iter, SFE_COL_FILE, &file, SFE_COL_INFO, &info, SFE_COL_IS_DIR, &is_dir, -1);
-        if (is_dir || file == NULL || !sfe_dir_model_wants_thumbnail(self->model, g_file_info_get_name(info)))
+        if (file == NULL || !sfe_dir_model_wants_thumbnail(self->model, g_file_info_get_name(info)))
             continue;
+        if (is_dir) { /* its cover picture, if it has one */
+            gint64 mtime = (gint64)g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+            if (cfg->folder_covers && g_file_is_native(file) && !sfe_thumb_in_cache_dir(file))
+                sfe_thumb_queue_request_folder(queue, file, mtime, size, self->thumb_cancel, on_thumbnail, self);
+            else
+                sfe_dir_model_set_thumbnail(self->model, file, NULL);
+            continue;
+        }
         const char* type = g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE);
         g_autofree char* path = g_file_get_path(file);
         if (path == NULL || (guint64)g_file_info_get_size(info) > max_bytes || sfe_thumb_in_cache_dir(file)
@@ -992,6 +1001,12 @@ static void apply_config(SfePane* self)
         if (self->cfg_thumbnails >= 0 && !cfg->thumbnails)
             sfe_dir_model_clear_thumbnails(self->model); /* icons again */
         self->cfg_thumbnails = cfg->thumbnails;
+        schedule_thumbnails(self);
+    }
+    if ((int)cfg->folder_covers != self->cfg_folder_covers) {
+        if (self->cfg_folder_covers >= 0)
+            sfe_dir_model_clear_thumbnails(self->model); /* folders asked again (files come from the cache) */
+        self->cfg_folder_covers = cfg->folder_covers;
         schedule_thumbnails(self);
     }
 
@@ -2096,6 +2111,7 @@ static void sfe_pane_init(SfePane* self)
     g_signal_connect(self->model, "file-added", G_CALLBACK(on_file_added), self);
     g_signal_connect(self->model, "files-changed", G_CALLBACK(on_files_changed), self);
     self->cfg_thumbnails = -1;
+    self->cfg_folder_covers = -1;
     self->thumb_size = -1;
     self->name_width = -1;
 

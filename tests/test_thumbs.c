@@ -187,6 +187,75 @@ static void test_queue(void)
     g_main_loop_unref(count.loop);
 }
 
+static char* cover_name(const char* dir_rel)
+{
+    g_autofree char* path = in_root(dir_rel);
+    g_autoptr(GFile) dir = g_file_new_for_path(path);
+    g_autoptr(GFile) cover = sfe_folder_cover_find(dir, NULL);
+    return cover ? g_file_get_basename(cover) : NULL;
+}
+
+/* The best-named picture wins; other pictures and non-pictures do not count. */
+static void test_folder_cover(void)
+{
+    write_text("album/01 Song.flac", "x");
+    write_text("album/cover.txt", "not a picture");
+    g_autofree char* none = cover_name("album");
+    g_assert_null(none);
+
+    g_object_unref(write_png("album/AlbumArt_{1234}_Large.jpg", 8, 8)); /* (a PNG named .jpg: names only) */
+    g_autofree char* wmp = cover_name("album");
+    g_assert_cmpstr(wmp, ==, "AlbumArt_{1234}_Large.jpg");
+    g_object_unref(write_png("album/Folder.PNG", 8, 8));
+    g_autofree char* folder = cover_name("album");
+    g_assert_cmpstr(folder, ==, "Folder.PNG");
+    g_object_unref(write_png("album/cover.webp", 8, 8));
+    g_autofree char* cover = cover_name("album");
+    g_assert_cmpstr(cover, ==, "cover.webp");
+
+    g_object_unref(write_png("photos/holiday.png", 8, 8)); /* any other picture is not a cover */
+    g_autofree char* other = cover_name("photos");
+    g_assert_null(other);
+    g_autofree char* sub = in_root("nested/cover.jpg");
+    g_mkdir_with_parents(sub, 0755); /* a folder named like a cover */
+    g_autofree char* dir = cover_name("nested");
+    g_assert_null(dir);
+}
+
+/* A folder request delivers the cover's thumbnail as the folder's. */
+static void on_folder_done(GFile* file, GdkPixbuf* pixbuf, gpointer data)
+{
+    Count* c = data;
+    g_autofree char* name = g_file_get_basename(file);
+    g_assert_true(strcmp(name, "music") == 0 || strcmp(name, "empty") == 0);
+    c->done++;
+    c->with_pixbuf += pixbuf != NULL;
+    if (c->done == 2)
+        g_main_loop_quit(c->loop);
+}
+
+static void test_folder_queue(void)
+{
+    g_autoptr(GPtrArray) none = g_ptr_array_new();
+    SfeThumbQueue* q = sfe_thumb_queue_new(1, none);
+    g_autoptr(GFile) art = write_png("music/front.png", 300, 300);
+    write_text("empty/notes.txt", "x");
+    g_autofree char* music_path = in_root("music");
+    g_autofree char* empty_path = in_root("empty");
+    g_autoptr(GFile) music = g_file_new_for_path(music_path);
+    g_autoptr(GFile) empty = g_file_new_for_path(empty_path);
+    Count count = { .loop = g_main_loop_new(NULL, FALSE) };
+
+    sfe_thumb_queue_request_folder(q, music, mtime_of(music), SFE_THUMB_NORMAL, NULL, on_folder_done, &count);
+    sfe_thumb_queue_request_folder(q, empty, mtime_of(empty), SFE_THUMB_NORMAL, NULL, on_folder_done, &count);
+    g_main_loop_run(count.loop);
+    g_assert_cmpint(count.with_pixbuf, ==, 1);
+    g_autofree char* uri = g_file_get_uri(art); /* cached under the picture's own URI */
+    g_autoptr(GdkPixbuf) cached = sfe_thumb_load_cached(uri, mtime_of(art), SFE_THUMB_NORMAL);
+    g_assert_nonnull(cached);
+    g_main_loop_unref(count.loop);
+}
+
 int main(int argc, char** argv)
 {
     root = g_dir_make_tmp("sfe-thumbs-XXXXXX", NULL);
@@ -197,6 +266,8 @@ int main(int argc, char** argv)
     g_test_add_func("/thumbs/failure", test_failure);
     g_test_add_func("/thumbs/thumbnailers", test_thumbnailers);
     g_test_add_func("/thumbs/queue", test_queue);
+    g_test_add_func("/thumbs/folder-cover", test_folder_cover);
+    g_test_add_func("/thumbs/folder-queue", test_folder_queue);
     int status = g_test_run();
 
     g_autofree char* cmd = g_strdup_printf("rm -rf '%s'", root);

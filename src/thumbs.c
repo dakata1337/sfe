@@ -432,6 +432,59 @@ GdkPixbuf* sfe_thumb_generate(GPtrArray* thumbnailers, GFile* file, const char* 
 }
 
 /* ------------------------------------------------------------------------ */
+/* Folder covers                                                             */
+/* ------------------------------------------------------------------------ */
+
+#define COVER_SCAN_LIMIT 5000 /* entries read before giving up on a folder */
+
+/* How good a name is as a cover: lower is better, -1 for not a cover. */
+static int cover_rank(const char* name)
+{
+    static const char* const stems[] = { "cover", "folder", "front", "albumart", "album", ".folder" };
+    static const char* const exts[] = { ".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp" };
+    g_autofree char* lower = g_utf8_strdown(name, -1);
+    const char* dot = strrchr(lower, '.');
+    if (dot == NULL || dot == lower)
+        return -1;
+    bool image = false;
+    for (size_t i = 0; i < G_N_ELEMENTS(exts) && !image; i++)
+        image = strcmp(dot, exts[i]) == 0;
+    if (!image)
+        return -1;
+    g_autofree char* stem = g_strndup(lower, dot - lower);
+    for (size_t i = 0; i < G_N_ELEMENTS(stems); i++) {
+        if (strcmp(stem, stems[i]) == 0)
+            return (int)i * 2;
+        /* "AlbumArt_{GUID}_Large", "AlbumArtSmall" (Windows Media Player) */
+        if (strcmp(stems[i], "albumart") == 0 && g_str_has_prefix(stem, "albumart"))
+            return (int)i * 2 + 1;
+    }
+    return -1;
+}
+
+GFile* sfe_folder_cover_find(GFile* dir, GCancellable* cancel)
+{
+    g_autoptr(GFileEnumerator) en = g_file_enumerate_children(dir,
+        G_FILE_ATTRIBUTE_STANDARD_NAME "," G_FILE_ATTRIBUTE_STANDARD_TYPE, G_FILE_QUERY_INFO_NONE, cancel, NULL);
+    g_autofree char* best = NULL;
+    int best_rank = G_MAXINT;
+    GFileInfo* info;
+    for (int n = 0; en != NULL && n < COVER_SCAN_LIMIT && best_rank > 0
+         && (info = g_file_enumerator_next_file(en, cancel, NULL)) != NULL;
+         n++) {
+        const char* name = g_file_info_get_name(info);
+        int rank = g_file_info_get_file_type(info) == G_FILE_TYPE_REGULAR ? cover_rank(name) : -1;
+        if (rank >= 0 && (rank < best_rank || (rank == best_rank && g_strcmp0(name, best) < 0))) {
+            best_rank = rank;
+            g_free(best);
+            best = g_strdup(name);
+        }
+        g_object_unref(info);
+    }
+    return best ? g_file_get_child(dir, best) : NULL;
+}
+
+/* ------------------------------------------------------------------------ */
 /* The worker pool                                                           */
 /* ------------------------------------------------------------------------ */
 
@@ -449,6 +502,7 @@ typedef struct {
     char* content_type;
     gint64 mtime;
     SfeThumbSize size;
+    bool folder; /* `file` is a folder: thumbnail its cover */
     guint64 seq; /* later requests first */
     GSList* waiters; /* Waiter*, guarded by the queue's lock */
     GdkPixbuf* result;
@@ -521,7 +575,21 @@ static void work(gpointer data, gpointer user_data)
     bool skip = all_cancelled(job); /* scrolled away before its turn */
     g_mutex_unlock(&q->lock);
 
-    if (!skip) {
+    if (!skip && job->folder) {
+        g_autoptr(GFile) cover = sfe_folder_cover_find(job->file, NULL);
+        g_autoptr(GFileInfo) info = cover ? g_file_query_info(cover,
+                                                G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE "," G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                                                G_FILE_QUERY_INFO_NONE, NULL, NULL)
+                                          : NULL;
+        if (info != NULL) {
+            g_autofree char* uri = g_file_get_uri(cover);
+            gint64 mtime = (gint64)g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+            job->result = sfe_thumb_load_cached(uri, mtime, job->size);
+            if (job->result == NULL && !sfe_thumb_has_failed(uri, mtime))
+                job->result = sfe_thumb_generate(q->thumbnailers, cover, g_file_info_get_content_type(info), mtime,
+                    job->size, NULL, NULL);
+        }
+    } else if (!skip) {
         job->result = sfe_thumb_load_cached(job->uri, job->mtime, job->size);
         if (job->result == NULL && !sfe_thumb_has_failed(job->uri, job->mtime))
             job->result = sfe_thumb_generate(q->thumbnailers, job->file, job->content_type, job->mtime, job->size,
@@ -563,11 +631,11 @@ bool sfe_thumb_queue_supports(SfeThumbQueue* queue, const char* content_type)
     return sfe_thumb_supported(queue->thumbnailers, content_type);
 }
 
-void sfe_thumb_queue_request(SfeThumbQueue* q, GFile* file, const char* content_type, gint64 mtime,
+static void request(SfeThumbQueue* q, GFile* file, bool folder, const char* content_type, gint64 mtime,
     SfeThumbSize size, GCancellable* cancel, SfeThumbDone done, gpointer data)
 {
     g_autofree char* uri = g_file_get_uri(file);
-    g_autofree char* key = g_strdup_printf("%d %s", size, uri);
+    g_autofree char* key = g_strdup_printf("%d %s%s", size, folder ? "folder " : "", uri);
     Waiter* w = g_new0(Waiter, 1);
     w->done = done;
     w->data = data;
@@ -588,10 +656,23 @@ void sfe_thumb_queue_request(SfeThumbQueue* q, GFile* file, const char* content_
     job->content_type = g_strdup(content_type);
     job->mtime = mtime;
     job->size = size;
+    job->folder = folder;
     job->seq = ++q->seq;
     job->waiters = g_slist_prepend(NULL, w);
     if (!g_hash_table_contains(q->jobs, job->key))
         g_hash_table_insert(q->jobs, job->key, job);
     g_mutex_unlock(&q->lock);
     g_thread_pool_push(q->pool, job, NULL);
+}
+
+void sfe_thumb_queue_request(SfeThumbQueue* q, GFile* file, const char* content_type, gint64 mtime,
+    SfeThumbSize size, GCancellable* cancel, SfeThumbDone done, gpointer data)
+{
+    request(q, file, false, content_type, mtime, size, cancel, done, data);
+}
+
+void sfe_thumb_queue_request_folder(SfeThumbQueue* q, GFile* dir, gint64 mtime, SfeThumbSize size,
+    GCancellable* cancel, SfeThumbDone done, gpointer data)
+{
+    request(q, dir, true, NULL, mtime, size, cancel, done, data);
 }

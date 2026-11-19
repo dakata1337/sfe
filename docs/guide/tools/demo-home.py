@@ -79,6 +79,11 @@ def main():
     # Music, Videos, Downloads
     for name in ("01 - Intro.mp3", "02 - Morning.mp3", "03 - Highway.flac"):
         write(d("Music", "Album", name))
+    gradient(d("Music", "Album", "cover.jpg"), (500, 500), (250, 120, 90), (90, 30, 110))  # a folder cover
+    for name in ("01 - Rain.mp3", "02 - Lights.mp3"):
+        write(d("Music", "Night Drive", name))
+    gradient(d("Music", "Night Drive", "folder.png"), (500, 500), (40, 60, 140), (10, 10, 40))
+    write(d("Music", "Singles", "demo.ogg"))
     write(d("Videos", "birthday.mp4"))
     write(d("Videos", "tutorial.mkv"))
     write(d("Downloads", "archive.tar.gz"))

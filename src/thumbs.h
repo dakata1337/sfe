@@ -73,6 +73,12 @@ bool sfe_thumb_supported(GPtrArray* thumbnailers, const char* content_type);
 GdkPixbuf* sfe_thumb_generate(GPtrArray* thumbnailers, GFile* file, const char* content_type, gint64 mtime,
     SfeThumbSize size, GCancellable* cancel, GError** error);
 
+/* The picture that stands for folder `dir` (music albums, photo sets): an
+ * image named cover, folder, front, albumart*, album or .folder (any case;
+ * .jpg .jpeg .png .webp .gif .bmp), in that order of preference; NULL if
+ * there is none. Reads the folder: call it from a worker thread. */
+GFile* sfe_folder_cover_find(GFile* dir, GCancellable* cancel);
+
 /* ------------------------------------------------------------------------ */
 /* The worker pool                                                           */
 
@@ -96,3 +102,9 @@ bool sfe_thumb_queue_supports(SfeThumbQueue* queue, const char* content_type);
  * file and size share one job. */
 void sfe_thumb_queue_request(SfeThumbQueue* queue, GFile* file, const char* content_type, gint64 mtime,
     SfeThumbSize size, GCancellable* cancel, SfeThumbDone done, gpointer data);
+
+/* The same for a folder: the thumbnail of its cover (sfe_folder_cover_find,
+ * cached under the cover's own URI), delivered as `dir`'s; NULL without a
+ * cover. `mtime` is the folder's. */
+void sfe_thumb_queue_request_folder(SfeThumbQueue* queue, GFile* dir, gint64 mtime, SfeThumbSize size,
+    GCancellable* cancel, SfeThumbDone done, gpointer data);

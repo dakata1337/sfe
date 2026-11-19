@@ -6,6 +6,10 @@ new version.
 
 ## Unreleased
 
+- Folder covers: a folder with a `cover.jpg`, `folder.png`, `front.jpg`,
+  `AlbumArt…` (and so on) shows that picture, with a small folder badge,
+  instead of the folder icon. *Settings → Thumbnails → Folder covers*
+  (`folder_covers` in `[preview]`) switches it off.
 - Visual mode: `dd` and `yy` work as in normal mode (the first `d` / `y`
   ran on its own and the second key leaked into normal mode); a key bound
   in visual mode now waits when it also starts a normal-mode chord.

@@ -89,6 +89,7 @@ typedef struct {
     /* [preview] */
     bool thumbnails;
     int thumbnail_max_mb;
+    bool folder_covers; /* a folder's cover.jpg etc. instead of its icon */
 
     /* [sidebar] */
     GPtrArray* bookmarks; /* char*, may start with "~" */

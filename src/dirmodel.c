@@ -101,12 +101,38 @@ static cairo_surface_t* thumb_surface(GdkPixbuf* pixbuf, int size, int scale)
     return gdk_cairo_surface_create_from_pixbuf(fitted, scale, NULL);
 }
 
+/* A folder's cover with a small folder icon in its bottom-right corner, so
+ * it does not pass for a picture file. Takes `cover`. */
+static cairo_surface_t* with_folder_badge(cairo_surface_t* cover, GFileInfo* info, int size, int scale)
+{
+    if (size < 32) /* (list view: too small for a badge) */
+        return cover;
+    double w = (double)cairo_image_surface_get_width(cover) / scale;
+    double h = (double)cairo_image_surface_get_height(cover) / scale;
+    int badge_size = MAX(14, size * 3 / 8);
+    cairo_surface_t* out = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, cairo_image_surface_get_width(cover),
+        cairo_image_surface_get_height(cover));
+    cairo_surface_set_device_scale(out, scale, scale);
+    cairo_t* cr = cairo_create(out);
+    cairo_set_source_surface(cr, cover, 0, 0);
+    cairo_paint(cr);
+    cairo_surface_t* badge = sfe_icon_for_info(info, badge_size, scale);
+    cairo_set_source_surface(cr, badge, MAX(0, w - badge_size), MAX(0, h - badge_size));
+    cairo_paint(cr);
+    cairo_surface_destroy(badge);
+    cairo_destroy(cr);
+    cairo_surface_destroy(cover);
+    return out;
+}
+
 /* The row's picture: its thumbnail if it has one, else the theme icon. */
 static cairo_surface_t* icon_for(SfeDirModel* self, GFileInfo* info, int size)
 {
     gpointer thumb = self->thumbs ? g_hash_table_lookup(self->thumbs, g_file_info_get_name(info)) : NULL;
-    if (thumb != NULL && thumb != NO_THUMB)
-        return thumb_surface(thumb, size, self->scale);
+    if (thumb != NULL && thumb != NO_THUMB) {
+        cairo_surface_t* surface = thumb_surface(thumb, size, self->scale);
+        return info_is_dir(info) ? with_folder_badge(surface, info, size, self->scale) : surface;
+    }
     return sfe_icon_for_info(info, size, self->scale);
 }
 

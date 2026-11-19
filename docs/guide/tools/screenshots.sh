@@ -274,6 +274,11 @@ launch Pictures/Holiday
 sleep 1.5
 shot_region thumbnails 220 0 $((W - 220)) 260
 
+# Folder covers: album folders with a cover.jpg / folder.png.
+launch Music
+sleep 1.5
+shot_region folder-covers 220 0 $((W - 220)) 200
+
 launch Projects
 key CTRL backslash
 sleep 0.6
