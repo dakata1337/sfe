@@ -66,6 +66,7 @@ struct _SfePane {
     double scroll_wanted[2]; /* where it was scrolled to */
     double content_end[2]; /* where its last row ends */
     bool padding; /* our own changes to the adjustments */
+    gint64 cursor_scroll_until; /* a keyboard cursor move scrolls until then (monotonic time) */
     /* A drag-select (rubber band) in progress, in content coordinates: GTK
      * draws it only over the files, sfe draws the rest. */
     bool band_pressed, band_active;
@@ -169,6 +170,8 @@ static void forget_anchor(SfePane* self)
     g_clear_pointer(&self->grid_anchor, gtk_tree_row_reference_free);
 }
 
+#define CURSOR_SCROLL_USEC G_USEC_PER_SEC /* long enough for a scroll animation */
+
 /* The cursor is about to move by the keyboard (or to a new file): the view
  * may scroll to it a moment later, outside the key event, which
  * on_scroll_value() would otherwise take for the view pulling itself back
@@ -177,6 +180,8 @@ static void forget_anchor(SfePane* self)
 static void cursor_scrolls(SfePane* self)
 {
     self->scroll_wanted[0] = self->scroll_wanted[1] = 0;
+    /* The scroll is animated: its later frames come without input too. */
+    self->cursor_scroll_until = g_get_monotonic_time() + CURSOR_SCROLL_USEC;
 }
 
 static void select_path(SfePane* self, GtkTreePath* path)
@@ -889,7 +894,9 @@ static bool user_input(void)
 /* Remembers where the user scrolled to. A view pulls itself back from the
  * empty space after the files when it re-measures (the window resized,
  * lost or got the focus: it keeps the last row in view); with no input
- * from the user that is undone. */
+ * from the user that is undone. Not while a keyboard cursor move scrolls:
+ * its animation frames come without input, and undoing one stopped gg a
+ * few lines up (cursor_scrolls()). */
 static void on_scroll_value(GtkAdjustment* adjustment, gpointer data)
 {
     SfePane* self = data;
@@ -900,7 +907,8 @@ static void on_scroll_value(GtkAdjustment* adjustment, gpointer data)
     double wanted = self->scroll_wanted[which];
     double page = gtk_adjustment_get_page_size(adjustment);
     bool was_in_space = self->content_end[which] > 0 && wanted > self->content_end[which] - page;
-    if (was_in_space && value < wanted && !user_input()) {
+    bool cursor_moving = g_get_monotonic_time() < self->cursor_scroll_until;
+    if (was_in_space && value < wanted && !user_input() && !cursor_moving) {
         self->padding = true;
         gtk_adjustment_set_value(adjustment, MIN(wanted, gtk_adjustment_get_upper(adjustment) - page));
         self->padding = false;

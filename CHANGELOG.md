@@ -8,7 +8,7 @@ new version.
 
 - `gg` (and other cursor keys) scroll back to the cursor when the view was
   scrolled into the empty space after the files; `gg` only selected the
-  first item.
+  first item, or stopped a few lines up on fast screens.
 - Thumbnails come back after F5 in the list view while it is scrolled into
   the empty space after the files (they showed plain icons until the view
   was scrolled).
