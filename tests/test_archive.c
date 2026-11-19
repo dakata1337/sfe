@@ -19,12 +19,6 @@ static char* fake_find(const char* name)
 
 static void test_names(void)
 {
-    g_assert_true(sfe_archive_is_archive("a.tar.gz"));
-    g_assert_true(sfe_archive_is_archive("A.ZIP"));
-    g_assert_true(sfe_archive_is_archive("x.7z"));
-    g_assert_false(sfe_archive_is_archive("notes.txt"));
-    g_assert_false(sfe_archive_is_archive(".zip")); /* nothing before the extension */
-
     struct {
         const char *name, *folder;
     } cases[] = {
@@ -32,7 +26,8 @@ static void test_names(void)
         { "backup.TGZ", "backup" },
         { "music.zip", "music" },
         { "v1.2.rar", "v1.2" },
-        { "readme.txt", "readme.txt" },
+        { "readme.txt", "readme.txt" }, /* not an archive: the name stays */
+        { ".zip", ".zip" }, /* nothing before the extension */
     };
     for (size_t i = 0; i < G_N_ELEMENTS(cases); i++) {
         g_autofree char* folder = sfe_archive_folder_name(cases[i].name);

@@ -66,11 +66,6 @@ static Format format_of(const char* name, size_t* ext_len)
     return FORMAT_NONE;
 }
 
-bool sfe_archive_is_archive(const char* name)
-{
-    return format_of(name, NULL) != FORMAT_NONE;
-}
-
 char* sfe_archive_folder_name(const char* name)
 {
     size_t ext_len = 0;

@@ -24,9 +24,6 @@
 /* Looks up a program in PATH (g_find_program_in_path); replaceable in tests. */
 typedef char* (*SfeFindProgram)(const char* name);
 
-/* Whether the name has an extension sfe knows how to extract. */
-bool sfe_archive_is_archive(const char* name);
-
 /* The folder an archive extracts into: "photos.tar.gz" -> "photos". */
 char* sfe_archive_folder_name(const char* name);
 

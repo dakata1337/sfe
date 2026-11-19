@@ -60,13 +60,6 @@ SfeUndoEntry* sfe_undo_record(SfeUndoKind kind, GPtrArray* pairs)
     return e;
 }
 
-SfeUndoEntry* sfe_undo_record_one(SfeUndoKind kind, GFile* before, GFile* after)
-{
-    GPtrArray* pairs = g_ptr_array_new_with_free_func(pair_free);
-    g_ptr_array_add(pairs, sfe_undo_pair_new(before, after));
-    return sfe_undo_record(kind, pairs);
-}
-
 SfeUndoEntry* sfe_undo_record_renames(GFile** files, char** names, int n)
 {
     GPtrArray* pairs = g_ptr_array_new_with_free_func(pair_free);

@@ -187,9 +187,14 @@ static void test_history(void)
     g_assert_null(sfe_undo_record(SFE_UNDO_COPY, g_ptr_array_new())); /* nothing done, nothing kept */
 
     g_autoptr(GFile) f = at("history/f");
-    guint first_id = sfe_undo_record_one(SFE_UNDO_CREATE, NULL, f)->id;
-    for (int i = 0; i < SFE_UNDO_MAX; i++)
-        sfe_undo_record_one(SFE_UNDO_LINK, NULL, f);
+    GPtrArray* one = g_ptr_array_new();
+    g_ptr_array_add(one, sfe_undo_pair_new(NULL, f));
+    guint first_id = sfe_undo_record(SFE_UNDO_CREATE, one)->id;
+    for (int i = 0; i < SFE_UNDO_MAX; i++) {
+        GPtrArray* link = g_ptr_array_new();
+        g_ptr_array_add(link, sfe_undo_pair_new(NULL, f));
+        sfe_undo_record(SFE_UNDO_LINK, link);
+    }
     GPtrArray* all = sfe_undo_entries();
     g_assert_cmpuint(all->len, ==, SFE_UNDO_MAX);
     g_assert_null(sfe_undo_find(first_id)); /* the oldest went */

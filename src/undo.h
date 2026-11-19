@@ -56,7 +56,6 @@ SfeUndoPair* sfe_undo_pair_new(GFile* before, GFile* after);
 /* Adds an entry and takes `pairs` (SfeUndoPair*); nothing is recorded for
  * an empty list (NULL is returned). */
 SfeUndoEntry* sfe_undo_record(SfeUndoKind kind, GPtrArray* pairs);
-SfeUndoEntry* sfe_undo_record_one(SfeUndoKind kind, GFile* before, GFile* after);
 
 /* Records a rename done with sfe_rename_files() (unchanged names skipped). */
 SfeUndoEntry* sfe_undo_record_renames(GFile** files, char** names, int n);
