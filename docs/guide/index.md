@@ -421,8 +421,8 @@ counted in the background, folders included).
 | `d` | `cut` | cut the selection |
 | `<Esc>` | `visual off` | leave visual mode |
 
-`y` and `d` run at once; typing them twice out of habit (`yy`, `dd`) does
-the same, as the repeat is dropped. Other keys work as in normal mode:
+`y` and `d` act on the selection at once and end visual mode, so a second
+`y` or `d` starts a normal-mode chord. Other keys work as in normal mode:
 `x` trashes the selection, `r` / `R`
 rename it, `:` opens the command line for it. Anything that acts on the
 files ends visual mode and clears the selection (*Settings → General →

@@ -417,10 +417,3 @@ SfeKeysResult sfe_keymap_lookup_layered(const SfeKeymap* first, const SfeKeymap*
         return SFE_KEYS_MATCH;
     return longer ? SFE_KEYS_PREFIX : SFE_KEYS_NONE;
 }
-
-bool sfe_keymap_repeat_shadowed(const SfeKeymap* then, const char* token)
-{
-    char* twice[] = { (char*)token, (char*)token, NULL };
-    bool prefix = false;
-    return sfe_keymap_lookup(then, twice, 2, NULL, &prefix) != SFE_KEYS_NONE;
-}

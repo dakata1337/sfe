@@ -193,11 +193,10 @@ static bool reaches(const SfeKeymap* first, const SfeKeymap* then, const char* s
     return true;
 }
 
-/* Every built-in key works in normal mode and in visual mode. In visual
- * mode a visual key runs at once, so a normal chord starting with it is
- * cut short; that is only allowed for a key typed twice ("yy" after the
- * visual "y"), whose repeat the window swallows. Anything else (a visual
- * "g" with a normal "gh") would leave keys behind for the next chord. */
+/* Every built-in key works in normal mode, and every visual key in visual
+ * mode. There a visual key runs at once, so the only normal chords cut short
+ * are the ones starting with a visual key: "yy" and "dd" (y and d act in
+ * visual mode). Any other would be a new clash. */
 static void test_layered(void)
 {
     g_autoptr(SfeKeymap) normal = sfe_keymap_new_default();
@@ -214,9 +213,8 @@ static void test_layered(void)
         guint len = g_strv_length(tokens);
         sfe_keymap_lookup(visual, tokens, len, &own, NULL);
         if (!reaches(visual, normal, d[i].sequence, own ? own : d[i].command, &at)) {
-            if (!(len == 2 && at == 1 && strcmp(tokens[0], tokens[1]) == 0))
+            if (!(len == 2 && at == 1 && (strcmp(d[i].sequence, "yy") == 0 || strcmp(d[i].sequence, "dd") == 0)))
                 g_error("in visual mode “%s” is cut short after %u key(s)", d[i].sequence, at);
-            g_assert_true(sfe_keymap_repeat_shadowed(normal, tokens[0]));
         }
     }
     for (size_t i = 0; i < nv; i++)
@@ -231,7 +229,6 @@ static void test_layered(void)
     g_assert_false(prefix);
     char* g[] = { "g", NULL };
     g_assert_cmpint(sfe_keymap_lookup_layered(visual, normal, g, 1, NULL, NULL), ==, SFE_KEYS_PREFIX);
-    g_assert_false(sfe_keymap_repeat_shadowed(normal, "j"));
 }
 
 int main(int argc, char** argv)
