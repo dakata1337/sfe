@@ -7,6 +7,9 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Properties: the permission check boxes work on your own read-only files
+  (mode 0444). They were greyed out unless the file was writable, though
+  the owner may always change permissions; now they follow ownership.
 - Saving several files at once through sfe's file dialog (the portal's
   SaveFiles) no longer lets the program overwrite files already in the
   chosen folder: those get free names such as `photo (2).jpg`, as when

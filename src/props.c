@@ -3,11 +3,12 @@
 #include "dialogs.h"
 #include <stdbool.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #define SIZE_REFRESH_MS 200
 #define INFO_ATTRIBUTES                                                        \
     "standard::*,time::modified,time::access,time::created,unix::mode,"        \
-    "owner::user,owner::group,access::can-write"
+    "owner::user,owner::group,unix::uid"
 
 /* ------------------------------------------------------------------------ */
 /* Background size count                                                     */
@@ -203,7 +204,9 @@ static void add_permissions(GtkGrid* grid, int* row, GtkWidget* dialog, GFile* f
         { S_IROTH, S_IWOTH, S_IXOTH },
     };
     PermState* ps = g_new0(PermState, 1);
-    bool editable = g_file_info_get_attribute_boolean(info, G_FILE_ATTRIBUTE_ACCESS_CAN_WRITE);
+    /* Only the owner (or root) may chmod, whether or not the file is writable. */
+    guint32 uid = g_file_info_get_attribute_uint32(info, G_FILE_ATTRIBUTE_UNIX_UID);
+    bool editable = g_file_info_has_attribute(info, G_FILE_ATTRIBUTE_UNIX_UID) && (uid == getuid() || getuid() == 0);
 
     ps->file = g_object_ref(file);
     ps->mode = g_file_info_get_attribute_uint32(info, G_FILE_ATTRIBUTE_UNIX_MODE) & 07777;
