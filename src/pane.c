@@ -911,11 +911,13 @@ static gboolean on_fit_columns(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
-/* Not during the allocation itself: hiding a column relays the list out. */
+/* Not during the allocation itself: hiding a column relays the list out.
+ * Ahead of GtkTreeView's row measuring, which in a big folder keeps the
+ * default idle priority waiting for half a minute after a resize. */
 static void schedule_fit_columns(SfePane* self)
 {
     if (self->columns_source == 0)
-        self->columns_source = g_idle_add(on_fit_columns, self);
+        self->columns_source = g_idle_add_full(G_PRIORITY_HIGH_IDLE, on_fit_columns, self, NULL);
 }
 
 static void on_list_allocated(GtkWidget* list, GdkRectangle* alloc, gpointer data)

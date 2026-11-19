@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- In a folder of very many files, the list view hides Size, Modified and Type
+  again when the window gets narrower. After a resize, GTK spends up to half a
+  minute measuring the rows in the background, and the column check waited
+  behind it, so the columns stayed and the names were squeezed to "a…xt".
 - Views of the same folder share its contents: a new split on a folder that
   is already open no longer reads it again or keeps a second copy of its
   files. A new split of a 100,000-file folder takes 8 MB more instead of
