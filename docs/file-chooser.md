@@ -133,7 +133,9 @@ makes the next dialog start the installed one.
   visual mode (`v`) are off.
 - Save with the suggested name and folder; replacing an existing file asks
   first. "Save as" for an existing file starts there.
-- SaveFiles (saving several files at once into a folder).
+- SaveFiles (saving several files at once into a folder). The program
+  writes without asking, so a name that already exists in the folder gets
+  a free one instead (`photo (2).jpg`).
 - The request's title and button label (with its mnemonic, GTK programs
   send `_Open`); closing the request (the program gave up) closes sfe.
 - **File type filters** (`filters`, `current_filter`): a drop-down in the
