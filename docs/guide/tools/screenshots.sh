@@ -241,6 +241,7 @@ shot_menu() { # NAME X Y WIDTH HEIGHT
     fi
     target=$(window_of "$P" largest)
     dispatch 'hl.dsp.workspace.toggle_special("magic")'
+    MAGIC_SHOWN=1 # finish() hides it again if anything below fails
     sleep 0.5
     dispatch "hl.dsp.focus({ window = \"address:$target\" })"
     sleep 0.3
@@ -253,10 +254,14 @@ shot_menu() { # NAME X Y WIDTH HEIGHT
     grim -g "$((x + $2)),$((y + $3)) ${4}x${5}" "$OUT/$1.png"
     key "" Escape
     dispatch 'hl.dsp.workspace.toggle_special("magic")'
+    MAGIC_SHOWN=0
 }
 
 # Puts back what was in the clipboard and removes the work files.
 finish() {
+    if [ "${MAGIC_SHOWN:-0}" = 1 ]; then
+        dispatch 'hl.dsp.workspace.toggle_special("magic")'
+    fi
     stop_sfe
     if [ -n "$CLIP_TYPE" ]; then
         # (wl-copy stays in the background serving it: keep it off our output)
