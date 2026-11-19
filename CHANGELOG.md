@@ -7,6 +7,11 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Split views of the same folder hide Size, Modified and Type at the same
+  window width. Each view learned a column's width only once it had shown
+  it and guessed 90 px before, so a split opened narrow (Type never shown)
+  disagreed with the other one. The widths now come from the texts: the
+  widest type in the folder and fixed samples for size and date.
 - In a folder of very many files, the list view hides Size, Modified and Type
   again when the window gets narrower. After a resize, GTK spends up to half a
   minute measuring the rows in the background, and the column check waited

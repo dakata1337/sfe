@@ -81,7 +81,7 @@ struct _SfePane {
 
     /* List columns that make way for the names in a narrow view. */
     int name_width; /* widest name in pixels (capped), -1 to measure again */
-    int column_width[4]; /* by SfeSortKey: last width seen while shown */
+    int column_width[4]; /* by SfeSortKey: what Size, Modified and Type need */
     int columns_for_width; /* list width the columns were fitted to */
     guint columns_source;
 
@@ -839,27 +839,59 @@ static void on_scroll_range(GtkAdjustment* adjustment, gpointer data)
 /* ------------------------------------------------------------------------ */
 
 #define NAME_CHARS_CAP 40 /* a longer name is not worth dropping columns for */
+#define COLUMN_ARROW 20 /* a header's sort arrow and its gap */
+#define COLUMN_PADDING 16 /* a cell's xpad on both sides, and GTK's own */
 
-/* The widest name shown, capped at about NAME_CHARS_CAP characters. */
-static int measure_names(SfePane* self)
+static int text_width(PangoLayout* layout, const char* text)
+{
+    int w = 0;
+    pango_layout_set_text(layout, text, -1);
+    pango_layout_get_pixel_size(layout, &w, NULL);
+    return w;
+}
+
+/* The widest name shown (capped at about NAME_CHARS_CAP characters), and
+ * what Size, Modified and Type need: worked out from their texts, so every
+ * view of a folder comes to the same widths whatever it has shown before. */
+static void measure_columns(SfePane* self)
 {
     GtkTreeModel* model = sfe_dir_model_get_model(self->model);
     GtkTreeIter iter;
     PangoLayout* layout = gtk_widget_create_pango_layout(self->list, NULL);
-    int cap = 0, widest = 0, w = 0;
+    g_autoptr(GHashTable) types = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    int cap = text_width(layout, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN");
+    int widest = 0;
 
-    pango_layout_set_text(layout, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN", NAME_CHARS_CAP);
-    pango_layout_get_pixel_size(layout, &cap, NULL);
-    for (bool ok = model && gtk_tree_model_get_iter_first(model, &iter); ok && widest < cap;
-         ok = gtk_tree_model_iter_next(model, &iter)) {
+    for (bool ok = model && gtk_tree_model_get_iter_first(model, &iter); ok; ok = gtk_tree_model_iter_next(model, &iter)) {
         g_autofree char* name = NULL;
-        gtk_tree_model_get(model, &iter, SFE_COL_NAME, &name, -1);
-        pango_layout_set_text(layout, name ? name : "", -1);
-        pango_layout_get_pixel_size(layout, &w, NULL);
-        widest = MAX(widest, w);
+        char* type = NULL;
+        gtk_tree_model_get(model, &iter, SFE_COL_NAME, widest < cap ? &name : NULL, SFE_COL_TYPE_TEXT, &type, -1);
+        if (name != NULL)
+            widest = MAX(widest, text_width(layout, name));
+        if (type != NULL)
+            g_hash_table_add(types, type); /* takes it */
+    }
+    self->name_width = MIN(widest, cap);
+
+    /* A cell's text, or the header with its sort arrow, plus the paddings. */
+    static const char* const samples[][3] = {
+        [SFE_SORT_SIZE] = { "888.8 MB", "999 bytes", NULL },
+        [SFE_SORT_MODIFIED] = { "8888-88-88 88:88", NULL, NULL },
+    };
+    for (int key = SFE_SORT_SIZE; key <= SFE_SORT_TYPE; key++) {
+        int w = text_width(layout, gtk_tree_view_column_get_title(self->columns[key])) + COLUMN_ARROW;
+        for (int i = 0; key != SFE_SORT_TYPE && i < 3 && samples[key][i] != NULL; i++)
+            w = MAX(w, text_width(layout, samples[key][i]));
+        if (key == SFE_SORT_TYPE) {
+            GHashTableIter it;
+            gpointer type;
+            g_hash_table_iter_init(&it, types);
+            while (g_hash_table_iter_next(&it, &type, NULL))
+                w = MAX(w, text_width(layout, type));
+        }
+        self->column_width[key] = w + COLUMN_PADDING;
     }
     g_object_unref(layout);
-    return MIN(widest, cap);
 }
 
 /* Shows Size, Modified and Type only while the names still fit beside
@@ -871,13 +903,7 @@ static void fit_columns(SfePane* self)
     if (self->view != SFE_VIEW_LIST || width <= 1)
         return;
     if (self->name_width < 0)
-        self->name_width = measure_names(self);
-
-    for (size_t i = 0; i < G_N_ELEMENTS(extras); i++) { /* widths of the shown ones, for later */
-        GtkTreeViewColumn* c = self->columns[extras[i]];
-        if (gtk_tree_view_column_get_visible(c) && gtk_tree_view_column_get_width(c) > 0)
-            self->column_width[extras[i]] = gtk_tree_view_column_get_width(c);
-    }
+        measure_columns(self);
     const SfeConfig* cfg = sfe_config();
     int icon = (int)lround(LIST_ICON_SIZE * cfg->ui_scale);
     int name_needed = self->name_width + icon + 32; /* icon, paddings, a little air */
@@ -885,7 +911,7 @@ static void fit_columns(SfePane* self)
     for (;;) {
         int used = name_needed;
         for (int i = 0; i < keep; i++)
-            used += self->column_width[extras[i]] > 0 ? self->column_width[extras[i]] : 90;
+            used += self->column_width[extras[i]];
         if (keep == 0 || used <= width)
             break;
         keep--;
