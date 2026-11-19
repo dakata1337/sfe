@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- List view in a folder with long names: no more "value location passed as
+  NULL" warnings, and the Type column is measured from every file (3.0.0
+  stopped reading types once a name reached the width cap).
+
 ## 3.0.0
 
 - Split views of the same folder hide Size, Modified and Type at the same

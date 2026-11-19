@@ -865,8 +865,8 @@ static void measure_columns(SfePane* self)
     for (bool ok = model && gtk_tree_model_get_iter_first(model, &iter); ok; ok = gtk_tree_model_iter_next(model, &iter)) {
         g_autofree char* name = NULL;
         char* type = NULL;
-        gtk_tree_model_get(model, &iter, SFE_COL_NAME, widest < cap ? &name : NULL, SFE_COL_TYPE_TEXT, &type, -1);
-        if (name != NULL)
+        gtk_tree_model_get(model, &iter, SFE_COL_NAME, &name, SFE_COL_TYPE_TEXT, &type, -1);
+        if (name != NULL && widest < cap)
             widest = MAX(widest, text_width(layout, name));
         if (type != NULL)
             g_hash_table_add(types, type); /* takes it */
