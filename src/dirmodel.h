@@ -27,11 +27,6 @@ enum {
     SFE_COL_FILE, /* GFile* */
     SFE_COL_INFO, /* GFileInfo* */
     SFE_COL_NAME, /* display name */
-    SFE_COL_ICON, /* cairo_surface_t*, grid size */
-    SFE_COL_ICON_SMALL, /* cairo_surface_t*, list size */
-    SFE_COL_SIZE_TEXT,
-    SFE_COL_MTIME_TEXT,
-    SFE_COL_TYPE_TEXT,
     SFE_COL_IS_DIR, /* gboolean */
     SFE_N_COLUMNS,
 };
@@ -104,3 +99,7 @@ GtkTreePath* sfe_dir_model_find(SfeDirModel* self, const char* name);
 /* The file at a path of the displayed model (new reference). */
 GFile* sfe_dir_model_file_at(SfeDirModel* self, GtkTreePath* path);
 GFileInfo* sfe_dir_model_info_at(SfeDirModel* self, GtkTreePath* path);
+/* What a row shows, computed when it is drawn: its picture (a new
+ * reference, grid or list size) and a column's text (free it). */
+cairo_surface_t* sfe_dir_model_icon(SfeDirModel* self, GFileInfo* info, bool grid);
+char* sfe_dir_model_text(GFileInfo* info, SfeSortKey key);

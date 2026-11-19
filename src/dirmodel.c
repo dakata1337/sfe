@@ -172,52 +172,69 @@ static cairo_surface_t* with_folder_badge(cairo_surface_t* cover, GFileInfo* inf
     return out;
 }
 
-/* The row's picture: its thumbnail if it has one, else the theme icon. */
+/* The row's picture: its thumbnail if it has one, else the theme icon.
+ * Returns a new reference. A thumbnail is scaled once per size and kept on
+ * the pixbuf, since rows are drawn from this on every paint. */
 static cairo_surface_t* icon_for(Folder* f, GFileInfo* info, int size)
 {
-    gpointer thumb = g_hash_table_lookup(f->thumbs, g_file_info_get_name(info));
+    gpointer thumb = f->thumbs ? g_hash_table_lookup(f->thumbs, g_file_info_get_name(info)) : NULL;
     if (thumb != NULL && thumb != NO_THUMB) {
-        cairo_surface_t* surface = thumb_surface(thumb, size, f->scale);
-        return info_is_dir(info) ? with_folder_badge(surface, info, f->dir, size, f->scale) : surface;
+        char key[32];
+        g_snprintf(key, sizeof key, "sfe-%d@%d", size, f->scale);
+        cairo_surface_t* surface = g_object_get_data(thumb, key);
+        if (surface == NULL) {
+            surface = thumb_surface(thumb, size, f->scale);
+            if (info_is_dir(info))
+                surface = with_folder_badge(surface, info, f->dir, size, f->scale);
+            g_object_set_data_full(thumb, key, surface, (GDestroyNotify)cairo_surface_destroy);
+        }
+        return cairo_surface_reference(surface);
     }
     return sfe_icon_for_info(info, f->dir, size, f->scale);
 }
 
-static void set_icons(Folder* f, GtkListStore* store, GtkTreeIter* iter, GFileInfo* info)
+cairo_surface_t* sfe_dir_model_icon(SfeDirModel* self, GFileInfo* info, bool grid)
 {
-    cairo_surface_t* big = icon_for(f, info, f->grid_size);
-    cairo_surface_t* small = icon_for(f, info, f->list_size);
+    Folder* f = self->folder;
+    if (f == NULL)
+        return NULL;
+    return icon_for(f, info, grid ? f->grid_size : f->list_size);
+}
 
-    gtk_list_store_set(store, iter, SFE_COL_ICON, big, SFE_COL_ICON_SMALL, small, -1);
-    cairo_surface_destroy(big);
-    cairo_surface_destroy(small);
+char* sfe_dir_model_text(GFileInfo* info, SfeSortKey key)
+{
+    bool is_dir = info_is_dir(info);
+    switch (key) {
+    case SFE_SORT_SIZE:
+        return is_dir ? g_strdup("") : g_format_size(g_file_info_get_size(info));
+    case SFE_SORT_MODIFIED:
+        return format_mtime(info);
+    case SFE_SORT_TYPE:
+        return g_strdup(is_dir ? "Folder" : type_description(info));
+    case SFE_SORT_NAME:
+        break;
+    }
+    return g_strdup(g_file_info_get_display_name(info));
+}
+
+/* The views draw icons from sfe_dir_model_icon(); tell them a row changed. */
+static void row_changed(GtkListStore* store, GtkTreeIter* iter)
+{
+    g_autoptr(GtkTreePath) path = gtk_tree_model_get_path(GTK_TREE_MODEL(store), iter);
+    gtk_tree_model_row_changed(GTK_TREE_MODEL(store), path, iter);
 }
 
 /* Writes a whole row in one call, so a new row is inserted complete: an empty
  * row that is filled in later confuses GtkTreeModelFilter. */
 static void store_row(Folder* f, GtkListStore* store, GtkTreeIter* iter, bool insert, GFileInfo* info)
 {
-    bool is_dir = info_is_dir(info);
     g_autoptr(GFile) file = g_file_get_child(f->dir, g_file_info_get_name(info));
-    g_autofree char* size = is_dir ? g_strdup("") : g_format_size(g_file_info_get_size(info));
-    g_autofree char* mtime = format_mtime(info);
-    cairo_surface_t* big = icon_for(f, info, f->grid_size);
-    cairo_surface_t* small = icon_for(f, info, f->list_size);
-
-    int columns[] = {
-        SFE_COL_FILE, SFE_COL_INFO, SFE_COL_NAME, SFE_COL_ICON, SFE_COL_ICON_SMALL,
-        SFE_COL_SIZE_TEXT, SFE_COL_MTIME_TEXT, SFE_COL_TYPE_TEXT, SFE_COL_IS_DIR,
-    };
+    int columns[] = { SFE_COL_FILE, SFE_COL_INFO, SFE_COL_NAME, SFE_COL_IS_DIR };
     GValue values[G_N_ELEMENTS(columns)] = { G_VALUE_INIT };
     g_value_set_object(g_value_init(&values[0], G_TYPE_FILE), file);
     g_value_set_object(g_value_init(&values[1], G_TYPE_FILE_INFO), info);
     g_value_set_string(g_value_init(&values[2], G_TYPE_STRING), g_file_info_get_display_name(info));
-    g_value_take_boxed(g_value_init(&values[3], CAIRO_GOBJECT_TYPE_SURFACE), big);
-    g_value_take_boxed(g_value_init(&values[4], CAIRO_GOBJECT_TYPE_SURFACE), small);
-    g_value_set_string(g_value_init(&values[5], G_TYPE_STRING), size);
-    g_value_set_string(g_value_init(&values[6], G_TYPE_STRING), mtime);
-    g_value_set_string(g_value_init(&values[7], G_TYPE_STRING), is_dir ? "Folder" : type_description(info));
-    g_value_set_boolean(g_value_init(&values[8], G_TYPE_BOOLEAN), is_dir);
+    g_value_set_boolean(g_value_init(&values[3], G_TYPE_BOOLEAN), info_is_dir(info));
 
     if (insert)
         gtk_list_store_insert_with_valuesv(store, iter, -1, columns, values, G_N_ELEMENTS(columns));
@@ -346,14 +363,13 @@ static void each_store(Folder* f, void (*fn)(Folder*, GtkListStore*))
 
 static void refresh_store_icons(Folder* f, GtkListStore* store)
 {
+    (void)f;
     GtkTreeIter iter;
     if (!gtk_tree_model_get_iter_first(GTK_TREE_MODEL(store), &iter))
         return;
-    do {
-        g_autoptr(GFileInfo) info = NULL;
-        gtk_tree_model_get(GTK_TREE_MODEL(store), &iter, SFE_COL_INFO, &info, -1);
-        set_icons(f, store, &iter, info);
-    } while (gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter));
+    do
+        row_changed(store, &iter);
+    while (gtk_tree_model_iter_next(GTK_TREE_MODEL(store), &iter));
 }
 
 static void refresh_icons(Folder* f)
@@ -453,9 +469,7 @@ static void sort_store(Folder* f, GtkListStore* store)
 static GtkListStore* new_store(void)
 {
     return gtk_list_store_new(SFE_N_COLUMNS,
-        G_TYPE_FILE, G_TYPE_FILE_INFO, G_TYPE_STRING,
-        CAIRO_GOBJECT_TYPE_SURFACE, CAIRO_GOBJECT_TYPE_SURFACE,
-        G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING, G_TYPE_BOOLEAN);
+        G_TYPE_FILE, G_TYPE_FILE_INFO, G_TYPE_STRING, G_TYPE_BOOLEAN);
 }
 
 static GHashTable* new_rows(void)
@@ -1094,12 +1108,12 @@ void sfe_dir_model_set_thumbnail(SfeDirModel* self, GFile* file, GdkPixbuf* pixb
         return;
     GtkTreeIter* iter = g_hash_table_lookup(f->rows, name);
     if (iter != NULL)
-        set_icons(f, f->store, iter, info);
+        row_changed(f->store, iter);
     for (GList* l = f->models; l != NULL; l = l->next) {
         SfeDirModel* m = l->data;
         iter = m->folder == f && m->own_store ? g_hash_table_lookup(m->own_rows, name) : NULL;
         if (iter != NULL)
-            set_icons(f, m->own_store, iter, info);
+            row_changed(m->own_store, iter);
     }
 }
 

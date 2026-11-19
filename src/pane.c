@@ -866,12 +866,12 @@ static void measure_columns(SfePane* self)
 
     for (bool ok = model && gtk_tree_model_get_iter_first(model, &iter); ok; ok = gtk_tree_model_iter_next(model, &iter)) {
         g_autofree char* name = NULL;
-        char* type = NULL;
-        gtk_tree_model_get(model, &iter, SFE_COL_NAME, &name, SFE_COL_TYPE_TEXT, &type, -1);
+        g_autoptr(GFileInfo) info = NULL;
+        gtk_tree_model_get(model, &iter, SFE_COL_NAME, &name, SFE_COL_INFO, &info, -1);
         if (name != NULL && widest < cap)
             widest = MAX(widest, text_width(layout, name));
-        if (type != NULL)
-            g_hash_table_add(types, type); /* takes it */
+        if (info != NULL)
+            g_hash_table_add(types, sfe_dir_model_text(info, SFE_SORT_TYPE)); /* takes it */
     }
     self->name_width = MIN(widest, cap);
 
@@ -2144,6 +2144,30 @@ static void on_grid_realized(GtkWidget* grid, gpointer data)
         | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK);
 }
 
+/* Rows hold only the file; icons and texts are made when a row is drawn. */
+static void icon_cell(GtkCellLayout* layout, GtkCellRenderer* cell, GtkTreeModel* model, GtkTreeIter* iter, gpointer data)
+{
+    (void)layout;
+    SfePane* self = data;
+    g_autoptr(GFileInfo) info = NULL;
+    gtk_tree_model_get(model, iter, SFE_COL_INFO, &info, -1);
+    bool grid = g_object_get_data(G_OBJECT(cell), "sfe-grid") != NULL;
+    cairo_surface_t* surface = info ? sfe_dir_model_icon(self->model, info, grid) : NULL;
+    g_object_set(cell, "surface", surface, NULL);
+    if (surface)
+        cairo_surface_destroy(surface);
+}
+
+static void text_cell(GtkTreeViewColumn* column, GtkCellRenderer* cell, GtkTreeModel* model, GtkTreeIter* iter, gpointer data)
+{
+    (void)data;
+    g_autoptr(GFileInfo) info = NULL;
+    gtk_tree_model_get(model, iter, SFE_COL_INFO, &info, -1);
+    g_autofree char* text = info ? sfe_dir_model_text(info,
+        GPOINTER_TO_INT(g_object_get_data(G_OBJECT(column), "sfe-sort-key"))) : NULL;
+    g_object_set(cell, "text", text, NULL);
+}
+
 static GtkWidget* build_grid(SfePane* self)
 {
     GtkWidget* grid = gtk_icon_view_new();
@@ -2157,7 +2181,8 @@ static GtkWidget* build_grid(SfePane* self)
     gtk_icon_view_set_column_spacing(GTK_ICON_VIEW(grid), 4);
 
     gtk_cell_layout_pack_start(layout, icon, FALSE);
-    gtk_cell_layout_add_attribute(layout, icon, "surface", SFE_COL_ICON);
+    g_object_set_data(G_OBJECT(icon), "sfe-grid", GINT_TO_POINTER(1));
+    gtk_cell_layout_set_cell_data_func(layout, icon, icon_cell, self, NULL);
 
     /* Long names wrap, but without Pango's hyphens ("wallpaper.pn-g"). */
     PangoAttrList* attrs = pango_attr_list_new();
@@ -2186,10 +2211,16 @@ static GtkWidget* build_grid(SfePane* self)
 }
 
 static GtkTreeViewColumn* add_text_column(SfePane* self, GtkWidget* list, const char* title,
-    int text_col, SfeSortKey key, float xalign)
+    SfeSortKey key, float xalign)
 {
     GtkCellRenderer* text = gtk_cell_renderer_text_new();
-    GtkTreeViewColumn* column = gtk_tree_view_column_new_with_attributes(title, text, "text", text_col, NULL);
+    GtkTreeViewColumn* column = gtk_tree_view_column_new();
+    gtk_tree_view_column_set_title(column, title);
+    gtk_tree_view_column_pack_start(column, text, TRUE);
+    if (key == SFE_SORT_NAME)
+        gtk_tree_view_column_add_attribute(column, text, "text", SFE_COL_NAME);
+    else
+        gtk_tree_view_column_set_cell_data_func(column, text, text_cell, NULL, NULL);
 
     g_object_set(text, "xalign", xalign, "ypad", ROW_PADDING, "xpad", 6, NULL);
     /* Not resizable by hand: a dragged width sticks and breaks fit_columns(). */
@@ -2212,7 +2243,7 @@ static GtkWidget* build_list(SfePane* self)
     gtk_tree_selection_set_mode(gtk_tree_view_get_selection(tree), GTK_SELECTION_MULTIPLE);
 
     /* Name: icon + text in one column. */
-    GtkTreeViewColumn* name = add_text_column(self, list, "Name", SFE_COL_NAME, SFE_SORT_NAME, 0.0f);
+    GtkTreeViewColumn* name = add_text_column(self, list, "Name", SFE_SORT_NAME, 0.0f);
     GtkCellRenderer* icon = gtk_cell_renderer_pixbuf_new();
     g_object_set(icon, "ypad", ROW_PADDING, "xpad", 4, NULL);
     GList* cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(name));
@@ -2220,13 +2251,13 @@ static GtkWidget* build_list(SfePane* self)
     gtk_cell_layout_set_cell_data_func(GTK_CELL_LAYOUT(name), cells->data, name_cell, self, NULL);
     g_list_free(cells);
     gtk_tree_view_column_pack_start(name, icon, FALSE);
-    gtk_tree_view_column_add_attribute(name, icon, "surface", SFE_COL_ICON_SMALL);
+    gtk_cell_layout_set_cell_data_func(GTK_CELL_LAYOUT(name), icon, icon_cell, self, NULL);
     gtk_cell_layout_reorder(GTK_CELL_LAYOUT(name), icon, 0);
     gtk_tree_view_column_set_expand(name, TRUE);
 
-    add_text_column(self, list, "Size", SFE_COL_SIZE_TEXT, SFE_SORT_SIZE, 1.0f);
-    add_text_column(self, list, "Modified", SFE_COL_MTIME_TEXT, SFE_SORT_MODIFIED, 0.0f);
-    add_text_column(self, list, "Type", SFE_COL_TYPE_TEXT, SFE_SORT_TYPE, 0.0f);
+    add_text_column(self, list, "Size", SFE_SORT_SIZE, 1.0f);
+    add_text_column(self, list, "Modified", SFE_SORT_MODIFIED, 0.0f);
+    add_text_column(self, list, "Type", SFE_SORT_TYPE, 0.0f);
 
     /* PROTOTYPE: fixed-height mode. GtkTreeView then measures one row instead
      * of all of them; every column needs a fixed width. */
