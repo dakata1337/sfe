@@ -252,12 +252,35 @@ static void test_cancel_from_question(void)
     remove_root(root);
 }
 
+/* "Replace" with a copy that fails keeps the file it was to replace (it
+ * used to be deleted before the copy started). */
+static void test_failed_replace_keeps_old(void)
+{
+    g_autofree char* root = make_root();
+    write_file(root, "src/b.txt", "new");
+    write_file(root, "dst/b.txt", "old");
+    g_autofree char* src_path = path(root, "src/b.txt");
+    g_assert_cmpint(g_chmod(src_path, 0), ==, 0); /* unreadable: the copy fails */
+    g_autoptr(GFile) b = file_at(root, "src/b.txt");
+    g_autoptr(GFile) dst = file_at(root, "dst");
+    g_autoptr(GList) list = one(b);
+
+    Run run = run_op(SFE_OP_COPY, list, dst, SFE_ANSWER_REPLACE, false);
+    g_assert_cmpint(run.questions, ==, 2); /* the conflict, then the error */
+    g_autofree char* kept = read_file(root, "dst/b.txt");
+    g_assert_cmpstr(kept, ==, "old");
+
+    g_chmod(src_path, 0644);
+    remove_root(root);
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/fileops/numbered-name", test_numbered_name);
     g_test_add_func("/fileops/copy-tree", test_copy_tree);
     g_test_add_func("/fileops/conflicts", test_conflicts);
+    g_test_add_func("/fileops/failed-replace-keeps-old", test_failed_replace_keeps_old);
     g_test_add_func("/fileops/merge-apply-to-all", test_merge_apply_to_all);
     g_test_add_func("/fileops/move-and-delete", test_move_and_delete);
     g_test_add_func("/fileops/cancel", test_cancel_from_question);

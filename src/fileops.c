@@ -291,10 +291,13 @@ typedef enum {
     TARGET_SKIP,
     TARGET_NEW, /* the (possibly renamed) target does not exist */
     TARGET_MERGE, /* both are directories: copy/move into the existing one */
+    TARGET_OVERWRITE, /* both are files: write over the existing one */
 } TargetMode;
 
 /* Decides where `src` goes when `*dest` may already exist. May replace
- * *dest with a renamed sibling, or delete the existing one ("replace"). */
+ * *dest with a renamed sibling. "Replace" overwrites a file in place (GIO
+ * writes a temporary file and renames it over the old one, so a failed copy
+ * leaves the old file); only a folder <-> file replacement deletes first. */
 static TargetMode resolve_target(SfeFileOp* op, GFile* src, GFile** dest)
 {
     GFileType src_type = file_type(src);
@@ -313,6 +316,8 @@ static TargetMode resolve_target(SfeFileOp* op, GFile* src, GFile** dest)
 
     switch (ask(op, SFE_QUESTION_CONFLICT, src, *dest, NULL)) {
     case SFE_ANSWER_REPLACE:
+        if (!src_dir && file_type(*dest) != G_FILE_TYPE_DIRECTORY)
+            return TARGET_OVERWRITE;
         return delete_recursive(op, *dest, false) ? TARGET_NEW : TARGET_SKIP;
     case SFE_ANSWER_RENAME: {
         GFile* renamed = unused_name(*dest, src_dir);
@@ -368,7 +373,8 @@ static bool copy_item(SfeFileOp* op, GFile* src, GFile* dest_in, bool record)
         g_autoptr(GFileInfo) info = g_file_query_info(src, "standard::size", NOFOLLOW, NULL, NULL);
         for (;;) {
             g_autoptr(GError) error = NULL;
-            if (g_file_copy(src, dest, G_FILE_COPY_NOFOLLOW_SYMLINKS | G_FILE_COPY_ALL_METADATA,
+            GFileCopyFlags overwrite = mode == TARGET_OVERWRITE ? G_FILE_COPY_OVERWRITE : G_FILE_COPY_NONE;
+            if (g_file_copy(src, dest, G_FILE_COPY_NOFOLLOW_SYMLINKS | G_FILE_COPY_ALL_METADATA | overwrite,
                     op->cancel, on_copy_progress, op, &error))
                 break;
             if (!retry_after(op, src, error))
@@ -436,6 +442,20 @@ static bool move_item(SfeFileOp* op, GFile* src, GFile* dest_in, bool record)
     }
 
     report(op, "Moving", src, 0);
+    if (mode == TARGET_OVERWRITE) { /* a file over a file: GIO renames, or copies then deletes, itself */
+        for (;;) {
+            g_autoptr(GError) error = NULL;
+            if (g_file_move(src, dest, G_FILE_COPY_NOFOLLOW_SYMLINKS | G_FILE_COPY_ALL_METADATA | G_FILE_COPY_OVERWRITE,
+                    op->cancel, on_copy_progress, op, &error)) {
+                op->done_items++;
+                if (record)
+                    add_result(op, src, dest);
+                return true;
+            }
+            if (!retry_after(op, src, error))
+                return false;
+        }
+    }
     for (;;) {
         g_autoptr(GError) error = NULL;
         /* A rename when possible; across filesystems GIO reports

@@ -7,6 +7,11 @@ release: see the top of that script).
 
 ## Unreleased
 
+- *Replace* no longer deletes the existing file before copying or moving
+  the new one over it. A copy that failed or was cancelled (full disk,
+  unreadable source, an unplugged drive) lost both; now the old file is
+  only replaced once the new one is complete. Replacing a folder with a
+  file, or the other way round, still removes the old one first.
 - A `config.toml` with a syntax error is no longer overwritten. Any change
   made in sfe (a column header click, a bookmark, Settings) used to replace
   the broken file with the defaults, losing bookmarks, keys and custom
