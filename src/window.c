@@ -35,6 +35,10 @@ struct _SfeWindow {
     GtkWidget* chord_box; /* the suggestions above showcmd */
     GtkWidget* hints; /* GtkGrid: what can follow the pending chord */
     guint hints_timeout;
+    GtkWidget* status; /* bottom left, above the command line: notice over mode */
+    GtkWidget* notice; /* "Yanked 3 files (32 MB)", for a few seconds */
+    guint notice_id; /* which notice is showing (sfe_window_show_status()) */
+    guint notice_timeout;
     GtkWidget* mode; /* "VISUAL" while the active view is in visual mode */
     GtkWidget* content; /* panes over the operations bar (and the chooser bar) */
     const SfeChooser* chooser; /* chooser mode (sfe --choose), or NULL */
@@ -213,12 +217,68 @@ static void rebuild_keymap(SfeWindow* win)
     }
 }
 
+/* The status corner shows while it has a notice or the mode. */
+static void update_status(SfeWindow* win)
+{
+    gtk_widget_set_visible(win->status, gtk_widget_get_visible(win->notice) || gtk_widget_get_visible(win->mode));
+}
+
+static gboolean on_notice_timeout(gpointer data)
+{
+    SfeWindow* win = data;
+    win->notice_timeout = 0;
+    gtk_widget_hide(win->notice);
+    update_status(win);
+    return G_SOURCE_REMOVE;
+}
+
+guint sfe_window_show_status(SfeWindow* win, const char* text)
+{
+    gtk_label_set_text(GTK_LABEL(win->notice), text);
+    gtk_widget_show(win->notice);
+    update_status(win);
+    g_clear_handle_id(&win->notice_timeout, g_source_remove);
+    win->notice_timeout = g_timeout_add_seconds(5, on_notice_timeout, win);
+    return ++win->notice_id;
+}
+
+void sfe_window_update_status(SfeWindow* win, guint id, const char* text)
+{
+    if (id == win->notice_id && gtk_widget_get_visible(win->notice))
+        gtk_label_set_text(GTK_LABEL(win->notice), text);
+}
+
+/* Places the status corner above the command line while that is open (its
+ * completion list grows upwards), else at the bottom. */
+static gboolean on_overlay_position(GtkOverlay* overlay, GtkWidget* child, GdkRectangle* alloc, gpointer data)
+{
+    SfeWindow* win = data;
+    if (child != win->status)
+        return FALSE;
+    GtkRequisition natural;
+    gtk_widget_get_preferred_size(child, NULL, &natural);
+    int h = gtk_widget_get_allocated_height(GTK_WIDGET(overlay));
+    int w = gtk_widget_get_allocated_width(GTK_WIDGET(overlay));
+    int below = 0;
+    if (gtk_widget_get_visible(GTK_WIDGET(win->cmdbar))) {
+        int min = 0, nat = 0;
+        gtk_widget_get_preferred_height_for_width(GTK_WIDGET(win->cmdbar), w, &min, &nat);
+        below = MIN(nat, h);
+    }
+    alloc->x = 0;
+    alloc->width = MIN(natural.width, w);
+    alloc->height = natural.height;
+    alloc->y = MAX(0, h - below - natural.height);
+    return TRUE;
+}
+
 /* "VISUAL" in the corner while the active view selects with v. */
 static void update_mode(SfeWindow* win)
 {
     SfePane* pane = sfe_window_get_active_pane(win);
     if (!sfe_pane_in_visual(pane)) {
         gtk_widget_hide(win->mode);
+        update_status(win);
         return;
     }
     GList* files = sfe_pane_get_selected_files(pane);
@@ -228,6 +288,7 @@ static void update_mode(SfeWindow* win)
         sfe_pane_visual_drawing(pane) ? "" : "  (v starts a chunk)");
     gtk_label_set_text(GTK_LABEL(win->mode), text);
     gtk_widget_show(win->mode);
+    update_status(win);
 }
 
 static void on_visual_changed(SfeSplit* split, SfePane* pane, gpointer data)
@@ -509,6 +570,7 @@ static void sfe_window_dispose(GObject* object)
         g_signal_handler_disconnect(sfe_app(), win->config_handler);
         win->config_handler = 0;
     }
+    g_clear_handle_id(&win->notice_timeout, g_source_remove);
     win->ops_bar = NULL; /* destroyed with the window's children */
     if (win->pending != NULL)
         drop_chord(win);
@@ -578,16 +640,27 @@ SfeWindow* sfe_window_new(SfeApplication* app, GFile* dir)
     gtk_widget_set_valign(win->chord_box, GTK_ALIGN_END);
     gtk_widget_set_no_show_all(win->chord_box, TRUE);
     win->mode = gtk_label_new(NULL);
-    gtk_style_context_add_class(gtk_widget_get_style_context(win->mode), "sfe-showcmd");
     gtk_style_context_add_class(gtk_widget_get_style_context(win->mode), "sfe-mode");
-    gtk_widget_set_halign(win->mode, GTK_ALIGN_START);
-    gtk_widget_set_valign(win->mode, GTK_ALIGN_END);
+    gtk_label_set_xalign(GTK_LABEL(win->mode), 0);
     gtk_widget_set_no_show_all(win->mode, TRUE);
+    win->notice = gtk_label_new(NULL);
+    gtk_style_context_add_class(gtk_widget_get_style_context(win->notice), "sfe-notice");
+    gtk_label_set_xalign(GTK_LABEL(win->notice), 0);
+    gtk_label_set_ellipsize(GTK_LABEL(win->notice), PANGO_ELLIPSIZE_MIDDLE);
+    gtk_widget_set_no_show_all(win->notice, TRUE);
+    win->status = gtk_box_new(GTK_ORIENTATION_VERTICAL, 2);
+    gtk_style_context_add_class(gtk_widget_get_style_context(win->status), "sfe-showcmd");
+    gtk_style_context_add_class(gtk_widget_get_style_context(win->status), "sfe-status");
+    gtk_box_pack_start(GTK_BOX(win->status), win->notice, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(win->status), win->mode, FALSE, FALSE, 0);
+    gtk_widget_set_no_show_all(win->status, TRUE);
     GtkWidget* overlay = gtk_overlay_new();
     gtk_container_add(GTK_CONTAINER(overlay), GTK_WIDGET(win->split));
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), GTK_WIDGET(win->cmdbar));
     gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->chord_box);
-    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->mode);
+    gtk_overlay_add_overlay(GTK_OVERLAY(overlay), win->status);
+    gtk_overlay_set_overlay_pass_through(GTK_OVERLAY(overlay), win->status, TRUE);
+    g_signal_connect(overlay, "get-child-position", G_CALLBACK(on_overlay_position), win);
 
     /* sidebar | (panes over the operations bar) */
     GtkWidget* content = win->content = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);

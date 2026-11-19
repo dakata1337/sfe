@@ -75,6 +75,7 @@ core_src = files(
   'src/portalconf.c',
   'src/portalreq.c',
   'src/rename.c',
+  'src/sizecount.c',
   'src/thumbs.c',
   'src/trash.c',
   'src/undo.c',

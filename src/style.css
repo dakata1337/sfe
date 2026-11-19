@@ -672,6 +672,11 @@ menu.sfe-menu {
     color: @sfe_accent;
 }
 
+/* The status corner: notices ("Yanked 3 files (32 MB)") over the mode. */
+.sfe-window .sfe-status .sfe-notice {
+    color: @sfe_fg;
+}
+
 /* "-- VISUAL --" while selecting with v. */
 .sfe-window .sfe-mode {
     color: @sfe_accent;

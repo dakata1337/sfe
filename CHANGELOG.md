@@ -31,6 +31,10 @@ new version.
   instead of naming the Firefox setting.
 - Settings → System shows the colours sfe took from the theme, each with
   the theme colour it came from; they follow theme changes.
+- A status corner at the bottom left: the visual-mode line, now above the
+  command list when the command line is open (it covered it), and for five
+  seconds what was yanked, cut or pasted, with the total size
+  (`Yanked 3 files (32 MB)`).
 
 ## 1.5.0
 

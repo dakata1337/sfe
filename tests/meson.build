@@ -86,3 +86,8 @@ test_portalreq = executable('test-portalreq', 'test_portalreq.c',
   dependencies: core_dep,
 )
 test('portalreq', test_portalreq)
+
+test_sizecount = executable('test-sizecount', 'test_sizecount.c',
+  dependencies: core_dep,
+)
+test('sizecount', test_sizecount)

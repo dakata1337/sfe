@@ -51,4 +51,11 @@ bool sfe_window_get_tree_full(SfeWindow* win);
 
 /* A line in the command bar until the next key: a note, or in the error
  * colour. */
+/* A notice in the status corner (bottom left, with the visual-mode line),
+ * gone after 5 seconds or when the next one comes; returns its id. */
+guint sfe_window_show_status(SfeWindow* win, const char* text);
+
+/* Changes notice `id`'s text if it is still showing (a size counted later). */
+void sfe_window_update_status(SfeWindow* win, guint id, const char* text);
+
 void sfe_window_show_message(SfeWindow* win, const char* text, bool error);

@@ -11,6 +11,7 @@
 #include "prefs.h"
 #include "props.h"
 #include "renamedlg.h"
+#include "sizecount.h"
 #include "split.h"
 #include "trash.h"
 #include "undo.h"
@@ -236,16 +237,64 @@ static void run_open_with_other(const SfeActionTarget* t)
     gtk_widget_show(dialog);
 }
 
+/* ---- "Yanked 3 files (32 MB)" in the status corner ---------------------- */
+
+typedef struct {
+    GWeakRef window;
+    guint id; /* the notice to fill in */
+    char* verb;
+} Notice;
+
+static void on_notice_counted(GObject* source, GAsyncResult* res, gpointer data)
+{
+    (void)source;
+    Notice* n = data;
+    SfeSizeCount count;
+    g_autoptr(SfeWindow) window = g_weak_ref_get(&n->window);
+    if (sfe_size_count_finish(res, &count, NULL) && window != NULL) {
+        g_autofree char* items = sfe_size_count_items(&count);
+        g_autofree char* size = g_format_size(count.bytes);
+        g_autofree char* text = g_strdup_printf("%s %s (%s)", n->verb, items, size);
+        sfe_window_update_status(window, n->id, text);
+    }
+    g_weak_ref_clear(&n->window);
+    g_free(n->verb);
+    g_free(n);
+}
+
+/* "<verb> 3 files" now, with the total size once it is counted. */
+static void notify_files(SfeWindow* window, const char* verb, GList* files)
+{
+    SfeSizeCount quick = { 0 };
+    for (GList* l = files; l != NULL; l = l->next) {
+        if (g_file_query_file_type(l->data, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL) == G_FILE_TYPE_DIRECTORY)
+            quick.folders++;
+        else
+            quick.files++;
+    }
+    g_autofree char* items = sfe_size_count_items(&quick);
+    g_autofree char* text = g_strdup_printf("%s %s (counting…)", verb, items);
+    Notice* n = g_new0(Notice, 1);
+    g_weak_ref_init(&n->window, window);
+    n->id = sfe_window_show_status(window, text);
+    n->verb = g_strdup(verb);
+    sfe_size_count_async(files, NULL, on_notice_counted, n);
+}
+
 static void run_cut(const SfeActionTarget* t)
 {
-    if (t->files != NULL)
-        sfe_clipboard_set(t->files, true);
+    if (t->files == NULL)
+        return;
+    sfe_clipboard_set(t->files, true);
+    notify_files(t->window, "Cut", t->files);
 }
 
 static void run_copy(const SfeActionTarget* t)
 {
-    if (t->files != NULL)
-        sfe_clipboard_set(t->files, false);
+    if (t->files == NULL)
+        return;
+    sfe_clipboard_set(t->files, false);
+    notify_files(t->window, "Yanked", t->files);
 }
 
 typedef struct {
@@ -260,14 +309,46 @@ static void on_cut_paste_done(SfeFileOp* op, GError* error, gpointer data)
         sfe_clipboard_clear_if_cut(); /* the files have moved */
 }
 
+/* "Pasted 3 files (32 MB)": the new files, counted once they are there. */
+static void on_paste_done(SfeFileOp* op, GError* error, gpointer data)
+{
+    g_autoptr(SfeWindow) window = g_weak_ref_get(data);
+    if (error != NULL || window == NULL)
+        return;
+    GPtrArray* results = sfe_file_op_get_results(op);
+    GList* files = NULL;
+    for (guint i = 0; i < results->len; i++) {
+        const SfeOpResult* r = g_ptr_array_index(results, i);
+        if (r->result != NULL)
+            files = g_list_prepend(files, r->result);
+    }
+    files = g_list_reverse(files);
+    if (files != NULL)
+        notify_files(window, sfe_file_op_get_kind(op) == SFE_OP_MOVE ? "Moved" : "Pasted", files);
+    g_list_free(files);
+}
+
+static void free_weak_ref(gpointer data, GClosure* closure)
+{
+    (void)closure;
+    g_weak_ref_clear(data);
+    g_free(data);
+}
+
 static void on_clipboard_files(GList* files, bool cut, gpointer data)
 {
     PasteRequest* req = data;
 
     if (files != NULL) {
+        guint n = g_list_length(files);
+        g_autofree char* text = g_strdup_printf("%s %u item%s…", cut ? "Moving" : "Pasting", n, n == 1 ? "" : "s");
+        sfe_window_show_status(req->window, text);
         g_autoptr(SfeFileOp) op = sfe_file_op_new(cut ? SFE_OP_MOVE : SFE_OP_COPY, files, req->dest);
         if (cut)
             g_signal_connect(op, "finished", G_CALLBACK(on_cut_paste_done), NULL);
+        GWeakRef* window = g_new0(GWeakRef, 1);
+        g_weak_ref_init(window, req->window);
+        g_signal_connect_data(op, "finished", G_CALLBACK(on_paste_done), window, free_weak_ref, 0);
         sfe_window_run_op(req->window, op);
     }
     g_object_unref(req->window);

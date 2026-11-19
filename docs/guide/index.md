@@ -393,7 +393,11 @@ selected like a Shift+click range:
 3. `v` starts the next chunk wherever the cursor is. Chunks add up like
    Ctrl+clicks; `<Space>` adds or removes single items.
 
-The corner shows `-- VISUAL --` and how many items are selected.
+The status corner (bottom left) shows `-- VISUAL --` and how many items
+are selected; while the command line is open it sits above the command
+list. The same corner reports yanking, cutting and pasting for five
+seconds: `Yanked 3 files (32 MB)`, `Pasted 2 items (1.0 kB)` (the size is
+counted in the background, folders included).
 
 | Keys | Command | Does |
 |---|---|---|
