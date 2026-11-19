@@ -706,7 +706,8 @@ menu.sfe-menu {
     color: @sfe_fg;
 }
 
-.sfe-settings > box > box > separator {
+.sfe-settings > box > box > separator,
+.sfe-settings > box > separator {
     background-color: alpha(@sfe_fg, 0.08);
     min-width: 1px;
 }
@@ -718,6 +719,11 @@ menu.sfe-menu {
 .sfe-settings treeview.view:selected {
     background-color: alpha(@sfe_accent, 0.22);
     color: @sfe_fg;
+}
+
+/* Hint and Close under the pages. */
+.sfe-settings .sfe-settings-footer {
+    padding: 10px 16px 12px 18px;
 }
 
 .sfe-settings stacksidebar separator {

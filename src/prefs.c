@@ -953,6 +953,31 @@ static void add_page(GtkStack* stack, GtkWidget* page, const char* name, const c
     gtk_stack_add_titled(stack, child, name, title);
 }
 
+static void on_close_clicked(GtkButton* button, gpointer dialog)
+{
+    (void)button;
+    gtk_dialog_response(GTK_DIALOG(dialog), GTK_RESPONSE_CLOSE);
+}
+
+/* Under the pages, across the whole window: a hint on the left, Close on the
+ * right (the dialog's own button row sat in the corner, over the sidebar). */
+static GtkWidget* footer(GtkWidget* dialog)
+{
+    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_style_context_add_class(gtk_widget_get_style_context(box), "sfe-settings-footer");
+    GtkWidget* hint = note("");
+    gtk_label_set_max_width_chars(GTK_LABEL(hint), -1);
+    gtk_label_set_ellipsize(GTK_LABEL(hint), PANGO_ELLIPSIZE_END);
+    gtk_label_set_line_wrap(GTK_LABEL(hint), FALSE);
+    gtk_widget_set_valign(hint, GTK_ALIGN_CENTER);
+    g_object_set_data(G_OBJECT(dialog), "sfe-hint", hint);
+    GtkWidget* close = gtk_button_new_with_label("Close");
+    g_signal_connect(close, "clicked", G_CALLBACK(on_close_clicked), dialog);
+    gtk_box_pack_start(GTK_BOX(box), hint, TRUE, TRUE, 0);
+    gtk_box_pack_end(GTK_BOX(box), close, FALSE, FALSE, 0);
+    return box;
+}
+
 static const char* const page_names[] = { "general", "thumbnails", "sidebar", "keys", "commands", "programs", "system", NULL };
 
 const char* const* sfe_preferences_pages(void)
@@ -1011,10 +1036,12 @@ void sfe_show_preferences_page(GtkWidget* parent, const char* page)
     gtk_box_pack_start(GTK_BOX(body), stack, TRUE, TRUE, 0);
     GtkWidget* content = gtk_dialog_get_content_area(GTK_DIALOG(dialog));
     gtk_container_set_border_width(GTK_CONTAINER(content), 0);
+    gtk_box_set_spacing(GTK_BOX(content), 0);
     gtk_box_pack_start(GTK_BOX(content), body, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(content), gtk_separator_new(GTK_ORIENTATION_HORIZONTAL), FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(content), footer(dialog), FALSE, FALSE, 0);
     gtk_style_context_add_class(gtk_widget_get_style_context(dialog), "sfe-settings");
 
-    gtk_dialog_add_button(GTK_DIALOG(dialog), "Close", GTK_RESPONSE_CLOSE);
     g_signal_connect(dialog, "response", G_CALLBACK(gtk_widget_destroy), NULL);
     lists->handler = g_signal_connect(sfe_app(), "config-changed", G_CALLBACK(on_config_changed), lists);
     g_object_set_data(G_OBJECT(dialog), "sfe-window", window);
