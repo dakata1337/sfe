@@ -21,6 +21,10 @@ SfeCommandBar* sfe_command_bar_new(SfeWindow* window);
 /* Opens the bar for typing, with `text` already typed (or empty). */
 void sfe_command_bar_start(SfeCommandBar* self, const char* text);
 
+/* The same, with characters start..end of `text` selected (typing replaces
+ * them). */
+void sfe_command_bar_start_selected(SfeCommandBar* self, const char* text, int start, int end);
+
 bool sfe_command_bar_is_active(SfeCommandBar* self);
 
 /* Shows `message` in the error colour until sfe_command_bar_dismiss(). */

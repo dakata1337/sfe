@@ -552,6 +552,13 @@ void sfe_window_show_command_line(SfeWindow* win, const char* text)
     sfe_command_bar_start(win->cmdbar, text);
 }
 
+void sfe_window_edit_command(SfeWindow* win, SfePane* pane, const char* text, int start, int end)
+{
+    if (pane != NULL && sfe_window_get_active_pane(win) != pane)
+        sfe_split_focus(win->split, pane); /* commands run in the active view */
+    sfe_command_bar_start_selected(win->cmdbar, text, start, end);
+}
+
 static void on_command_bar_done(SfeCommandBar* bar, gpointer data)
 {
     (void)bar;

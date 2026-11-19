@@ -35,6 +35,9 @@ new version.
   command list when the command line is open (it covered it), and for five
   seconds what was yanked, cut or pasted, with the total size
   (`Yanked 3 files (32 MB)`).
+- Rename… (F2 on one file), New Folder… and New File… open the command line
+  (`:rename <file> <name>` with the stem selected, `:mkdir `, `:touch `)
+  instead of a name popup.
 
 ## 1.5.0
 

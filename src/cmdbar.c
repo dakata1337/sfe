@@ -382,6 +382,12 @@ void sfe_command_bar_start(SfeCommandBar* self, const char* text)
     refresh(self);
 }
 
+void sfe_command_bar_start_selected(SfeCommandBar* self, const char* text, int start, int end)
+{
+    sfe_command_bar_start(self, text);
+    gtk_editable_select_region(GTK_EDITABLE(self->entry), start, end);
+}
+
 bool sfe_command_bar_is_active(SfeCommandBar* self)
 {
     return self->active;

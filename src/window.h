@@ -38,6 +38,11 @@ bool sfe_window_is_chooser(SfeWindow* win);
 /* Opens the ":" command line, with `text` typed in (or empty). */
 void sfe_window_show_command_line(SfeWindow* win, const char* text);
 
+/* Opens the command line for `pane` (made the active view) with `text`
+ * typed and characters start..end selected: how Rename…, New Folder… and
+ * New File… ask for a name. */
+void sfe_window_edit_command(SfeWindow* win, SfePane* pane, const char* text, int start, int end);
+
 /* Hides or shows the sidebar (Ctrl+S, the minimal look). */
 void sfe_window_toggle_sidebar(SfeWindow* win);
 void sfe_window_set_sidebar_visible(SfeWindow* win, bool visible);

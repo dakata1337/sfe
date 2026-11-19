@@ -358,8 +358,8 @@ type_text "todo"
 key "" Escape
 key "" F2
 sleep 0.6
-shot rename-one dialog
-key "" Escape dialog
+shot rename-one
+key "" Escape
 
 launch Pictures/Camera
 key CTRL a

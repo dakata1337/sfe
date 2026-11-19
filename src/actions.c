@@ -11,7 +11,9 @@
 #include "prefs.h"
 #include "props.h"
 #include "renamedlg.h"
+#include "cmdline.h"
 #include "sizecount.h"
+#include "util.h"
 #include "split.h"
 #include "trash.h"
 #include "undo.h"
@@ -562,50 +564,12 @@ static void run_undo(const SfeActionTarget* t)
 static void run_toggle_sidebar(const SfeActionTarget* t) { sfe_window_toggle_sidebar(t->window); }
 static void run_toggle_tree(const SfeActionTarget* t) { sfe_window_toggle_tree(t->window); }
 
-typedef struct {
-    SfePane* pane;
-    GFile* dir;
-    bool folder;
-} CreateRequest;
-
-static void create_request_free(gpointer p)
-{
-    CreateRequest* req = p;
-    g_object_unref(req->pane);
-    g_object_unref(req->dir);
-    g_free(req);
-}
-
-static void on_new_name(const char* name, gpointer data)
-{
-    CreateRequest* req = data;
-    g_autoptr(GFile) file = g_file_get_child(req->dir, name);
-    g_autoptr(GError) error = NULL;
-    bool ok;
-
-    if (req->folder) {
-        ok = g_file_make_directory(file, NULL, &error);
-    } else {
-        g_autoptr(GFileOutputStream) out = g_file_create(file, G_FILE_CREATE_NONE, NULL, &error);
-        ok = out != NULL;
-    }
-    if (!ok) {
-        g_autofree char* title = g_strdup_printf("Cannot create “%s”", name);
-        sfe_show_error(GTK_WIDGET(req->pane), title, error->message);
-        return;
-    }
-    sfe_undo_record_one(SFE_UNDO_CREATE, NULL, file);
-    sfe_pane_reveal(req->pane, name);
-}
-
+/* The names are typed on the command line: ":mkdir ", ":touch ". */
 static void ask_new(const SfeActionTarget* t, bool folder)
 {
-    CreateRequest* req = g_new0(CreateRequest, 1);
-    req->pane = g_object_ref(t->pane);
-    req->dir = g_object_ref(t->dir);
-    req->folder = folder;
-    sfe_ask_name(widget_of(t), folder ? "New Folder" : "New File", folder ? "New Folder" : "New File",
-        "Create", on_new_name, req, create_request_free);
+    const char* text = folder ? "mkdir " : "touch ";
+    int n = (int)g_utf8_strlen(text, -1);
+    sfe_window_edit_command(t->window, t->pane, text, n, n);
 }
 
 static void run_new_folder(const SfeActionTarget* t) { ask_new(t, true); }
@@ -624,12 +588,33 @@ static bool can_rename(const SfeActionTarget* t)
     return t->files != NULL && !sfe_trash_is_trash_dir(t->dir);
 }
 
+/* One file: ":rename <file> <its name>" on the command line, the name's
+ * stem selected. */
+static void ask_rename(const SfeActionTarget* t, GFile* file)
+{
+    g_autoptr(GFile) parent = g_file_get_parent(file);
+    g_autofree char* name = g_file_get_basename(file);
+    g_autofree char* path = g_file_get_path(file);
+    g_autofree char* where = parent && g_file_equal(parent, t->dir) ? g_strdup(name) : sfe_contract_home(path ? path : name);
+    g_autofree char* stem = NULL;
+    g_autofree char* ext = NULL;
+    sfe_split_extension(name, g_file_query_file_type(file, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL) == G_FILE_TYPE_DIRECTORY,
+        &stem, &ext);
+    g_autofree char* q_where = sfe_cmdline_quote(where);
+    g_autofree char* q_name = sfe_cmdline_quote(name);
+    g_autofree char* q_stem = sfe_cmdline_quote(stem);
+    g_autofree char* head = g_strdup_printf("rename %s ", q_where);
+    g_autofree char* text = g_strconcat(head, q_name, NULL);
+    int start = (int)g_utf8_strlen(head, -1);
+    sfe_window_edit_command(t->window, t->pane, text, start, start + (int)g_utf8_strlen(q_stem, -1));
+}
+
 static void run_rename(const SfeActionTarget* t)
 {
     if (!can_rename(t))
         return;
     if (t->files->next == NULL)
-        sfe_rename_one(widget_of(t), t->files->data, on_renamed, g_object_ref(t->pane), g_object_unref);
+        ask_rename(t, t->files->data);
     else
         sfe_rename_many(widget_of(t), t->files, SFE_RENAME_NO_SWITCH, on_renamed, g_object_ref(t->pane), g_object_unref);
 }

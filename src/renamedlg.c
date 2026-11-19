@@ -66,62 +66,6 @@ static bool perform(GtkWidget* parent, Request* req, GFile** files, char** names
 }
 
 /* ------------------------------------------------------------------------ */
-/* One file                                                                  */
-/* ------------------------------------------------------------------------ */
-
-typedef struct {
-    Request* req;
-    GtkWidget* parent;
-} OneRename;
-
-static void one_free(gpointer p)
-{
-    OneRename* one = p;
-    request_free(one->req);
-    g_object_unref(one->parent);
-    g_free(one);
-}
-
-/* A full sentence for the name prompt's error message. */
-static const char* explain(SfeRenameStatus status)
-{
-    switch (status) {
-    case SFE_RENAME_EMPTY: return "The name cannot be empty.";
-    case SFE_RENAME_INVALID: return "A name cannot contain “/” or be “.” or “..”.";
-    case SFE_RENAME_EXISTS:
-    case SFE_RENAME_DUPLICATE: return "Another file in this folder already has that name.";
-    default: return NULL;
-    }
-}
-
-static void on_one_name(const char* name, gpointer data)
-{
-    OneRename* one = data;
-    char* names[] = { (char*)name };
-    SfeRenameStatus status;
-
-    if (sfe_rename_check(one->req->files, names, 1, &status) > 0) {
-        g_autofree char* title = g_strdup_printf("Cannot rename to “%s”", name);
-        sfe_show_error(one->parent, title, explain(status));
-        return;
-    }
-    if (status == SFE_RENAME_OK)
-        perform(one->parent, one->req, one->req->files, names, 1);
-}
-
-void sfe_rename_one(GtkWidget* parent, GFile* file, SfeRenamedFunc done, gpointer data, GDestroyNotify destroy)
-{
-    GList files = { .data = file };
-    OneRename* one = g_new0(OneRename, 1);
-    one->req = request_new(&files, done, data, destroy);
-    one->parent = g_object_ref(parent);
-
-    g_autofree char* name = g_file_get_basename(file);
-    g_autofree char* display = g_filename_display_name(name);
-    sfe_ask_name(parent, "Rename", display, "Rename", on_one_name, one, one_free);
-}
-
-/* ------------------------------------------------------------------------ */
 /* Many files                                                                */
 /* ------------------------------------------------------------------------ */
 

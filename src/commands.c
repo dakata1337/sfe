@@ -223,10 +223,15 @@ static bool run_symlink(Ctx* c, int argc, char** argv, GError** error)
 
 static bool run_rename(Ctx* c, int argc, char** argv, GError** error)
 {
-    if (argc == 1)
+    if (argc == 1) /* the selection: one file gets ":rename <file> <name>" to edit, several the dialog */
         return run_action(c, "rename", NULL, error);
-    if (argc != 3)
+    if (argc == 2)
         return fail(error, "usage: rename <file> <new name>");
+    if (argc > 3) { /* unquoted spaces in the new name: "rename a.txt My File.txt" */
+        g_autofree char* joined = g_strjoinv(" ", argv + 2);
+        char* args[] = { argv[0], argv[1], joined, NULL };
+        return run_rename(c, 3, args, error);
+    }
     g_autoptr(GFile) file = resolve(c, argv[1]);
     GFile* files[] = { file };
     char* names[] = { argv[2] };
@@ -276,7 +281,7 @@ static bool run_mass_rename(Ctx* c, int argc, char** argv, GError** error)
 static bool run_new(Ctx* c, bool directory, int argc, char** argv, GError** error)
 {
     if (argc == 1)
-        return run_action(c, directory ? "new-folder" : "new-file", NULL, error);
+        return fail(error, "usage: %s <name>", argv[0]);
     g_autofree char* name = g_strjoinv(" ", argv + 1);
     g_autoptr(GFile) file = resolve(c, name);
     if (directory) {
@@ -1146,10 +1151,10 @@ static const Command commands[] = {
     { { "cp", { "copy", NULL }, "<file>… <destination>", "copy into a folder" }, complete_transfer, run_copy, false },
     { { "mv", { "move", NULL }, "<file>… <destination>", "move into a folder" }, complete_transfer, run_move, false },
     { { "ln", { "symlink", NULL }, "<target>… <folder or link name>", "make symbolic links" }, complete_transfer, run_symlink, false },
-    { { "rename", NO_ALIAS, "[<file> <new name>]", "rename (the dialog without arguments)" }, complete_rename, run_rename, false },
+    { { "rename", NO_ALIAS, "[<file> <new name>]", "rename; alone, edit the selected file's name here (several: the pattern dialog)" }, complete_rename, run_rename, false },
     { { "mass_rename", NO_ALIAS, "[all|files|directories]", "rename with a pattern: the selection, else the whole folder" }, complete_mass_rename, run_mass_rename, false },
-    { { "touch", { "new_file", NULL }, "[<name>]", "create an empty file (the dialog without a name)" }, NULL, run_new_file, false },
-    { { "mkdir", { "new_directory", "new_folder" }, "[<name>]", "create a folder (the dialog without a name)" }, NULL, run_new_directory, false },
+    { { "touch", { "new_file", NULL }, "<name>", "create an empty file" }, NULL, run_new_file, false },
+    { { "mkdir", { "new_directory", "new_folder" }, "<name>", "create a folder" }, NULL, run_new_directory, false },
     { { "trash", NO_ALIAS, "[<file>…]", "move to the trash" }, complete_files, run_trash, false },
     { { "delete", NO_ALIAS, "[<file>…]", "delete permanently (asks)" }, complete_files, run_delete, false },
     { { "yank", { "copy_clipboard", NULL }, "[<file>…]", "copy to the clipboard" }, complete_files, run_copy_clipboard, false },

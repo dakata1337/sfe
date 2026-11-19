@@ -252,8 +252,11 @@ command = "foot nvim %f"
 
 ## Renaming
 
-**F2** on one file asks for the new name. The part before the extension is
-selected, ready to type over.
+**F2** on one file (or *Rename…* in its menu) opens the command line with
+`:rename <file> <name>` typed in. The part of the name before the extension
+is selected, ready to type over; Enter renames, Esc cancels. Spaces need no
+quoting in the new name. *New Folder…* (Ctrl+Shift+N) and *New File…* open
+it the same way, with `:mkdir ` and `:touch `.
 
 ![Rename one file](images/rename-one.png)
 
@@ -450,10 +453,10 @@ selection.
 | `cp` (`copy`) | `<file>… <destination>` | copy into a folder |
 | `mv` (`move`) | `<file>… <destination>` | move into a folder |
 | `ln` (`symlink`) | `<target>… <folder or link name>` | make symbolic links |
-| `rename` | `[<file> <new name>]` | rename (the dialog without arguments) |
+| `rename` | `[<file> <new name>]` | rename; alone, puts the selected file's name on the command line to edit (several files: the pattern dialog) |
 | `mass_rename` | `[all\|files\|directories]` | rename with a pattern: the selected items (in visual mode or several), else the whole folder; the argument picks what *Include* starts on (`all` without one) |
-| `touch` (`new_file`) | `[<name>]` | create an empty file (the dialog without a name); spaces are part of the name |
-| `mkdir` (`new_directory`, `new_folder`) | `[<name>]` | create a folder, with the folders on the way (the dialog without a name); `:mkdir Hello World!` makes one folder “Hello World!” |
+| `touch` (`new_file`) | `<name>` | create an empty file; spaces are part of the name |
+| `mkdir` (`new_directory`, `new_folder`) | `<name>` | create a folder, with the folders on the way; `:mkdir Hello World!` makes one folder “Hello World!” |
 | `trash` | `[<file>…]` | move to the trash (the selection without any) |
 | `delete` | `[<file>…]` | delete permanently (asks) |
 | `yank` (`copy_clipboard`) | `[<file>…]` | copy to the clipboard |
