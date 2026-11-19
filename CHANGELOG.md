@@ -6,49 +6,68 @@ new version.
 
 ## Unreleased
 
-- Folder covers: a folder with a `cover.jpg`, `folder.png`, `front.jpg`,
-  `AlbumArt…` (and so on) shows that picture, with a small folder badge,
-  instead of the folder icon. *Settings → Thumbnails → Folder covers*
-  (`folder_covers` in `[preview]`) switches it off.
-- Visual mode: a command that acts on the selection also clears it
-  (*Settings → General → Clear visual selection after use*, `visual_clear`).
-- Pasted files become the selection.
-- `:cd` without a folder goes to the start folder from the settings
-  (it went to the home folder).
-- `:mass_rename [all|files|directories]` renames the selected items (in
-  visual mode or several), else the whole folder, with *Include* set to the
-  argument; it no longer takes file names. `R` does the same.
-- `:mkdir` and `:touch` take one name: `:mkdir Hello World!` makes the
-  folder “Hello World!” (it made two folders).
-- `:split close` is gone in favour of `:q` / `:quit` (`<C-w>q` runs `q`).
-- The old command names deprecated since 1.0.0 (`toggle_hidden`,
-  `close_pane`, `paste_into`, …) are removed; key bindings using them need
-  the new names (a table is in the guide).
-- `:split` completion says what each sub-command does, and whether it makes
-  a view, moves the focus or moves the view; `:split move` offers all four
-  directions.
-- `G` jumps to the last item without selecting every item on the way (in
-  the grid too); `gg` the same for the first.
-- `:open_with <program>` with nothing selected opens the current folder in
-  it (it said there was nothing to open).
-- Settings: the General options are grouped (Window, Looks, Files); options
-  you changed are in bold italics, and double-clicking an option's name
-  resets it; Close sits in a footer with room around it.
-- Settings → System links to the guide's *Open and save dialogs* section
-  instead of naming the Firefox setting.
-- Settings → System shows the colours sfe took from the theme, each with
-  the theme colour it came from; they follow theme changes.
-- A status corner at the bottom left: the visual-mode line, now above the
-  command list when the command line is open (it covered it), and for five
-  seconds what was yanked, cut or pasted, with the total size
-  (`Yanked 3 files (32 MB)`).
+## 2.0.0
+
+### Breaking changes
+
+- The old command names deprecated since 1.0.0 are removed: `toggle_hidden`,
+  `toggle_sidebar`, `toggle_tree`, `view_grid`, `view_list`,
+  `split_vertical`, `split_horizontal`, `close_pane`, `next_pane`,
+  `select_all`, `paste_into`, `bookmark_folder`, `bookmark_selection`,
+  `unbookmark_folder`, `unbookmark_selection`, `open_with_other`. Key
+  bindings in `config.toml` that use them say “unknown command”; the guide
+  has a table of the new names (`hidden toggle`, `q`, `paste <folder>`, …).
+- `:split close` is removed: use `:q` / `:quit` (`<C-w>q` runs `q`).
+- `:mass_rename` takes `all`, `files` or `directories` instead of file
+  names. It renames the items selected in visual mode (or several selected
+  ones), else the whole folder, with *Include* set to the argument; `R`
+  does the same.
+- `:mkdir` and `:touch` take one name, spaces included (`:mkdir Hello
+  World!` makes one folder), and need it: the name popup is gone.
 - Rename… (F2 on one file), New Folder… and New File… open the command line
   (`:rename <file> <name>` with the stem selected, `:mkdir `, `:touch `)
-  instead of a name popup.
-- Error messages follow generated themes (Noctalia, matugen): sfe now
-  prefers `error_bg_color` over the base theme's `error_color`, which gave
-  stock red; the text of destructive buttons uses the theme's
-  `error_fg_color` instead of white.
+  instead of a popup. `:rename` joins the words of an unquoted new name.
+- `:cd` without a folder goes to the start folder from the settings instead
+  of the home folder.
+- In visual mode, a command that acts on the selection now clears it.
+  *Settings → General → Clear visual selection after use* (`visual_clear`)
+  turns this off.
+
+### New
+
+- Folder covers: a folder holding `cover.jpg`, `folder.png`, `front.jpg`,
+  `AlbumArt…` and the like shows that picture, with a small folder badge,
+  instead of its icon. *Settings → Thumbnails → Folder covers*
+  (`folder_covers` in `[preview]`).
+- A status corner at the bottom left: the visual-mode line, and for five
+  seconds what was yanked, cut or pasted, with the total size (`Yanked 3
+  files (32 MB)`).
+- Pasted files become the selection.
+- Settings: the General options are grouped (Window, Looks, Files); options
+  you changed are in bold italics, and double-clicking an option's name
+  resets it.
+- Settings → System shows the colours sfe took from the theme, each with the
+  theme colour it came from.
+- `:split` completion says what each sub-command does: make a view, move
+  the focus or move the view.
+- `:open_with <program>` with nothing selected opens the current folder in
+  it.
+
+### Fixed
+
+- The visual-mode line no longer covers the command list: it moves above it
+  while the command line is open.
+- `G` jumps to the last item without selecting every item on the way (in
+  the grid too), and `gg` to the first.
+- `:split move` completes all four directions (it offered nothing with a
+  single view).
+- Error messages follow generated themes (Noctalia, matugen): `error_bg_color`
+  is preferred over the base theme's `error_color`, which gave stock red;
+  destructive buttons take their text colour from `error_fg_color` instead
+  of white.
+- Settings: Close sits in a footer with room around it, no longer over the
+  page list; the Open / Save dialogs setting links to the guide instead of
+  naming a Firefox setting.
 
 ## 1.5.0
 
