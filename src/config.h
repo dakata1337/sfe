@@ -128,6 +128,7 @@ typedef struct {
     const char* label; /* short name in Preferences */
     double min, max; /* SFE_OPT_INT, SFE_OPT_DOUBLE */
     const char* const* choices; /* SFE_OPT_ENUM: NULL-terminated, index == value */
+    const char* group; /* a heading in Preferences over this and the next options, or NULL */
 } SfeOption;
 
 /* Every scalar option (n receives the count), in file order. */

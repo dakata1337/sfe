@@ -60,17 +60,17 @@ const char* sfe_sort_order_name(SfeSortOrder order)
 }
 
 static const SfeOption options[] = {
-    { "general", "start_path", SFE_OPT_STRING, FIELD(start_path), "Directory opened by new windows", .label = "Start folder" },
-    { "general", "show_hidden", SFE_OPT_BOOL, FIELD(show_hidden), "Show files whose name starts with a dot", .label = "Show hidden files" },
-    { "general", "ui_scale", SFE_OPT_DOUBLE, FIELD(ui_scale), "Scale factor for text and icons (0.5 - 3.0)", .min = 0.5, .max = 3.0, .label = "Scale" },
+    { "general", "start_path", SFE_OPT_STRING, FIELD(start_path), "Directory opened by new windows", .label = "Start folder", .group = "Window" },
     { "general", "view", SFE_OPT_ENUM, FIELD(view), "Default view: grid | list", .choices = view_names, .label = "Default view" },
+    { "general", "decorations", SFE_OPT_BOOL, FIELD(decorations), "Draw a window title bar (turn off on tiling compositors)", .label = "Window title bar" },
+    { "general", "ui_scale", SFE_OPT_DOUBLE, FIELD(ui_scale), "Scale factor for text and icons (0.5 - 3.0)", .min = 0.5, .max = 3.0, .label = "Scale", .group = "Looks" },
     { "general", "icon_size", SFE_OPT_INT, FIELD(icon_size), "Icon size in the grid view, in pixels (16 - 256)", .min = 16, .max = 256, .label = "Icon size" },
     { "general", "file_icons", SFE_OPT_ENUM, FIELD(file_icons), "File icons: system (the icon theme as it is) | tinted (folders in the theme's accent colour) | symbolic (one-colour icons in the theme's colours)", .choices = file_icon_names, .label = "File icons" },
+    { "general", "show_hidden", SFE_OPT_BOOL, FIELD(show_hidden), "Show files whose name starts with a dot", .label = "Show hidden files", .group = "Files" },
     { "general", "sort_by", SFE_OPT_ENUM, FIELD(sort_by), "Sort by: name | size | modified | type", .choices = sort_names, .label = "Sort by" },
     { "general", "sort_order", SFE_OPT_ENUM, FIELD(sort_order), "Sort direction: ascending (A-Z, smallest, oldest first) | descending", .choices = order_names, .label = "Sort order" },
     { "general", "dirs_first", SFE_OPT_BOOL, FIELD(dirs_first), "List directories before files", .label = "Folders first" },
     { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },
-    { "general", "decorations", SFE_OPT_BOOL, FIELD(decorations), "Draw a window title bar (turn off on tiling compositors)", .label = "Window title bar" },
     { "preview", "thumbnails", SFE_OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails", .label = "Thumbnails" },
     { "preview", "thumbnail_max_mb", SFE_OPT_INT, FIELD(thumbnail_max_mb), "Skip thumbnails for files larger than this (MiB)", .min = 1, .max = 1 << 20, .label = "Thumbnail size limit (MiB)" },
     { "sidebar", "devices", SFE_OPT_ENUM, FIELD(devices), "Devices listed: all (removable drives and disks) | removable (only what can be unplugged: flash drives, SD cards)", .choices = device_names, .label = "Devices" },

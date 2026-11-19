@@ -721,6 +721,18 @@ menu.sfe-menu {
     color: @sfe_fg;
 }
 
+/* A group of options: "Looks ─────". */
+.sfe-settings .sfe-settings-group label {
+    font-weight: bold;
+    font-size: 0.9em;
+    color: @sfe_accent;
+}
+
+.sfe-settings .sfe-settings-group separator {
+    background-color: alpha(@sfe_fg, 0.12);
+    min-height: 1px;
+}
+
 /* Hint and Close under the pages. */
 .sfe-settings .sfe-settings-footer {
     padding: 10px 16px 12px 18px;

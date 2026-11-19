@@ -291,6 +291,20 @@ static GtkWidget* file_icons_chooser(const SfeOption* opt)
     return chooser;
 }
 
+/* "Looks ───────": a group of options. */
+static GtkWidget* group_heading(const char* title, bool first)
+{
+    GtkWidget* box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10);
+    GtkWidget* label = gtk_label_new(title);
+    GtkWidget* line = gtk_separator_new(GTK_ORIENTATION_HORIZONTAL);
+    gtk_style_context_add_class(gtk_widget_get_style_context(box), "sfe-settings-group");
+    gtk_widget_set_valign(line, GTK_ALIGN_CENTER);
+    gtk_box_pack_start(GTK_BOX(box), label, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box), line, TRUE, TRUE, 0);
+    gtk_widget_set_margin_top(box, first ? 0 : 14);
+    return box;
+}
+
 /* The options of one config section, built from the option table. */
 static GtkWidget* options_page(const char* section, const char* text)
 {
@@ -304,6 +318,10 @@ static GtkWidget* options_page(const char* section, const char* text)
     for (size_t i = 0; i < n; i++) {
         if (strcmp(opts[i].section, section) != 0)
             continue;
+        if (opts[i].group != NULL) {
+            GtkWidget* heading = group_heading(opts[i].group, row == 0);
+            gtk_grid_attach(GTK_GRID(grid), heading, 0, row++, 2, 1);
+        }
         GtkWidget* label = gtk_label_new(opts[i].label ? opts[i].label : opts[i].key);
         g_autofree char* tip = g_strdup_printf("%s\n(%s.%s in config.toml)", opts[i].help, opts[i].section, opts[i].key);
         gtk_widget_set_tooltip_text(label, tip);
