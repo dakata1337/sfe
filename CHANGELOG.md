@@ -11,6 +11,8 @@ new version.
 - `:mass_rename [all|files|directories]` renames the selected items (in
   visual mode or several), else the whole folder, with *Include* set to the
   argument; it no longer takes file names. `R` does the same.
+- `:mkdir` and `:touch` take one name: `:mkdir Hello World!` makes the
+  folder “Hello World!” (it made two folders).
 
 ## 1.5.0
 

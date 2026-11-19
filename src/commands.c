@@ -270,30 +270,29 @@ static bool run_mass_rename(Ctx* c, int argc, char** argv, GError** error)
     return true;
 }
 
-/* new_file / new_directory: names in the active folder ("a/b" makes the
- * folders on the way for new_directory). */
+/* touch / mkdir: one name in the active folder ("a/b" makes the folders on
+ * the way for mkdir). The words are one name: ":mkdir Hello World!" makes
+ * "Hello World!". */
 static bool run_new(Ctx* c, bool directory, int argc, char** argv, GError** error)
 {
     if (argc == 1)
         return run_action(c, directory ? "new-folder" : "new-file", NULL, error);
-    GPtrArray* made = g_ptr_array_new();
-    bool ok = true;
-    for (int i = 1; i < argc && ok; i++) {
-        g_autoptr(GFile) file = resolve(c, argv[i]);
-        if (directory) {
-            ok = g_file_make_directory_with_parents(file, NULL, error);
-        } else {
-            g_autoptr(GFileOutputStream) out = g_file_create(file, G_FILE_CREATE_NONE, NULL, error);
-            ok = out != NULL;
-        }
-        if (!ok)
-            break;
-        g_ptr_array_add(made, sfe_undo_pair_new(NULL, file));
-        if (argc == 2 && strchr(argv[1], '/') == NULL)
-            sfe_pane_reveal(c->pane, argv[1]); /* select it once it shows up */
+    g_autofree char* name = g_strjoinv(" ", argv + 1);
+    g_autoptr(GFile) file = resolve(c, name);
+    if (directory) {
+        if (!g_file_make_directory_with_parents(file, NULL, error))
+            return false;
+    } else {
+        g_autoptr(GFileOutputStream) out = g_file_create(file, G_FILE_CREATE_NONE, NULL, error);
+        if (out == NULL)
+            return false;
     }
+    GPtrArray* made = g_ptr_array_new();
+    g_ptr_array_add(made, sfe_undo_pair_new(NULL, file));
     sfe_undo_record(SFE_UNDO_CREATE, made);
-    return ok;
+    if (strchr(name, '/') == NULL)
+        sfe_pane_reveal(c->pane, name); /* select it once it shows up */
+    return true;
 }
 
 static bool run_new_file(Ctx* c, int argc, char** argv, GError** error)
@@ -1131,8 +1130,8 @@ static const Command commands[] = {
     { { "ln", { "symlink", NULL }, "<target>… <folder or link name>", "make symbolic links" }, complete_transfer, run_symlink, false },
     { { "rename", NO_ALIAS, "[<file> <new name>]", "rename (the dialog without arguments)" }, complete_rename, run_rename, false },
     { { "mass_rename", NO_ALIAS, "[all|files|directories]", "rename with a pattern: the selection, else the whole folder" }, complete_mass_rename, run_mass_rename, false },
-    { { "touch", { "new_file", NULL }, "[<name>…]", "create empty files (the dialog without a name)" }, NULL, run_new_file, false },
-    { { "mkdir", { "new_directory", "new_folder" }, "[<name>…]", "create folders (the dialog without a name)" }, NULL, run_new_directory, false },
+    { { "touch", { "new_file", NULL }, "[<name>]", "create an empty file (the dialog without a name)" }, NULL, run_new_file, false },
+    { { "mkdir", { "new_directory", "new_folder" }, "[<name>]", "create a folder (the dialog without a name)" }, NULL, run_new_directory, false },
     { { "trash", NO_ALIAS, "[<file>…]", "move to the trash" }, complete_files, run_trash, false },
     { { "delete", NO_ALIAS, "[<file>…]", "delete permanently (asks)" }, complete_files, run_delete, false },
     { { "yank", { "copy_clipboard", NULL }, "[<file>…]", "copy to the clipboard" }, complete_files, run_copy_clipboard, false },
