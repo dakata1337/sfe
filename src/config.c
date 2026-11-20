@@ -72,7 +72,8 @@ static const SfeOption options[] = {
     { "general", "dirs_first", SFE_OPT_BOOL, FIELD(dirs_first), "List directories before files", .label = "Folders first" },
     { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },
     { "general", "visual_clear", SFE_OPT_BOOL, FIELD(visual_clear), "After a command acts on a visual-mode selection (yank, trash, ...), clear the selection", .label = "Clear visual selection after use" },
-    { "general", "search_recursive", SFE_OPT_BOOL, FIELD(search_recursive), "Search (Ctrl+F, /) also looks in the folders below the current one", .label = "Search in subfolders", .group = "Search" },
+    { "general", "search_delay_ms", SFE_OPT_INT, FIELD(search_delay_ms), "Search when typing pauses this long, in milliseconds (0: at every key)", .min = 0, .max = 2000, .label = "Search after a pause of (ms)", .group = "Search" },
+    { "general", "search_recursive", SFE_OPT_BOOL, FIELD(search_recursive), "Search (Ctrl+F, /) also looks in the folders below the current one", .label = "Search in subfolders" },
     { "general", "cache_minutes", SFE_OPT_INT, FIELD(cache_minutes), "Keep folders you left loaded this many minutes, so going back is instant (0: off)", .min = 0, .max = 1440, .label = "Keep left folders (minutes)", .group = "Memory" },
     { "general", "cache_mb", SFE_OPT_INT, FIELD(cache_mb), "Memory for folders you left, in MiB; the ones left longest ago are dropped first", .min = 16, .max = 1 << 16, .label = "Memory for left folders (MiB)" },
     { "preview", "thumbnails", SFE_OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails", .label = "Thumbnails" },
@@ -161,6 +162,7 @@ SfeConfig* sfe_config_new(void)
     cfg->confirm_delete = true;
     cfg->visual_clear = true;
     cfg->decorations = true;
+    cfg->search_delay_ms = 100;
     cfg->cache_minutes = 5;
     cfg->cache_mb = 512;
 

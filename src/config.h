@@ -86,6 +86,7 @@ typedef struct {
     bool confirm_delete;
     bool visual_clear; /* clear the selection after acting on a visual one */
     bool search_recursive; /* search (Ctrl+F) also in the folders below */
+    int search_delay_ms; /* search when typing pauses this long */
     int cache_minutes; /* keep folders no pane shows loaded this long (0: off) */
     int cache_mb; /* at most this much memory for them */
     bool decorations;

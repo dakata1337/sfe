@@ -490,16 +490,15 @@ static void flush_search(SfePane* self)
 }
 
 /* Searching a big folder takes a while, so it waits until typing pauses
- * for 100 ms, and runs below drawing: the typed letter shows first. */
-#define SEARCH_DELAY_MS 100
-
+ * (search_delay_ms), and runs below drawing: the typed letter shows first. */
 static void on_search_changed(SfeSearchBar* bar, const char* text, gpointer data)
 {
     (void)bar;
     (void)text;
     SfePane* self = data;
     g_clear_handle_id(&self->search_timer, g_source_remove);
-    self->search_timer = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE, SEARCH_DELAY_MS, on_search_timer, self, NULL);
+    self->search_timer = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE, (guint)MAX(0, sfe_config()->search_delay_ms),
+        on_search_timer, self, NULL);
 }
 
 static void on_search_move(SfeSearchBar* bar, int delta, gpointer data)

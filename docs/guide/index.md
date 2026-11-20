@@ -188,6 +188,11 @@ anywhere › letters in order (`dm` finds `dirmodel.c`)
 
 Case is ignored unless you type an uppercase letter.
 
+The search runs when typing pauses for 100 ms, so typing stays smooth in
+big folders; Enter and Up / Down use everything typed even sooner. Change
+the pause with *Search after a pause of* (`search_delay_ms`; 0 searches at
+every key).
+
 The count on the right shows the matches and the files in the folder
 (`12 / 300`). When more than 1,000 files match, only the best 1,000 are
 listed and the count says so (`best 1000 of 15000`); keep typing to narrow
@@ -673,6 +678,7 @@ ui_scale = 1.0
 view = "grid"        # grid | list
 sort_by = "name"     # name | size | modified | type
 sort_order = "ascending"  # ascending | descending
+search_delay_ms = 100     # search when typing pauses this long
 search_recursive = false  # search also in the folders below
 cache_minutes = 5    # keep folders you left loaded (0: off)
 cache_mb = 512       # memory for them; the oldest go first
