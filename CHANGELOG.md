@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.1.0
+
 - Long names in the list view are shortened in the middle
   ("holiday photo … final edit.jpg"), so the extension stays visible.
 - Grid view: long names get two lines with the "…" in the middle of the
