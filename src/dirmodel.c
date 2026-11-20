@@ -574,6 +574,7 @@ static Folder* folder_get(GFile* dir)
     g_autofree char* uri = g_file_get_uri(dir);
     Folder* f = g_hash_table_lookup(folders, uri);
     if (f != NULL && f->cached_since != 0) { /* back from the cache: its ref is now the caller's */
+        g_debug("cache: reused %s", g_file_peek_path(f->dir));
         g_queue_remove(&cache, f);
         f->cached_since = 0;
         return f;
@@ -619,8 +620,9 @@ static gsize folder_bytes(Folder* f)
     return bytes;
 }
 
-static void cache_drop(Folder* f)
+static void cache_drop(Folder* f, const char* why)
 {
+    g_debug("cache: dropped %s (%s)", g_file_peek_path(f->dir), why);
     g_queue_remove(&cache, f);
     f->cached_since = 0;
     folder_unlist(f);
@@ -636,7 +638,7 @@ static void cache_trim(void)
     const SfeConfig* cfg = sfe_config();
     gint64 oldest_kept = g_get_monotonic_time() - (gint64)cfg->cache_minutes * 60 * G_USEC_PER_SEC;
     while (!g_queue_is_empty(&cache) && ((Folder*)g_queue_peek_head(&cache))->cached_since <= oldest_kept)
-        cache_drop(g_queue_peek_head(&cache));
+        cache_drop(g_queue_peek_head(&cache), "expired");
     gsize total = 0;
     for (GList* l = cache.head; l != NULL; l = l->next)
         total += folder_bytes(l->data);
@@ -644,7 +646,7 @@ static void cache_trim(void)
     while (total > limit && !g_queue_is_empty(&cache)) {
         Folder* oldest = g_queue_peek_head(&cache);
         total -= folder_bytes(oldest);
-        cache_drop(oldest);
+        cache_drop(oldest, "over the size limit");
     }
 }
 
@@ -667,6 +669,7 @@ static bool cache_keep(Folder* f)
         return false; /* not loaded, or no monitor to keep it current */
     f->cached_since = g_get_monotonic_time();
     g_queue_push_tail(&cache, f);
+    g_debug("cache: kept %s (about %zu MiB)", g_file_peek_path(f->dir), folder_bytes(f) >> 20);
     if (cache_timer == 0)
         cache_timer = g_timeout_add_seconds(30, on_cache_timer, NULL);
     cache_trim();
@@ -752,7 +755,7 @@ static void on_dir_changed(GFileMonitor* monitor, GFile* file, GFile* other,
             || event == G_FILE_MONITOR_EVENT_UNMOUNTED) {
             folder_unlist(f); /* if it comes back, read it again */
             if (f->cached_since != 0) {
-                cache_drop(f);
+                cache_drop(f, "deleted");
                 return;
             }
             GList* models = shown_by(f);
