@@ -823,12 +823,16 @@ static void walk_thread(GTask* task, gpointer source, gpointer data, GCancellabl
     g_task_return_pointer(task, found, (GDestroyNotify)g_ptr_array_unref);
 }
 
+
+
 static void stop_walk(SfeDirModel* self)
 {
     if (self->walk_cancel != NULL)
         g_cancellable_cancel(self->walk_cancel);
     g_clear_object(&self->walk_cancel);
     g_clear_object(&self->walk_root);
+    if (self->deep != NULL)
+        release_freed_memory(self->deep->len);
     g_clear_pointer(&self->deep, g_ptr_array_unref);
 }
 
