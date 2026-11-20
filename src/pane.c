@@ -645,7 +645,7 @@ static void on_gone(SfeDirModel* model, gpointer data)
 /* Config                                                                    */
 /* ------------------------------------------------------------------------ */
 
-/* PROTOTYPE: every grid item the same size, so GtkIconView does not
+/* Every grid item the same size, so GtkIconView does not
  * measure each name. Names get two lines, in the font in use: measured
  * again when the style changes (UI scale, font). */
 static void fit_grid_items(SfePane* self)
@@ -926,7 +926,7 @@ static void measure_columns(SfePane* self)
                 w = MAX(w, text_width(layout, type));
         }
         self->column_width[key] = w + COLUMN_PADDING;
-        /* PROTOTYPE: the fixed-width columns get what was measured, so
+        /* The fixed-width columns get what was measured, so
          * fit_columns() decides with the widths they really have. */
         gtk_tree_view_column_set_fixed_width(self->columns[key], self->column_width[key]);
     }
@@ -965,7 +965,7 @@ static void fit_columns(SfePane* self)
     }
     if (changed) /* the list keeps the old widths otherwise: the name stays squeezed */
         gtk_tree_view_columns_autosize(GTK_TREE_VIEW(self->list));
-    /* PROTOTYPE: with fixed widths GTK may hand the spare room to the last
+    /* With fixed widths GTK may hand the spare room to the last
      * column instead of Name, so Name gets it here. */
     int rest = width;
     for (int i = 0; i < keep; i++)
@@ -2202,7 +2202,7 @@ static void text_cell(GtkTreeViewColumn* column, GtkCellRenderer* cell, GtkTreeM
     g_object_set(cell, "text", text, NULL);
 }
 
-/* PROTOTYPE: a grid name in its fixed two-line box. GtkCellRendererText
+/* A grid name in its fixed two-line box. GtkCellRendererText
  * would cut a third line off; this draws at most two, with "…" in the
  * middle of the second, so the end of the name (its extension) stays. */
 typedef GtkCellRendererText SfeNameRenderer;
@@ -2340,7 +2340,7 @@ static GtkWidget* build_list(SfePane* self)
     add_text_column(self, list, "Modified", SFE_SORT_MODIFIED, 0.0f);
     add_text_column(self, list, "Type", SFE_SORT_TYPE, 0.0f);
 
-    /* PROTOTYPE: fixed-height mode. GtkTreeView then measures one row instead
+    /* Fixed-height mode. GtkTreeView then measures one row instead
      * of all of them; every column needs a fixed width. measure_columns()
      * and fit_columns() set them (before the first paint). */
     for (size_t i = 0; i < G_N_ELEMENTS(self->columns); i++)
