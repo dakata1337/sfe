@@ -75,6 +75,11 @@ program for an extension, see [Configuration](#configuration).
   right-click it for the folder's menu even in long folders.
 - In the grid, Shift+click and Shift+arrows select in reading order: from
   where you started to the item you pick, row by row, like text.
+- Folders you leave stay loaded for 5 minutes, so going back (or Back) is
+  quick and their thumbnails are still there. Changes on disk meanwhile are
+  picked up in the background. They use at most 512 MiB; past that, the
+  folders left longest ago are dropped first. Both are in *Settings* under
+  Memory (`cache_minutes`, 0 turns it off, and `cache_mb`).
 
 ### Thumbnails
 
@@ -663,6 +668,8 @@ view = "grid"        # grid | list
 sort_by = "name"     # name | size | modified | type
 sort_order = "ascending"  # ascending | descending
 search_recursive = false  # search also in the folders below
+cache_minutes = 5    # keep folders you left loaded (0: off)
+cache_mb = 512       # memory for them; the oldest go first
 
 [preview]
 thumbnails = true

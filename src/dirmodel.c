@@ -27,6 +27,7 @@ typedef struct {
     GFileMonitor* monitor;
     bool loading;
     bool building; /* filling fresh stores, not reacting to changes */
+    gint64 cached_since; /* no pane shows it, kept for a while (0: not cached) */
 
     /* How rows look; global settings, so the same in every pane (shortcut:
      * the last pane to set them wins; upgrade if panes ever differ). */
@@ -38,6 +39,7 @@ typedef struct {
 } Folder;
 
 static GHashTable* folders; /* uri -> Folder*, those loading or loaded */
+static GQueue cache = G_QUEUE_INIT; /* Folder*, no pane shows them; oldest first, each holds a ref */
 
 struct _SfeDirModel {
     GObject parent;
@@ -571,6 +573,11 @@ static Folder* folder_get(GFile* dir)
         folders = g_hash_table_new(g_str_hash, g_str_equal);
     g_autofree char* uri = g_file_get_uri(dir);
     Folder* f = g_hash_table_lookup(folders, uri);
+    if (f != NULL && f->cached_since != 0) { /* back from the cache: its ref is now the caller's */
+        g_queue_remove(&cache, f);
+        f->cached_since = 0;
+        return f;
+    }
     if (f != NULL)
         return folder_ref(f);
 
@@ -589,10 +596,91 @@ static Folder* folder_get(GFile* dir)
     return f;
 }
 
+/* Recent folders stay loaded for a while after the last pane leaves them
+ * (cache_minutes), so going back is instant. Their monitor keeps running,
+ * so changes on disk meanwhile are already in them. When the cache grows
+ * past cache_mb, the folders left longest ago go first. */
+#define CACHE_BYTES_PER_FILE 1500 /* shortcut: measured average (info, row, collate key), not counted; count if it is ever far off */
+
+static guint cache_timer;
+
+static gsize folder_bytes(Folder* f)
+{
+    gsize bytes = f->infos ? g_hash_table_size(f->infos) * CACHE_BYTES_PER_FILE : 0;
+    GHashTableIter it;
+    gpointer thumb;
+    if (f->thumbs != NULL) {
+        g_hash_table_iter_init(&it, f->thumbs);
+        while (g_hash_table_iter_next(&it, NULL, &thumb)) {
+            if (thumb != NO_THUMB)
+                bytes += (gsize)gdk_pixbuf_get_byte_length(thumb) * 2; /* and its scaled copies */
+        }
+    }
+    return bytes;
+}
+
+static void cache_drop(Folder* f)
+{
+    g_queue_remove(&cache, f);
+    f->cached_since = 0;
+    folder_unlist(f);
+    if (f->cancel != NULL)
+        g_cancellable_cancel(f->cancel);
+    stop_monitor(f);
+    folder_unref(f);
+}
+
+/* Drops folders past their time, then the oldest while over the size. */
+static void cache_trim(void)
+{
+    const SfeConfig* cfg = sfe_config();
+    gint64 oldest_kept = g_get_monotonic_time() - (gint64)cfg->cache_minutes * 60 * G_USEC_PER_SEC;
+    while (!g_queue_is_empty(&cache) && ((Folder*)g_queue_peek_head(&cache))->cached_since <= oldest_kept)
+        cache_drop(g_queue_peek_head(&cache));
+    gsize total = 0;
+    for (GList* l = cache.head; l != NULL; l = l->next)
+        total += folder_bytes(l->data);
+    gsize limit = (gsize)cfg->cache_mb << 20;
+    while (total > limit && !g_queue_is_empty(&cache)) {
+        Folder* oldest = g_queue_peek_head(&cache);
+        total -= folder_bytes(oldest);
+        cache_drop(oldest);
+    }
+}
+
+static gboolean on_cache_timer(gpointer data)
+{
+    (void)data;
+    cache_trim();
+    if (!g_queue_is_empty(&cache))
+        return G_SOURCE_CONTINUE;
+    cache_timer = 0;
+    return G_SOURCE_REMOVE;
+}
+
+/* Takes over the last pane's ref when `f` is worth keeping. */
+static bool cache_keep(Folder* f)
+{
+    const SfeConfig* cfg = sfe_config();
+    if (cfg->cache_minutes <= 0 || cfg->cache_mb <= 0 || f->store == NULL || f->loading || f->monitor == NULL
+        || f->uri == NULL)
+        return false; /* not loaded, or no monitor to keep it current */
+    f->cached_since = g_get_monotonic_time();
+    g_queue_push_tail(&cache, f);
+    if (cache_timer == 0)
+        cache_timer = g_timeout_add_seconds(30, on_cache_timer, NULL);
+    cache_trim();
+    return true;
+}
+
 /* A pane stops showing or waiting for `f`. The last one cancels its load. */
+static bool cache_keep(Folder* f);
+
 static void folder_detach(Folder* f, SfeDirModel* model)
 {
     f->models = g_list_remove(f->models, model);
+    if (f->models == NULL && cache_keep(f))
+        return; /* the pane's ref is now the cache's */
     if (f->models == NULL) {
         folder_unlist(f);
         if (f->cancel != NULL)
@@ -663,6 +751,10 @@ static void on_dir_changed(GFileMonitor* monitor, GFile* file, GFile* other,
         if (event == G_FILE_MONITOR_EVENT_DELETED || event == G_FILE_MONITOR_EVENT_MOVED_OUT
             || event == G_FILE_MONITOR_EVENT_UNMOUNTED) {
             folder_unlist(f); /* if it comes back, read it again */
+            if (f->cached_since != 0) {
+                cache_drop(f);
+                return;
+            }
             GList* models = shown_by(f);
             for (GList* l = models; l != NULL; l = l->next)
                 g_signal_emit(l->data, signals[SIGNAL_GONE], 0);

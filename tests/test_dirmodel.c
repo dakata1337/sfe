@@ -199,6 +199,61 @@ static void test_recursive(void)
     g_assert_cmpint(system(cmd), ==, 0);
 }
 
+/* A folder no pane shows stays cached: the same rows come back, with the
+ * changes made on disk meanwhile; past the size limit, or with the cache
+ * off, it is dropped. */
+static void test_cache(void)
+{
+    SfeConfig* cfg = (SfeConfig*)sfe_config();
+    g_autofree char* path = g_dir_make_tmp("sfe-dirmodel-XXXXXX", NULL);
+    g_autofree char* other_path = g_dir_make_tmp("sfe-dirmodel-XXXXXX", NULL);
+    touch(path, "a.txt");
+    g_autoptr(GFile) dir = g_file_new_for_path(path);
+    g_autoptr(GFile) other = g_file_new_for_path(other_path);
+
+    Counts c = { 0 };
+    SfeDirModel* m = open_model(dir, &c);
+    gpointer store = sfe_dir_model_get_model(m);
+    g_object_add_weak_pointer(store, &store);
+
+    /* Left: cached, and kept current. */
+    sfe_dir_model_load(m, other);
+    wait_for(&c.loaded, 2);
+    g_assert_nonnull(store);
+    touch(path, "b.txt");
+    gpointer seen = store;
+    while (gtk_tree_model_iter_n_children(seen, NULL) != 2)
+        g_main_context_iteration(NULL, TRUE);
+
+    /* Back: the same rows, at once. */
+    sfe_dir_model_load(m, dir);
+    wait_for(&c.loaded, 3);
+    g_assert_true(sfe_dir_model_get_model(m) == store);
+    g_assert_cmpint(rows(m), ==, 2);
+
+    /* Over the size limit: dropped when left. */
+    cfg->cache_mb = 0;
+    sfe_dir_model_load(m, other);
+    wait_for(&c.loaded, 4);
+    g_assert_null(store);
+
+    /* The cache off: dropped too. */
+    cfg->cache_mb = 512;
+    cfg->cache_minutes = 0;
+    sfe_dir_model_load(m, dir);
+    wait_for(&c.loaded, 5);
+    store = sfe_dir_model_get_model(m);
+    g_object_add_weak_pointer(store, &store);
+    sfe_dir_model_load(m, other);
+    wait_for(&c.loaded, 6);
+    g_assert_null(store);
+    cfg->cache_minutes = 5;
+
+    g_object_unref(m);
+    g_autofree char* cmd = g_strdup_printf("rm -rf '%s' '%s'", path, other_path);
+    g_assert_cmpint(system(cmd), ==, 0);
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -208,5 +263,6 @@ int main(int argc, char** argv)
     }
     g_test_add_func("/dirmodel/shared", test_shared);
     g_test_add_func("/dirmodel/recursive", test_recursive);
+    g_test_add_func("/dirmodel/cache", test_cache);
     return g_test_run();
 }

@@ -73,6 +73,8 @@ static const SfeOption options[] = {
     { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },
     { "general", "visual_clear", SFE_OPT_BOOL, FIELD(visual_clear), "After a command acts on a visual-mode selection (yank, trash, ...), clear the selection", .label = "Clear visual selection after use" },
     { "general", "search_recursive", SFE_OPT_BOOL, FIELD(search_recursive), "Search (Ctrl+F, /) also looks in the folders below the current one", .label = "Search in subfolders", .group = "Search" },
+    { "general", "cache_minutes", SFE_OPT_INT, FIELD(cache_minutes), "Keep folders you left loaded this many minutes, so going back is instant (0: off)", .min = 0, .max = 1440, .label = "Keep left folders (minutes)", .group = "Memory" },
+    { "general", "cache_mb", SFE_OPT_INT, FIELD(cache_mb), "Memory for folders you left, in MiB; the ones left longest ago are dropped first", .min = 16, .max = 1 << 16, .label = "Memory for left folders (MiB)" },
     { "preview", "thumbnails", SFE_OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails", .label = "Thumbnails" },
     { "preview", "thumbnail_max_mb", SFE_OPT_INT, FIELD(thumbnail_max_mb), "Skip thumbnails for files larger than this (MiB)", .min = 1, .max = 1 << 20, .label = "Thumbnail size limit (MiB)" },
     { "preview", "folder_covers", SFE_OPT_BOOL, FIELD(folder_covers), "Show a folder's cover picture (cover.jpg, folder.png, front.jpg, ...) instead of its icon", .label = "Folder covers" },
@@ -159,6 +161,8 @@ SfeConfig* sfe_config_new(void)
     cfg->confirm_delete = true;
     cfg->visual_clear = true;
     cfg->decorations = true;
+    cfg->cache_minutes = 5;
+    cfg->cache_mb = 512;
 
     cfg->thumbnails = true;
     cfg->thumbnail_max_mb = 50;

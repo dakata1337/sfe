@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Folders you leave stay loaded for 5 minutes (up to 512 MiB, the oldest
+  dropped first; *Settings* → Memory), and changes on disk are picked up
+  meanwhile. Going back to a folder of 100,000 files takes 0.65 s of work
+  in the list instead of 2 s (the grid: 2.2 s instead of 3.5 s).
 - The command line and the status corner no longer join letters such as
   "ffi" into one glyph (some monospace fonts, e.g. Nimbus Mono, do).
 - Search can look in subfolders too: turn on *Search in subfolders*
