@@ -7,6 +7,12 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Drag and drop files: between splits, between sfe windows and with other
+  applications. Drag from a selected file to take the whole selection;
+  dragging from an unselected file still draws a selection rectangle. A drop
+  on a folder goes into it, elsewhere into the view's folder. It moves on the
+  same file system and copies to another; hold Ctrl to copy, Shift to move.
+
 ## 3.2.1
 
 - Open / save dialogs (also through the portal) open at 1200 x 800,

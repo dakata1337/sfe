@@ -61,6 +61,9 @@ const SfeUserAction* sfe_find_user_action(const char* name, unsigned kind);
 /* Pastes the clipboard's files into `dest`. */
 void sfe_actions_paste_into(SfeWindow* window, GFile* dest);
 
+/* Copies or moves `files` (GFile*) into `dest` (a drop), like a paste. */
+void sfe_actions_transfer(SfeWindow* window, GList* files, GFile* dest, bool move);
+
 /* Opens `files` (GFile*) with `app`; errors are shown in a dialog. */
 /* The mass rename dialog for `files`, or for every item of `pane`'s folder
  * when NULL (always with the Include switch then). */

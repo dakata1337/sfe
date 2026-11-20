@@ -246,6 +246,12 @@ it; going to another folder ends it.
 - Copy and paste use the system clipboard, so they work between views,
   between windows and with other file managers. Pasted files become the
   selection, so the next command acts on them.
+- Drag files to another split, another window or another application, or
+  drop files from them. Start the drag on a selected file to take the whole
+  selection; a drag from an unselected file draws a selection rectangle
+  instead. A drop on a folder goes into it, elsewhere into the view's
+  folder. Files move on the same file system and are copied to another; hold
+  **Ctrl** to copy or **Shift** to move.
 - **Open With** lists the applications installed for the file type.
 - Long operations show progress at the bottom, with a cancel button:
 

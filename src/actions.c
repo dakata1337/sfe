@@ -356,20 +356,32 @@ static void free_weak_ref(gpointer data, GClosure* closure)
     g_free(data);
 }
 
+static SfeFileOp* transfer(SfeWindow* window, GList* files, GFile* dest, bool move)
+{
+    guint n = g_list_length(files);
+    g_autofree char* text = g_strdup_printf("%s %u item%s…", move ? "Moving" : "Pasting", n, n == 1 ? "" : "s");
+    sfe_window_show_status(window, text);
+    SfeFileOp* op = sfe_file_op_new(move ? SFE_OP_MOVE : SFE_OP_COPY, files, dest);
+    GWeakRef* ref = g_new0(GWeakRef, 1);
+    g_weak_ref_init(ref, window);
+    g_signal_connect_data(op, "finished", G_CALLBACK(on_paste_done), ref, free_weak_ref, 0);
+    return op;
+}
+
+void sfe_actions_transfer(SfeWindow* window, GList* files, GFile* dest, bool move)
+{
+    g_autoptr(SfeFileOp) op = transfer(window, files, dest, move);
+    sfe_window_run_op(window, op);
+}
+
 static void on_clipboard_files(GList* files, bool cut, gpointer data)
 {
     PasteRequest* req = data;
 
     if (files != NULL) {
-        guint n = g_list_length(files);
-        g_autofree char* text = g_strdup_printf("%s %u item%s…", cut ? "Moving" : "Pasting", n, n == 1 ? "" : "s");
-        sfe_window_show_status(req->window, text);
-        g_autoptr(SfeFileOp) op = sfe_file_op_new(cut ? SFE_OP_MOVE : SFE_OP_COPY, files, req->dest);
+        g_autoptr(SfeFileOp) op = transfer(req->window, files, req->dest, cut);
         if (cut)
             g_signal_connect(op, "finished", G_CALLBACK(on_cut_paste_done), NULL);
-        GWeakRef* window = g_new0(GWeakRef, 1);
-        g_weak_ref_init(window, req->window);
-        g_signal_connect_data(op, "finished", G_CALLBACK(on_paste_done), window, free_weak_ref, 0);
         sfe_window_run_op(req->window, op);
     }
     g_object_unref(req->window);

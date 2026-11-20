@@ -1,6 +1,7 @@
 #include "pane.h"
 #include "theme.h"
 
+#include "actions.h"
 #include "app.h"
 #include "ctxmenu.h"
 #include "dialogs.h"
@@ -79,6 +80,14 @@ struct _SfePane {
     bool band_own; /* grid band started on a file or below the items: GTK does not band there, we do */
     GHashTable* band_base; /* with Ctrl: row indexes (+1) selected before the band */
     double band_x1, band_y1, band_x2, band_y2;
+    /* Drag and drop: a press on a selected file, which may become a drag
+     * (in bin coordinates), and the drag coming in. */
+    GtkTreePath* drag_path;
+    double drag_x, drag_y;
+    GdkDragContext* drop_ctx;
+    GList* drop_files; /* GFile*, once its data arrived */
+    bool drop_ready, drop_now;
+    int drop_x, drop_y; /* widget coordinates */
     /* Grid: where a Shift-selection starts (the last item picked without
      * Shift), or NULL for the cursor. */
     GtkTreeRowReference* grid_anchor;
@@ -1095,6 +1104,305 @@ static void on_scroll_value(GtkAdjustment* adjustment, gpointer data)
 }
 
 /* ------------------------------------------------------------------------ */
+/* Drag and drop of files (text/uri-list, as other file managers use)        */
+/* ------------------------------------------------------------------------ */
+
+static void set_anchor(SfePane* self, GtkTreePath* path);
+
+static const GtkTargetEntry uri_targets[] = { { (char*)"text/uri-list", 0, 0 } };
+
+/* The row at bin window coordinates (NULL on the list's headers). */
+static GtkTreePath* path_at(GtkWidget* view, GdkWindow* window, double x, double y)
+{
+    if (GTK_IS_ICON_VIEW(view))
+        return gtk_icon_view_get_path_at_pos(GTK_ICON_VIEW(view), (int)x, (int)y);
+    GtkTreePath* path = NULL;
+    if (window == gtk_tree_view_get_bin_window(GTK_TREE_VIEW(view)))
+        gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(view), (int)x, (int)y, &path, NULL, NULL, NULL);
+    return path;
+}
+
+static bool path_selected(GtkWidget* view, GtkTreePath* path)
+{
+    if (GTK_IS_ICON_VIEW(view))
+        return gtk_icon_view_path_is_selected(GTK_ICON_VIEW(view), path);
+    return gtk_tree_selection_path_is_selected(gtk_tree_view_get_selection(GTK_TREE_VIEW(view)), path);
+}
+
+/* A press on a selected file may start dragging the whole selection, so
+ * GTK must not see it (it would select just that file). Without a drag the
+ * release selects that file; a double click opens it. True when taken. */
+static bool drag_press(SfePane* self, GtkWidget* view, GdkEventButton* event)
+{
+    if (event->button != GDK_BUTTON_PRIMARY || self->single || (event->state & (GDK_SHIFT_MASK | GDK_CONTROL_MASK)))
+        return false;
+    GtkTreePath* path = path_at(view, event->window, event->x, event->y);
+    if (path == NULL || !path_selected(view, path)) {
+        gtk_tree_path_free(path);
+        return false;
+    }
+    g_clear_pointer(&self->drag_path, gtk_tree_path_free);
+    if (event->type == GDK_2BUTTON_PRESS)
+        activate_path(self, path);
+    if (event->type == GDK_BUTTON_PRESS) {
+        self->drag_path = gtk_tree_path_copy(path);
+        self->drag_x = event->x;
+        self->drag_y = event->y;
+        gtk_widget_grab_focus(view);
+    }
+    gtk_tree_path_free(path);
+    return true;
+}
+
+static void drag_release(SfePane* self, GtkWidget* view)
+{
+    GtkTreePath* path = g_steal_pointer(&self->drag_path);
+    if (path == NULL)
+        return;
+    if (GTK_IS_ICON_VIEW(view)) {
+        gtk_icon_view_unselect_all(GTK_ICON_VIEW(view));
+        gtk_icon_view_select_path(GTK_ICON_VIEW(view), path);
+        gtk_icon_view_set_cursor(GTK_ICON_VIEW(view), path, NULL, FALSE);
+        set_anchor(self, path);
+    } else {
+        gtk_tree_view_set_cursor(GTK_TREE_VIEW(view), path, NULL, FALSE); /* (selects only it) */
+    }
+    gtk_tree_path_free(path);
+}
+
+static bool drag_motion(SfePane* self, GtkWidget* view, GdkEventMotion* event)
+{
+    if (self->drag_path == NULL)
+        return false;
+    if (!gtk_drag_check_threshold(view, (int)self->drag_x, (int)self->drag_y, (int)event->x, (int)event->y))
+        return true;
+    g_autoptr(GFileInfo) info = sfe_dir_model_info_at(self->model, self->drag_path);
+    g_clear_pointer(&self->drag_path, gtk_tree_path_free);
+    GtkTargetList* targets = gtk_target_list_new(uri_targets, G_N_ELEMENTS(uri_targets));
+    GdkDragContext* ctx = gtk_drag_begin_with_coordinates(view, targets, GDK_ACTION_COPY | GDK_ACTION_MOVE,
+        GDK_BUTTON_PRIMARY, (GdkEvent*)event, -1, -1);
+    gtk_target_list_unref(targets);
+    if (ctx != NULL && info != NULL) {
+        cairo_surface_t* icon = sfe_dir_model_icon(self->model, info, false);
+        if (icon != NULL) {
+            gtk_drag_set_icon_surface(ctx, icon);
+            cairo_surface_destroy(icon);
+        }
+    }
+    return true;
+}
+
+static void on_drag_data_get(GtkWidget* view, GdkDragContext* ctx, GtkSelectionData* sel, guint info,
+    guint time, gpointer data)
+{
+    (void)view, (void)ctx, (void)info, (void)time;
+    GList* files = sfe_pane_get_selected_files(SFE_PANE(data));
+    g_autoptr(GPtrArray) uris = g_ptr_array_new_with_free_func(g_free);
+    for (GList* l = files; l != NULL; l = l->next)
+        g_ptr_array_add(uris, g_file_get_uri(l->data));
+    g_ptr_array_add(uris, NULL);
+    gtk_selection_data_set_uris(sel, (char**)uris->pdata);
+    g_list_free_full(files, g_object_unref);
+}
+
+static void drop_reset(SfePane* self)
+{
+    g_clear_object(&self->drop_ctx);
+    g_list_free_full(g_steal_pointer(&self->drop_files), g_object_unref);
+    self->drop_ready = self->drop_now = false;
+}
+
+/* Marks the folder a drop would go into: the folder under the pointer,
+ * else the whole view (its folder). */
+static void drop_highlight(GtkWidget* view, GtkTreePath* folder)
+{
+    if (GTK_IS_ICON_VIEW(view))
+        gtk_icon_view_set_drag_dest_item(GTK_ICON_VIEW(view), folder, GTK_ICON_VIEW_DROP_INTO);
+    else
+        gtk_tree_view_set_drag_dest_row(GTK_TREE_VIEW(view), folder, GTK_TREE_VIEW_DROP_INTO_OR_BEFORE);
+    if (folder != NULL)
+        gtk_drag_unhighlight(view);
+    else
+        gtk_drag_highlight(view);
+}
+
+static void drop_unhighlight(GtkWidget* view)
+{
+    if (GTK_IS_ICON_VIEW(view))
+        gtk_icon_view_set_drag_dest_item(GTK_ICON_VIEW(view), NULL, GTK_ICON_VIEW_NO_DROP);
+    else
+        gtk_tree_view_set_drag_dest_row(GTK_TREE_VIEW(view), NULL, GTK_TREE_VIEW_DROP_BEFORE);
+    gtk_drag_unhighlight(view);
+}
+
+/* Where a drop at widget coordinates goes (new reference). */
+static GFile* drop_folder(SfePane* self, GtkWidget* view, int x, int y)
+{
+    int bx = 0, by = 0;
+    GtkTreePath* path = NULL;
+    if (GTK_IS_ICON_VIEW(view)) {
+        gtk_icon_view_convert_widget_to_bin_window_coords(GTK_ICON_VIEW(view), x, y, &bx, &by);
+        path = gtk_icon_view_get_path_at_pos(GTK_ICON_VIEW(view), bx, by);
+    } else {
+        gtk_tree_view_convert_widget_to_bin_window_coords(GTK_TREE_VIEW(view), x, y, &bx, &by);
+        gtk_tree_view_get_path_at_pos(GTK_TREE_VIEW(view), bx, by, &path, NULL, NULL, NULL);
+    }
+    GFile* dest = NULL;
+    GtkTreeModel* model = sfe_dir_model_get_model(self->model);
+    GtkTreeIter iter;
+    gboolean is_dir = FALSE;
+    if (path != NULL && model != NULL && gtk_tree_model_get_iter(model, &iter, path))
+        gtk_tree_model_get(model, &iter, SFE_COL_IS_DIR, &is_dir, -1);
+    if (is_dir)
+        dest = sfe_dir_model_file_at(self->model, path);
+    if (dest == NULL)
+        g_clear_pointer(&path, gtk_tree_path_free);
+    drop_highlight(view, path);
+    gtk_tree_path_free(path);
+    return dest != NULL ? dest : g_object_ref(self->dir);
+}
+
+static bool same_filesystem(GFile* a, GFile* b)
+{
+    g_autoptr(GFileInfo) ia = g_file_query_info(a, G_FILE_ATTRIBUTE_ID_FILESYSTEM, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, NULL, NULL);
+    g_autoptr(GFileInfo) ib = g_file_query_info(b, G_FILE_ATTRIBUTE_ID_FILESYSTEM, 0, NULL, NULL);
+    const char* fa = ia ? g_file_info_get_attribute_string(ia, G_FILE_ATTRIBUTE_ID_FILESYSTEM) : NULL;
+    const char* fb = ib ? g_file_info_get_attribute_string(ib, G_FILE_ATTRIBUTE_ID_FILESYSTEM) : NULL;
+    return fa != NULL && g_strcmp0(fa, fb) == 0;
+}
+
+/* Copy or move, as other file managers do: Ctrl copies, Shift moves, else a
+ * move on the same file system and a copy to another. 0 refuses: a folder
+ * into itself, a move to where the files already are, nothing usable. */
+static GdkDragAction drop_action(SfePane* self, GtkWidget* view, GdkDragContext* ctx, GFile* dest)
+{
+    if (self->drop_files == NULL)
+        return 0;
+    bool all_here = true;
+    for (GList* l = self->drop_files; l != NULL; l = l->next) {
+        g_autoptr(GFile) parent = g_file_get_parent(l->data);
+        if (g_file_equal(l->data, dest) || g_file_has_prefix(dest, l->data))
+            return 0;
+        all_here = all_here && parent != NULL && g_file_equal(parent, dest);
+    }
+    GdkModifierType mask = 0;
+    gdk_window_get_device_position(gtk_widget_get_window(view), gdk_drag_context_get_device(ctx), NULL, NULL, &mask);
+    GdkDragAction action;
+    if (mask & GDK_CONTROL_MASK)
+        action = GDK_ACTION_COPY;
+    else if (mask & GDK_SHIFT_MASK)
+        action = GDK_ACTION_MOVE;
+    else
+        action = same_filesystem(self->drop_files->data, dest) ? GDK_ACTION_MOVE : GDK_ACTION_COPY;
+    if (!(gdk_drag_context_get_actions(ctx) & action))
+        action = gdk_drag_context_get_suggested_action(ctx) & (GDK_ACTION_COPY | GDK_ACTION_MOVE);
+    return action == GDK_ACTION_MOVE && all_here ? 0 : action;
+}
+
+static void drop_status(SfePane* self, GtkWidget* view, GdkDragContext* ctx, guint time)
+{
+    g_autoptr(GFile) dest = drop_folder(self, view, self->drop_x, self->drop_y);
+    GdkDragAction action = self->drop_ready ? drop_action(self, view, ctx, dest) : 0;
+    if (action == 0)
+        drop_unhighlight(view);
+    gdk_drag_status(ctx, action, time);
+}
+
+static void drop_finish(SfePane* self, GtkWidget* view, GdkDragContext* ctx, guint time)
+{
+    g_autoptr(GFile) dest = drop_folder(self, view, self->drop_x, self->drop_y);
+    GdkDragAction action = drop_action(self, view, ctx, dest);
+    GtkWidget* window = gtk_widget_get_toplevel(GTK_WIDGET(self));
+    if (action != 0 && SFE_IS_WINDOW(window))
+        sfe_actions_transfer(SFE_WINDOW(window), self->drop_files, dest, action == GDK_ACTION_MOVE);
+    drop_unhighlight(view);
+    gtk_drag_finish(ctx, action != 0 && SFE_IS_WINDOW(window), FALSE, time);
+    drop_reset(self);
+}
+
+/* The files are fetched on the first motion, to choose copy or move. */
+static gboolean on_drag_motion(GtkWidget* view, GdkDragContext* ctx, int x, int y, guint time, gpointer data)
+{
+    SfePane* self = data;
+    if (gtk_drag_dest_find_target(view, ctx, NULL) == GDK_NONE)
+        return FALSE;
+    self->drop_x = x;
+    self->drop_y = y;
+    if (ctx != self->drop_ctx) {
+        drop_reset(self);
+        self->drop_ctx = g_object_ref(ctx);
+        gtk_drag_get_data(view, ctx, gdk_atom_intern_static_string("text/uri-list"), time);
+    }
+    drop_status(self, view, ctx, time);
+    return TRUE;
+}
+
+/* (Also before a drop.) */
+static void on_drag_leave(GtkWidget* view, GdkDragContext* ctx, guint time, gpointer data)
+{
+    (void)ctx, (void)time, (void)data;
+    drop_unhighlight(view);
+}
+
+static gboolean on_drag_drop(GtkWidget* view, GdkDragContext* ctx, int x, int y, guint time, gpointer data)
+{
+    SfePane* self = data;
+    if (gtk_drag_dest_find_target(view, ctx, NULL) == GDK_NONE)
+        return FALSE;
+    if (ctx != self->drop_ctx) {
+        drop_reset(self);
+        self->drop_ctx = g_object_ref(ctx);
+    }
+    self->drop_x = x;
+    self->drop_y = y;
+    self->drop_now = true;
+    if (self->drop_ready)
+        drop_finish(self, view, ctx, time);
+    else
+        gtk_drag_get_data(view, ctx, gdk_atom_intern_static_string("text/uri-list"), time);
+    return TRUE;
+}
+
+/* Only local files and the trash (to restore from it). */
+static void on_drag_data_received(GtkWidget* view, GdkDragContext* ctx, int x, int y, GtkSelectionData* sel,
+    guint info, guint time, gpointer data)
+{
+    (void)x, (void)y, (void)info;
+    SfePane* self = data;
+    if (ctx != self->drop_ctx)
+        return;
+    if (!self->drop_ready) {
+        g_auto(GStrv) uris = gtk_selection_data_get_uris(sel);
+        bool usable = uris != NULL && uris[0] != NULL;
+        GList* files = NULL;
+        for (char** u = uris; usable && *u != NULL; u++) {
+            GFile* file = g_file_new_for_uri(*u);
+            usable = g_file_is_native(file) || g_file_has_uri_scheme(file, "trash");
+            files = g_list_prepend(files, file);
+        }
+        if (usable)
+            self->drop_files = g_list_reverse(files);
+        else
+            g_list_free_full(files, g_object_unref);
+        self->drop_ready = true;
+    }
+    if (self->drop_now)
+        drop_finish(self, view, ctx, time);
+    else
+        drop_status(self, view, ctx, time);
+}
+
+static void setup_dnd(SfePane* self, GtkWidget* view)
+{
+    gtk_drag_dest_set(view, 0, uri_targets, G_N_ELEMENTS(uri_targets), GDK_ACTION_COPY | GDK_ACTION_MOVE);
+    g_signal_connect(view, "drag-data-get", G_CALLBACK(on_drag_data_get), self);
+    g_signal_connect(view, "drag-motion", G_CALLBACK(on_drag_motion), self);
+    g_signal_connect(view, "drag-leave", G_CALLBACK(on_drag_leave), self);
+    g_signal_connect(view, "drag-drop", G_CALLBACK(on_drag_drop), self);
+    g_signal_connect(view, "drag-data-received", G_CALLBACK(on_drag_data_received), self);
+}
+
+/* ------------------------------------------------------------------------ */
 /* The drag-select rectangle in the empty space                              */
 /* ------------------------------------------------------------------------ */
 
@@ -1187,9 +1495,13 @@ static void band_select(SfePane* self)
 static gboolean on_view_motion(GtkWidget* view, GdkEventMotion* event, gpointer data)
 {
     SfePane* self = data;
-    if (!self->band_pressed || !(event->state & GDK_BUTTON1_MASK))
+    if (!(event->state & GDK_BUTTON1_MASK))
         return FALSE;
     grid_event_to_bin(view, event->window, &event->x, &event->y);
+    if (drag_motion(self, view, event))
+        return TRUE;
+    if (!self->band_pressed)
+        return FALSE;
     event_to_content(view, event->x, event->y, &self->band_x2, &self->band_y2);
     if (self->band_own) {
         if (!self->band_active && !gtk_drag_check_threshold(view, (int)self->band_x1, (int)self->band_y1,
@@ -1210,6 +1522,7 @@ static gboolean on_view_release(GtkWidget* view, GdkEventButton* event, gpointer
 {
     (void)event;
     SfePane* self = data;
+    drag_release(self, view);
     if (self->band_active)
         gtk_widget_queue_draw(view);
     self->band_pressed = self->band_active = self->band_own = false;
@@ -2019,6 +2332,8 @@ static gboolean on_view_button_press(GtkWidget* view, GdkEventButton* event, gpo
 
     sfe_pane_visual_end(self); /* the mouse takes over the selection */
     grid_event_to_bin(view, event->window, &event->x, &event->y);
+    if (drag_press(self, view, event))
+        return TRUE;
     band_press(self, view, event);
     if (GTK_IS_ICON_VIEW(view) && event->type == GDK_BUTTON_PRESS && event->button == GDK_BUTTON_PRIMARY
         && grid_click(self, event))
@@ -2323,6 +2638,7 @@ static GtkWidget* build_grid(SfePane* self)
     g_signal_connect(grid, "button-release-event", G_CALLBACK(on_view_release), self);
     g_signal_connect_after(grid, "draw", G_CALLBACK(on_view_draw_after), self);
     g_signal_connect(grid, "popup-menu", G_CALLBACK(on_view_popup_menu), self);
+    setup_dnd(self, grid);
     return grid;
 }
 
@@ -2391,6 +2707,7 @@ static GtkWidget* build_list(SfePane* self)
     g_signal_connect(list, "button-release-event", G_CALLBACK(on_view_release), self);
     g_signal_connect_after(list, "draw", G_CALLBACK(on_view_draw_after), self);
     g_signal_connect(list, "popup-menu", G_CALLBACK(on_view_popup_menu), self);
+    setup_dnd(self, list);
     g_signal_connect(list, "size-allocate", G_CALLBACK(on_list_allocated), self);
     return list;
 }
@@ -2568,6 +2885,8 @@ static void sfe_pane_dispose(GObject* object)
     g_clear_object(&self->search_base);
     g_clear_pointer(&self->filter, g_free);
     g_clear_pointer(&self->band_base, g_hash_table_unref);
+    g_clear_pointer(&self->drag_path, gtk_tree_path_free);
+    drop_reset(self);
     g_clear_object(&self->dir);
     G_OBJECT_CLASS(sfe_pane_parent_class)->dispose(object);
 }
