@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Grid view: the mouse wheel works over the empty space after the files.
+  Scrolled to the end, the wheel over that space did nothing (GTK's grid
+  takes scrolling only where it has items).
+
 ## 3.0.1
 
 - List view in a folder with long names: no more "value location passed as

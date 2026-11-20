@@ -2053,6 +2053,16 @@ static GtkWidget* build_filter_badge(SfePane* self)
     return box;
 }
 
+/* GtkIconView takes scrolling only on its inner window, which ends at the
+ * last row. Scrolled into the room after the files, the wheel there went
+ * past the grid and its scrolled window never saw it. */
+static void on_grid_realized(GtkWidget* grid, gpointer data)
+{
+    (void)data;
+    GdkWindow* window = gtk_widget_get_window(grid);
+    gdk_window_set_events(window, gdk_window_get_events(window) | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
+}
+
 static GtkWidget* build_grid(SfePane* self)
 {
     GtkWidget* grid = gtk_icon_view_new();
@@ -2083,6 +2093,7 @@ static GtkWidget* build_grid(SfePane* self)
     gtk_cell_layout_set_cell_data_func(layout, text, name_cell, self, NULL);
 
     g_signal_connect(grid, "item-activated", G_CALLBACK(on_grid_activated), self);
+    g_signal_connect_after(grid, "realize", G_CALLBACK(on_grid_realized), NULL);
     g_signal_connect(grid, "selection-changed", G_CALLBACK(on_selection_changed), self);
     g_signal_connect(grid, "key-press-event", G_CALLBACK(on_view_key_press), self);
     g_signal_connect(grid, "button-press-event", G_CALLBACK(on_view_button_press), self);
