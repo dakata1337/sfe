@@ -1,5 +1,6 @@
 #include "dirmodel.h"
 
+#include "app.h"
 #include "fuzzy.h"
 #include "filefilter.h"
 #include "icons.h"
@@ -53,6 +54,11 @@ struct _SfeDirModel {
     char* query; /* search filter, NULL when not searching */
     int matched; /* files the query matches (may exceed the rows); kept up to date as files come and go */
     const SfeFileFilter* filter; /* a file dialog's type filter (borrowed), or NULL */
+
+    /* Recursive search: the files in the folders below, found by a walk. */
+    GPtrArray* deep; /* GFileInfo*, named by their path ("sub/x.txt"); NULL until walked */
+    GFile* walk_root; /* the folder walked or being walked, NULL when none */
+    GCancellable* walk_cancel;
 
     /* The settings this pane wants, given to every folder it shows. */
     bool show_hidden;
@@ -232,7 +238,7 @@ static void row_changed(GtkListStore* store, GtkTreeIter* iter)
  * row that is filled in later confuses GtkTreeModelFilter. */
 static void store_row(Folder* f, GtkListStore* store, GtkTreeIter* iter, bool insert, GFileInfo* info)
 {
-    g_autoptr(GFile) file = g_file_get_child(f->dir, g_file_info_get_name(info));
+    g_autoptr(GFile) file = g_file_resolve_relative_path(f->dir, g_file_info_get_name(info)); /* "sub/x.txt" too */
     int columns[] = { SFE_COL_FILE, SFE_COL_INFO, SFE_COL_NAME, SFE_COL_IS_DIR };
     GValue values[G_N_ELEMENTS(columns)] = { G_VALUE_INIT };
     g_value_set_object(g_value_init(&values[0], G_TYPE_FILE), file);
@@ -726,6 +732,10 @@ static GPtrArray* shown_infos(SfeDirModel* self)
         if (is_shown(self, info)) /* (scores it) */
             g_ptr_array_add(shown, info);
     }
+    for (guint i = 0; self->query != NULL && self->deep != NULL && i < self->deep->len; i++) {
+        if (is_shown(self, g_ptr_array_index(self->deep, i)))
+            g_ptr_array_add(shown, g_ptr_array_index(self->deep, i));
+    }
     self->matched = (int)shown->len;
     if (self->query != NULL && shown->len > SFE_SEARCH_MAX_SHOWN) {
         sort_scores = self->scores;
@@ -756,6 +766,110 @@ static void rebuild_own(SfeDirModel* self)
     sort_store(f, self->own_store);
 }
 
+/* Recursive search walks the folders below in a thread, breadth first:
+ * not into symlinks, other file systems (/proc, mounted drives) or hidden
+ * folders (unless hidden files are shown). Every file found is named by its
+ * path from the folder, so the query can match "photos/2024". */
+#define WALK_MAX 100000 /* shortcut: files beyond this are not searched; raise if trees that big matter */
+
+typedef struct {
+    GFile* root;
+    bool hidden;
+} WalkJob;
+
+static void walk_job_free(WalkJob* job)
+{
+    g_object_unref(job->root);
+    g_free(job);
+}
+
+static void walk_thread(GTask* task, gpointer source, gpointer data, GCancellable* cancel)
+{
+    (void)source;
+    WalkJob* job = data;
+    GPtrArray* found = g_ptr_array_new_with_free_func(g_object_unref);
+    g_autoptr(GFileInfo) root_info = g_file_query_info(job->root, G_FILE_ATTRIBUTE_UNIX_DEVICE,
+        G_FILE_QUERY_INFO_NONE, cancel, NULL);
+    guint32 device = root_info ? g_file_info_get_attribute_uint32(root_info, G_FILE_ATTRIBUTE_UNIX_DEVICE) : 0;
+    GQueue dirs = G_QUEUE_INIT; /* paths from the root, "" the root itself */
+    g_queue_push_tail(&dirs, g_strdup(""));
+
+    while (!g_queue_is_empty(&dirs) && found->len < WALK_MAX && !g_cancellable_is_cancelled(cancel)) {
+        g_autofree char* rel = g_queue_pop_head(&dirs);
+        g_autoptr(GFile) dir = g_file_resolve_relative_path(job->root, rel);
+        g_autoptr(GFileEnumerator) e = g_file_enumerate_children(dir, SFE_FILE_ATTRIBUTES "," G_FILE_ATTRIBUTE_UNIX_DEVICE,
+            G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS, cancel, NULL);
+        GFileInfo* info;
+        while (e != NULL && found->len < WALK_MAX && (info = g_file_enumerator_next_file(e, cancel, NULL)) != NULL) {
+            char* path = *rel ? g_build_filename(rel, g_file_info_get_name(info), NULL) : g_strdup(g_file_info_get_name(info));
+            if (info_is_dir(info) && !g_file_info_get_is_symlink(info) && (job->hidden || !g_file_info_get_is_hidden(info))
+                && g_file_info_get_attribute_uint32(info, G_FILE_ATTRIBUTE_UNIX_DEVICE) == device)
+                g_queue_push_tail(&dirs, g_strdup(path));
+            if (*rel == '\0') { /* the folder's own files are shown already */
+                g_free(path);
+                g_object_unref(info);
+                continue;
+            }
+            g_autofree char* display = g_filename_display_name(path);
+            g_autofree char* collate = g_utf8_collate_key_for_filename(display, -1);
+            g_file_info_set_name(info, path);
+            g_file_info_set_display_name(info, display);
+            g_file_info_set_attribute_string(info, COLLATE_KEY_ATTR, collate);
+            g_ptr_array_add(found, info);
+            g_free(path);
+        }
+    }
+    g_queue_clear_full(&dirs, g_free);
+    g_task_return_pointer(task, found, (GDestroyNotify)g_ptr_array_unref);
+}
+
+static void stop_walk(SfeDirModel* self)
+{
+    if (self->walk_cancel != NULL)
+        g_cancellable_cancel(self->walk_cancel);
+    g_clear_object(&self->walk_cancel);
+    g_clear_object(&self->walk_root);
+    g_clear_pointer(&self->deep, g_ptr_array_unref);
+}
+
+static void refilter(SfeDirModel* self);
+
+static void on_walked(GObject* source, GAsyncResult* res, gpointer data)
+{
+    (void)data;
+    SfeDirModel* self = SFE_DIR_MODEL(source);
+    GCancellable* cancel = g_task_get_cancellable(G_TASK(res));
+    GPtrArray* found = g_task_propagate_pointer(G_TASK(res), NULL);
+    if (g_cancellable_is_cancelled(cancel) || cancel != self->walk_cancel) { /* superseded */
+        if (found != NULL)
+            g_ptr_array_unref(found);
+        return;
+    }
+    self->deep = found;
+    refilter(self);
+}
+
+/* Starts, keeps or stops the walk to match the query, the setting and the
+ * folder shown. */
+static void update_walk(SfeDirModel* self)
+{
+    bool want = self->query != NULL && self->folder != NULL && sfe_config()->search_recursive;
+    if (want && self->walk_root != NULL && g_file_equal(self->walk_root, self->folder->dir))
+        return;
+    stop_walk(self);
+    if (!want)
+        return;
+    self->walk_root = g_object_ref(self->folder->dir);
+    self->walk_cancel = g_cancellable_new();
+    WalkJob* job = g_new0(WalkJob, 1);
+    job->root = g_object_ref(self->folder->dir);
+    job->hidden = self->show_hidden;
+    GTask* task = g_task_new(self, self->walk_cancel, on_walked, NULL);
+    g_task_set_task_data(task, job, (GDestroyNotify)walk_job_free);
+    g_task_run_in_thread(task, walk_thread);
+    g_object_unref(task);
+}
+
 static void refilter(SfeDirModel* self)
 {
     if (self->folder == NULL || self->folder->store == NULL)
@@ -778,6 +892,7 @@ static void switch_folder(SfeDirModel* self)
     self->folder = g_steal_pointer(&self->pending);
     g_clear_handle_id(&self->switch_source, g_source_remove);
     apply_settings(self, self->folder);
+    update_walk(self);
     rebuild_own(self);
     g_signal_emit(self, signals[SIGNAL_LOADED], 0);
     if (old != NULL)
@@ -980,6 +1095,7 @@ void sfe_dir_model_set_query(SfeDirModel* self, const char* query)
         return;
     g_free(self->query);
     self->query = g_strdup(q);
+    update_walk(self);
     refilter(self);
 }
 
@@ -1001,6 +1117,8 @@ void sfe_dir_model_get_counts(SfeDirModel* self, int* shown, int* matched, int* 
     g_hash_table_iter_init(&it, self->folder->infos);
     while (g_hash_table_iter_next(&it, NULL, &info))
         *total += passes_hidden(self->folder, info);
+    for (guint i = 0; self->query != NULL && self->deep != NULL && i < self->deep->len; i++)
+        *total += passes_hidden(self->folder, g_ptr_array_index(self->deep, i));
 }
 
 void sfe_dir_model_set_filter(SfeDirModel* self, const SfeFileFilter* filter)
@@ -1096,7 +1214,8 @@ void sfe_dir_model_set_icon_sizes(SfeDirModel* self, int grid, int list, int sca
 
 bool sfe_dir_model_wants_thumbnail(SfeDirModel* self, const char* name)
 {
-    return self->folder != NULL && self->folder->thumbs != NULL && !g_hash_table_contains(self->folder->thumbs, name);
+    return self->folder != NULL && self->folder->thumbs != NULL && strchr(name, '/') == NULL /* (a recursive search's: shortcut, no thumbnails) */
+        && !g_hash_table_contains(self->folder->thumbs, name);
 }
 
 void sfe_dir_model_set_thumbnail(SfeDirModel* self, GFile* file, GdkPixbuf* pixbuf)
@@ -1161,6 +1280,7 @@ static void sfe_dir_model_dispose(GObject* object)
     SfeDirModel* self = SFE_DIR_MODEL(object);
 
     g_clear_handle_id(&self->switch_source, g_source_remove);
+    stop_walk(self);
     g_clear_object(&self->own_store);
     g_clear_pointer(&self->own_rows, g_hash_table_unref);
     if (self->pending != NULL)

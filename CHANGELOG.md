@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Search can look in subfolders too: turn on *Search in subfolders*
+  (`search_recursive`) in Settings. Matches below the folder show their
+  path (`photos/2024/beach.jpg`), and Enter keeps them as a filter like
+  any other search.
 - The file-dialog service no longer leaks a little memory each time a
   program asks which filter was in use.
 

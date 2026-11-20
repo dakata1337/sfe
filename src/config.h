@@ -85,6 +85,7 @@ typedef struct {
     bool dirs_first;
     bool confirm_delete;
     bool visual_clear; /* clear the selection after acting on a visual one */
+    bool search_recursive; /* search (Ctrl+F) also in the folders below */
     bool decorations;
 
     /* [preview] */

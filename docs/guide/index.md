@@ -192,6 +192,14 @@ Type a folder name followed by `/` to search inside that folder: `src/pa`
 looks for "pa" in `src`, and `docs/guide/` walks down two levels. The search
 only goes down: `..` and `.` are not allowed.
 
+With *Search in subfolders* on (`search_recursive`, in *Settings* under
+Search), the search also finds files in the folders below, shown by their
+path (`photos/2024/beach.jpg`), and the path counts in the match. It skips
+hidden folders (unless hidden files are shown), links to folders and other
+drives, and stops after 100,000 files, nearest folders first. Files there
+get no thumbnails, and changes on disk below the folder show the next time
+you search.
+
 The letters that matched are marked in each name.
 
 | Key | Action |
@@ -654,6 +662,7 @@ ui_scale = 1.0
 view = "grid"        # grid | list
 sort_by = "name"     # name | size | modified | type
 sort_order = "ascending"  # ascending | descending
+search_recursive = false  # search also in the folders below
 
 [preview]
 thumbnails = true

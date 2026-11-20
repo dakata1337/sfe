@@ -72,6 +72,7 @@ static const SfeOption options[] = {
     { "general", "dirs_first", SFE_OPT_BOOL, FIELD(dirs_first), "List directories before files", .label = "Folders first" },
     { "general", "confirm_delete", SFE_OPT_BOOL, FIELD(confirm_delete), "Ask before deleting permanently", .label = "Confirm permanent delete" },
     { "general", "visual_clear", SFE_OPT_BOOL, FIELD(visual_clear), "After a command acts on a visual-mode selection (yank, trash, ...), clear the selection", .label = "Clear visual selection after use" },
+    { "general", "search_recursive", SFE_OPT_BOOL, FIELD(search_recursive), "Search (Ctrl+F, /) also looks in the folders below the current one", .label = "Search in subfolders", .group = "Search" },
     { "preview", "thumbnails", SFE_OPT_BOOL, FIELD(thumbnails), "Show image and video thumbnails", .label = "Thumbnails" },
     { "preview", "thumbnail_max_mb", SFE_OPT_INT, FIELD(thumbnail_max_mb), "Skip thumbnails for files larger than this (MiB)", .min = 1, .max = 1 << 20, .label = "Thumbnail size limit (MiB)" },
     { "preview", "folder_covers", SFE_OPT_BOOL, FIELD(folder_covers), "Show a folder's cover picture (cover.jpg, folder.png, front.jpg, ...) instead of its icon", .label = "Folder covers" },

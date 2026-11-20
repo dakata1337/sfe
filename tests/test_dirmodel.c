@@ -4,6 +4,7 @@
 #include "app.h"
 #include "dirmodel.h"
 #include <glib/gstdio.h>
+#include <stdlib.h>
 
 /* dirmodel.c's icons read the config; the defaults do. */
 const SfeConfig* sfe_config(void)
@@ -153,6 +154,51 @@ static void test_shared(void)
     g_rmdir(other_path);
 }
 
+/* Recursive search: files in the folders below match by their path, rows
+ * carry the right file; hidden folders and the folder's own files are not
+ * walked twice. */
+static void test_recursive(void)
+{
+    ((SfeConfig*)sfe_config())->search_recursive = true;
+    g_autofree char* path = g_dir_make_tmp("sfe-dirmodel-XXXXXX", NULL);
+    g_autofree char* sub = g_build_filename(path, "sub", NULL);
+    g_autofree char* deep = g_build_filename(sub, "deeper", NULL);
+    g_autofree char* hidden = g_build_filename(path, ".hid", NULL);
+    g_assert_cmpint(g_mkdir_with_parents(deep, 0700), ==, 0);
+    g_assert_cmpint(g_mkdir(hidden, 0700), ==, 0);
+    touch(path, "pear.txt");
+    touch(sub, "pear2.txt");
+    touch(deep, "pear3.txt");
+    touch(hidden, "pear4.txt");
+    touch(sub, "plum.txt");
+    g_autoptr(GFile) dir = g_file_new_for_path(path);
+
+    Counts c = { 0 };
+    SfeDirModel* m = open_model(dir, &c);
+    sfe_dir_model_set_query(m, "pear");
+    wait_for(&c.loaded, 3); /* the query, then the walk's results */
+    g_assert_cmpint(rows(m), ==, 3);
+    g_autoptr(GtkTreePath) row = sfe_dir_model_find(m, "sub/deeper/pear3.txt");
+    g_assert_nonnull(row);
+    g_autoptr(GFile) file = sfe_dir_model_file_at(m, row);
+    g_autofree char* file_path = g_file_get_path(file);
+    g_autofree char* want = g_build_filename(deep, "pear3.txt", NULL);
+    g_assert_cmpstr(file_path, ==, want);
+
+    /* The path counts: "deeperpear" matches only through the folder name. */
+    sfe_dir_model_set_query(m, "deeperpear");
+    g_assert_cmpint(rows(m), ==, 1);
+
+    /* The search ends: only the folder's own files. */
+    sfe_dir_model_set_query(m, NULL);
+    g_assert_cmpint(rows(m), ==, 2); /* pear.txt, sub (.hid hidden) */
+    g_object_unref(m);
+    ((SfeConfig*)sfe_config())->search_recursive = false;
+
+    g_autofree char* cmd = g_strdup_printf("rm -rf '%s'", path);
+    g_assert_cmpint(system(cmd), ==, 0);
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -161,5 +207,6 @@ int main(int argc, char** argv)
         return 77; /* skipped */
     }
     g_test_add_func("/dirmodel/shared", test_shared);
+    g_test_add_func("/dirmodel/recursive", test_recursive);
     return g_test_run();
 }
