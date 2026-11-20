@@ -655,8 +655,9 @@ static void fit_grid_items(SfePane* self)
     pango_layout_get_pixel_size(two_lines, NULL, &text_h);
     g_object_unref(two_lines);
     gtk_cell_renderer_get_padding(self->grid_text, &xpad, &ypad);
-    gtk_cell_renderer_set_fixed_size(self->grid_text, gtk_icon_view_get_item_width(GTK_ICON_VIEW(self->grid)),
-        text_h + 2 * ypad);
+    /* Padding outside the wrap width, as GtkCellRendererText measures. */
+    gtk_cell_renderer_set_fixed_size(self->grid_text,
+        gtk_icon_view_get_item_width(GTK_ICON_VIEW(self->grid)) + 2 * xpad, text_h + 2 * ypad);
 }
 
 static void on_grid_style_updated(GtkWidget* grid, gpointer data)
@@ -2214,13 +2215,13 @@ static void sfe_name_renderer_render(GtkCellRenderer* cell, cairo_t* cr, GtkWidg
     (void)background;
     g_autofree char* text = NULL;
     PangoAttrList* attrs = NULL;
-    int xpad, ypad;
-    g_object_get(cell, "text", &text, "attributes", &attrs, NULL);
+    int xpad, ypad, wrap_width;
+    g_object_get(cell, "text", &text, "attributes", &attrs, "wrap-width", &wrap_width, NULL);
     gtk_cell_renderer_get_padding(cell, &xpad, &ypad);
 
     PangoLayout* layout = gtk_widget_create_pango_layout(widget, text);
     pango_layout_set_attributes(layout, attrs);
-    pango_layout_set_width(layout, MAX(1, area->width - 2 * xpad) * PANGO_SCALE);
+    pango_layout_set_width(layout, MAX(1, MIN(wrap_width, area->width - 2 * xpad)) * PANGO_SCALE);
     pango_layout_set_height(layout, -2); /* two lines at most */
     pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
     pango_layout_set_ellipsize(layout, PANGO_ELLIPSIZE_MIDDLE);
