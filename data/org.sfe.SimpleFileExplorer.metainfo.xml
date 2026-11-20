@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="3.2.0" date="2026-11-20">
+      <description>
+        <p>Folders you leave stay cached; search in subfolders; smoother search typing</p>
+      </description>
+    </release>
     <release version="3.1.0" date="2026-11-20">
       <description>
         <p>Big folders open about five times faster; long names keep their extension</p>

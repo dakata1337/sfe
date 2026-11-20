@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.2.0
+
 - Search waits until typing pauses for 100 ms (`search_delay_ms`, in
   *Settings* under Search), and draws the typed letter before searching,
   so typing stays smooth in big folders (typing "file9999" in 100,000
