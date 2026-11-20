@@ -1337,11 +1337,13 @@ static gboolean on_drag_motion(GtkWidget* view, GdkDragContext* ctx, int x, int 
     return TRUE;
 }
 
-/* (Also before a drop.) */
+/* Also just before a drop, which then fetches the files again. The files
+ * are forgotten here because Wayland reuses one context for every drag. */
 static void on_drag_leave(GtkWidget* view, GdkDragContext* ctx, guint time, gpointer data)
 {
-    (void)ctx, (void)time, (void)data;
+    (void)ctx, (void)time;
     drop_unhighlight(view);
+    drop_reset(SFE_PANE(data));
 }
 
 static gboolean on_drag_drop(GtkWidget* view, GdkDragContext* ctx, int x, int y, guint time, gpointer data)
