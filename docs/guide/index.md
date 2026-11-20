@@ -57,6 +57,9 @@ program for an extension, see [Configuration](#configuration).
 ![List view with Name, Size, Modified and Type columns](images/list-view.png)
 
 - **Ctrl+1** grid view, **Ctrl+2** list view, or the toggle button.
+- Names too long for their space are shortened in the middle
+  ("holiday photo … final edit.jpg"), so the extension stays visible; the
+  grid gives each name up to two lines.
 - Sorting: by name, size, date modified or type, ascending or descending.
   In the list view, click a column header to sort by it; click again to
   reverse. In either view, right-click empty space → *Sort By*, or

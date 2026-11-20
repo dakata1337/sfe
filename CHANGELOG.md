@@ -9,6 +9,13 @@ release: see the top of that script).
 
 - Long names in the list view are shortened in the middle
   ("holiday photo … final edit.jpg"), so the extension stays visible.
+- Grid view: long names get two lines with the "…" in the middle of the
+  second, so the extension stays visible (they were cut off at the end).
+- Big folders open much faster: 100,000 files take about 4 s of work in
+  the grid (was 21 s) and 2.5 s in the list (was 12 s), and use less
+  memory. Every grid item and list row now has the same size, and icons
+  and texts are made only for the rows on screen. A thumbnail arriving
+  redraws the view instead of laying it out again.
 
 ## 3.0.3
 
