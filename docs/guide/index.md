@@ -593,6 +593,12 @@ table, looked up before `[keys]` while selecting:
 Run sfe with `G_MESSAGES_DEBUG=sfe sfe` to see debug messages (navigation,
 mounting, configuration reloads).
 
+A debug build (`meson setup build --buildtype=debug`) prints them without
+that, and also reports folder loads (files and time) and the folder cache:
+hits, folders cached and dropped (expired, over the size limit, deleted),
+and changes that update a cached folder. Those lines also show for a few
+seconds in the window's bottom-left corner, by folder name.
+
 ## Configuration
 
 **Ctrl+P** (or `:settings`) opens *Settings*. Changes apply immediately and

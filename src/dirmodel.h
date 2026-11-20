@@ -39,6 +39,11 @@ enum {
     "standard::is-backup,standard::is-symlink,standard::symlink-target,"     \
     "time::modified,access::can-read,access::can-write,unix::mode"
 
+/* Debug builds: called with each line of the load / cache log, the folder
+ * by its name (the terminal gets its path). Release builds never call it. */
+typedef void (*SfeDirModelLogHook)(const char* line);
+void sfe_dir_model_set_log_hook(SfeDirModelLogHook hook);
+
 #define SFE_TYPE_DIR_MODEL (sfe_dir_model_get_type())
 G_DECLARE_FINAL_TYPE(SfeDirModel, sfe_dir_model, SFE, DIR_MODEL, GObject)
 

@@ -4,6 +4,7 @@
 #include "fuzzy.h"
 #include "filefilter.h"
 #include "icons.h"
+#include "util.h"
 #include <cairo-gobject.h>
 #include <string.h>
 
@@ -28,6 +29,7 @@ typedef struct {
     bool loading;
     bool building; /* filling fresh stores, not reacting to changes */
     gint64 cached_since; /* no pane shows it, kept for a while (0: not cached) */
+    gint64 load_started; /* for the debug log */
 
     /* How rows look; global settings, so the same in every pane (shortcut:
      * the last pane to set them wins; upgrade if panes ever differ). */
@@ -37,6 +39,40 @@ typedef struct {
     bool dirs_first;
     int grid_size, list_size, scale;
 } Folder;
+
+/* Debug builds report loads and the cache's work: in the terminal and,
+ * through the hook, in the window. Release builds compile it away. */
+#ifdef DEBUG
+static SfeDirModelLogHook log_hook;
+
+void sfe_dir_model_set_log_hook(SfeDirModelLogHook hook)
+{
+    log_hook = hook;
+}
+
+static void G_GNUC_PRINTF(2, 3) dev_log(GFile* dir, const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    g_autofree char* what = g_strdup_vprintf(format, args);
+    va_end(args);
+    g_autofree char* path = g_file_get_path(dir);
+    g_autofree char* shown = path ? sfe_contract_home(path) : g_file_get_uri(dir);
+    g_debug("%s: %s", shown, what);
+    if (log_hook != NULL) {
+        g_autofree char* name = g_file_get_basename(dir); /* the window has little room */
+        g_autofree char* line = g_strdup_printf("%s: %s", name, what);
+        log_hook(line);
+    }
+}
+#define DEV_LOG(dir, ...) dev_log(dir, __VA_ARGS__)
+#else
+void sfe_dir_model_set_log_hook(SfeDirModelLogHook hook)
+{
+    (void)hook;
+}
+#define DEV_LOG(dir, ...) ((void)0)
+#endif
 
 static GHashTable* folders; /* uri -> Folder*, those loading or loaded */
 static GQueue cache = G_QUEUE_INIT; /* Folder*, no pane shows them; oldest first, each holds a ref */
@@ -574,13 +610,15 @@ static Folder* folder_get(GFile* dir)
     g_autofree char* uri = g_file_get_uri(dir);
     Folder* f = g_hash_table_lookup(folders, uri);
     if (f != NULL && f->cached_since != 0) { /* back from the cache: its ref is now the caller's */
-        g_debug("cache: reused %s", g_file_peek_path(f->dir));
+        DEV_LOG(f->dir, "cache hit (left %.0f s ago)", (g_get_monotonic_time() - f->cached_since) / (double)G_USEC_PER_SEC);
         g_queue_remove(&cache, f);
         f->cached_since = 0;
         return f;
     }
-    if (f != NULL)
+    if (f != NULL) {
+        DEV_LOG(f->dir, "%s", f->loading ? "already loading" : "shared with another view");
         return folder_ref(f);
+    }
 
     f = g_new0(Folder, 1);
     f->refs = 1;
@@ -622,7 +660,8 @@ static gsize folder_bytes(Folder* f)
 
 static void cache_drop(Folder* f, const char* why)
 {
-    g_debug("cache: dropped %s (%s)", g_file_peek_path(f->dir), why);
+    DEV_LOG(f->dir, "dropped from the cache (%s)", why);
+    (void)why; /* (release builds log nothing) */
     g_queue_remove(&cache, f);
     f->cached_since = 0;
     folder_unlist(f);
@@ -669,7 +708,7 @@ static bool cache_keep(Folder* f)
         return false; /* not loaded, or no monitor to keep it current */
     f->cached_since = g_get_monotonic_time();
     g_queue_push_tail(&cache, f);
-    g_debug("cache: kept %s (about %zu MiB)", g_file_peek_path(f->dir), folder_bytes(f) >> 20);
+    DEV_LOG(f->dir, "cached (about %zu MiB, %u files)", folder_bytes(f) >> 20, g_hash_table_size(f->infos));
     if (cache_timer == 0)
         cache_timer = g_timeout_add_seconds(30, on_cache_timer, NULL);
     cache_trim();
@@ -764,6 +803,17 @@ static void on_dir_changed(GFileMonitor* monitor, GFile* file, GFile* other,
             g_list_free_full(models, g_object_unref);
         }
         return;
+    }
+
+    if (f->cached_since != 0) {
+        static const char* const names[] = { [G_FILE_MONITOR_EVENT_CHANGED] = "changed",
+            [G_FILE_MONITOR_EVENT_CHANGES_DONE_HINT] = "written", [G_FILE_MONITOR_EVENT_DELETED] = "deleted",
+            [G_FILE_MONITOR_EVENT_CREATED] = "created", [G_FILE_MONITOR_EVENT_ATTRIBUTE_CHANGED] = "attributes",
+            [G_FILE_MONITOR_EVENT_RENAMED] = "renamed", [G_FILE_MONITOR_EVENT_MOVED_IN] = "moved in",
+            [G_FILE_MONITOR_EVENT_MOVED_OUT] = "moved out" };
+        const char* what = (guint)event < G_N_ELEMENTS(names) ? names[event] : NULL;
+        if (what != NULL && event != G_FILE_MONITOR_EVENT_CHANGED)
+            DEV_LOG(f->dir, "cached copy updated: %s %s", name, what);
     }
 
     switch (event) {
@@ -1031,6 +1081,8 @@ static void finish_load(LoadJob* job)
         return;
 
     f->loading = false;
+    DEV_LOG(f->dir, "loaded %u files in %.0f ms", job->infos->len,
+        (g_get_monotonic_time() - f->load_started) / 1000.0);
     clear_contents(f);
     f->store = new_store();
     f->rows = new_rows();
@@ -1065,6 +1117,7 @@ static void fail_load(LoadJob* job, GError* error)
 {
     Folder* f = job->folder;
     if (!g_cancellable_is_cancelled(job->cancel)) {
+        DEV_LOG(f->dir, "load failed: %s", error->message);
         f->loading = false;
         folder_unlist(f); /* the next try reads it again */
         GList* models = NULL;
@@ -1135,6 +1188,8 @@ static void folder_load(Folder* f)
     g_clear_object(&f->cancel);
     f->cancel = g_cancellable_new();
     f->loading = true;
+    f->load_started = g_get_monotonic_time();
+    DEV_LOG(f->dir, "%s from disk", f->store ? "reloading" : "loading");
 
     job->folder = folder_ref(f);
     job->cancel = g_object_ref(f->cancel);

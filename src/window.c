@@ -5,6 +5,7 @@
 #include "cmdbar.h"
 #include "commands.h"
 #include "dialogs.h"
+#include "dirmodel.h"
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/gdkwayland.h>
 #endif
@@ -224,9 +225,16 @@ static void update_status(SfeWindow* win)
     gtk_widget_set_visible(win->status, gtk_widget_get_visible(win->notice) || gtk_widget_get_visible(win->mode));
 }
 
+#ifdef DEBUG
+static GQueue dev_lines = G_QUEUE_INIT; /* the debug log's last lines, shown in the status corner */
+#endif
+
 static gboolean on_notice_timeout(gpointer data)
 {
     SfeWindow* win = data;
+#ifdef DEBUG
+    g_queue_clear_full(&dev_lines, g_free);
+#endif
     win->notice_timeout = 0;
     g_cancellable_cancel(win->notice_cancel); /* nobody will see the result */
     gtk_widget_hide(win->notice);
@@ -247,6 +255,34 @@ guint sfe_window_show_status(SfeWindow* win, const char* text)
     win->notice_cancel = g_cancellable_new();
     return ++win->notice_id;
 }
+
+#ifdef DEBUG
+/* Debug builds: the last lines of the load / cache log in every window's
+ * status corner, like a notice (without cancelling a notice's count). */
+static void show_dev_log(const char* line)
+{
+    g_queue_push_tail(&dev_lines, g_strdup(line));
+    while (dev_lines.length > 4)
+        g_free(g_queue_pop_head(&dev_lines));
+    GString* text = g_string_new(NULL);
+    for (GList* l = dev_lines.head; l != NULL; l = l->next)
+        g_string_append_printf(text, "%s%s", text->len ? "\n" : "", (const char*)l->data);
+    GApplication* app = g_application_get_default();
+    for (GList* w = app ? gtk_application_get_windows(GTK_APPLICATION(app)) : NULL; w != NULL; w = w->next) {
+        if (!SFE_IS_WINDOW(w->data))
+            continue;
+        SfeWindow* win = w->data;
+        if (win->notice == NULL)
+            continue; /* still being built (its first folder loads first) */
+        gtk_label_set_text(GTK_LABEL(win->notice), text->str);
+        gtk_widget_show(win->notice);
+        update_status(win);
+        g_clear_handle_id(&win->notice_timeout, g_source_remove);
+        win->notice_timeout = g_timeout_add_seconds(5, on_notice_timeout, win);
+    }
+    g_string_free(text, TRUE);
+}
+#endif
 
 GCancellable* sfe_window_get_status_cancellable(SfeWindow* win)
 {
@@ -610,6 +646,9 @@ static void sfe_window_class_init(SfeWindowClass* klass)
 
 static void sfe_window_init(SfeWindow* win)
 {
+#ifdef DEBUG
+    sfe_dir_model_set_log_hook(show_dev_log);
+#endif
     gtk_style_context_add_class(gtk_widget_get_style_context(GTK_WIDGET(win)), "sfe-window");
     gtk_window_set_default_size(GTK_WINDOW(win), 1100, 700);
     win->pending = g_ptr_array_new_with_free_func(g_free);
