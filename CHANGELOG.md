@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.0.2
+
 - Grid view: a drag-selection can start on a file or in the empty space
   after the files (only empty space between files worked; the views do not
   drag files, so pressing on one and dragging did nothing). A click or
