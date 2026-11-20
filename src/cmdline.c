@@ -65,7 +65,7 @@ GPtrArray* sfe_cmdline_tokenize(const char* line)
 char** sfe_cmdline_split(const char* line, GError** error)
 {
     g_autoptr(GPtrArray) args = sfe_cmdline_tokenize(line);
-    GPtrArray* argv = g_ptr_array_new();
+    GPtrArray* argv = g_ptr_array_new_with_free_func(g_free);
 
     for (guint i = 0; i < args->len; i++) {
         SfeCmdArg* a = g_ptr_array_index(args, i);

@@ -194,7 +194,9 @@ GVariant* sfe_portal_request_results(const SfePortalRequest* r, const char* outp
         g_variant_builder_add(&results, "{sv}", "choices", choice_list);
     else
         g_variant_unref(g_variant_ref_sink(choice_list));
-    if (r->filters != NULL && filter >= 0 && filter < (int)g_variant_n_children(r->filters))
-        g_variant_builder_add(&results, "{sv}", "current_filter", g_variant_get_child_value(r->filters, filter));
+    if (r->filters != NULL && filter >= 0 && filter < (int)g_variant_n_children(r->filters)) {
+        g_autoptr(GVariant) current = g_variant_get_child_value(r->filters, filter);
+        g_variant_builder_add(&results, "{sv}", "current_filter", current);
+    }
     return g_variant_builder_end(&results);
 }

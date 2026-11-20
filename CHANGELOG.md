@@ -7,6 +7,9 @@ release: see the top of that script).
 
 ## Unreleased
 
+- The file-dialog service no longer leaks a little memory each time a
+  program asks which filter was in use.
+
 ## 3.1.0
 
 - Long names in the list view are shortened in the middle
