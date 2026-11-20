@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.2.1
+
 - Open / save dialogs (also through the portal) open at 1200 x 800,
   shrunk to fit smaller screens (they were 1060 x 640 and 900 x 640).
 
