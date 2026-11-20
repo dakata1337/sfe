@@ -7,6 +7,9 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Open / save dialogs (also through the portal) open at 1200 x 800,
+  shrunk to fit smaller screens (they were 1060 x 640 and 900 x 640).
+
 ## 3.2.0
 
 - Search waits until typing pauses for 100 ms (`search_delay_ms`, in

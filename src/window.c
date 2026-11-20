@@ -990,6 +990,25 @@ static void add_choices(SfeWindow* win, GtkBox* row)
     }
 }
 
+/* A file dialog opens at 1200 x 800, shrunk (same shape) to fit a smaller
+ * screen: room for the files and, when opening, the preview. */
+static void set_dialog_size(SfeWindow* win)
+{
+    int width = 1200, height = 800;
+    GdkDisplay* display = gtk_widget_get_display(GTK_WIDGET(win));
+    GdkMonitor* monitor = gdk_display_get_primary_monitor(display);
+    if (monitor == NULL && gdk_display_get_n_monitors(display) > 0)
+        monitor = gdk_display_get_monitor(display, 0); /* Wayland has no primary one */
+    if (monitor != NULL) {
+        GdkRectangle area;
+        gdk_monitor_get_workarea(monitor, &area);
+        double fit = MIN(1.0, MIN(area.width * 0.9 / width, area.height * 0.9 / height));
+        width = (int)(width * fit);
+        height = (int)(height * fit);
+    }
+    gtk_window_set_default_size(GTK_WINDOW(win), width, height);
+}
+
 void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
 {
     static const char* const titles[] = { "Open", "Save", "Select Folder" };
@@ -1004,7 +1023,7 @@ void sfe_window_set_chooser(SfeWindow* win, const SfeChooser* chooser)
         else
             g_signal_connect_after(win, "realize", G_CALLBACK(attach_to_parent), NULL); /* (the GdkWindow exists then) */
     }
-    gtk_window_set_default_size(GTK_WINDOW(win), chooser->mode == SFE_CHOOSE_OPEN ? 1060 : 900, 640);
+    set_dialog_size(win);
 
     /* Opening files: the views get the preview on their right:
      * [views | preview]. Saving and folders need none. */
