@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="3.0.3" date="2026-11-20">
+      <description>
+        <p>Split position names follow the narrow layout</p>
+      </description>
+    </release>
     <release version="3.0.2" date="2026-11-20">
       <description>
         <p>Grid view fixes: the mouse wheel and drag-selection work in the empty space after the files, and a drag-selection can start on a file.</p>

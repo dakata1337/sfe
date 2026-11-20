@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.0.3
+
 - In a narrow window, where the views stack, `split absolute` offers them
   as top / middle / bottom (or top / bottom) instead of left / right-top /
   right-bottom. The side-by-side names still work, so key bindings using
