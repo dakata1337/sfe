@@ -249,6 +249,26 @@ static void test_cache(void)
     g_assert_null(store);
     cfg->cache_minutes = 5;
 
+    /* Deleted while cached: dropped. */
+    g_autofree char* doomed_path = g_build_filename(path, "doomed", NULL);
+    g_assert_cmpint(g_mkdir(doomed_path, 0700), ==, 0);
+    g_autoptr(GFile) doomed = g_file_new_for_path(doomed_path);
+    sfe_dir_model_load(m, doomed);
+    wait_for(&c.loaded, 7);
+    store = sfe_dir_model_get_model(m);
+    g_object_add_weak_pointer(store, &store);
+    sfe_dir_model_load(m, other);
+    wait_for(&c.loaded, 8);
+    g_assert_nonnull(store);
+    g_assert_cmpint(g_rmdir(doomed_path), ==, 0);
+    bool late = false;
+    guint timer = g_timeout_add(5000, timed_out, &late);
+    while (store != NULL && !late)
+        g_main_context_iteration(NULL, TRUE);
+    if (!late)
+        g_source_remove(timer);
+    g_assert_null(store);
+
     g_object_unref(m);
     g_autofree char* cmd = g_strdup_printf("rm -rf '%s' '%s'", path, other_path);
     g_assert_cmpint(system(cmd), ==, 0);
