@@ -48,6 +48,7 @@ struct _SfePane {
     GtkWidget* overlay; /* stack + floating search bar */
     SfeSearchBar* search;
     GFile* search_base; /* where the search started (it may walk into folders) */
+    guint search_timer; /* the typed text is searched for when typing pauses */
     char* filter; /* the query kept after Enter in the search, NULL when not filtered */
     GtkWidget* filter_badge; /* "Filtered: …" over the files, with a clear button */
     GtkWidget* filter_label;
@@ -389,10 +390,15 @@ void sfe_pane_start_search(SfePane* self)
 /* Hides the search bar and shows every file again. With `keep`, the
  * highlighted match stays selected in the full listing. With `go_back`, a
  * search that walked into a folder returns to where it started. */
+static void apply_search(SfePane* self);
+
 static void end_search_full(SfePane* self, bool keep, bool go_back)
 {
     if (!searching(self))
         return;
+    if (keep && self->search_timer != 0)
+        apply_search(self); /* the match kept is one of what was typed */
+    g_clear_handle_id(&self->search_timer, g_source_remove);
 
     g_autoptr(GFile) base = g_steal_pointer(&self->search_base);
     if (go_back && base != NULL && !g_file_equal(base, self->dir)) {
@@ -456,10 +462,10 @@ static GFile* resolve_search_dir(GFile* base, const char* text, const char** que
     return dir;
 }
 
-static void on_search_changed(SfeSearchBar* bar, const char* text, gpointer data)
+static void apply_search(SfePane* self)
 {
-    (void)bar;
-    SfePane* self = data;
+    g_clear_handle_id(&self->search_timer, g_source_remove);
+    const char* text = sfe_search_bar_get_text(self->search);
     const char* query = text;
     g_autoptr(GFile) dir = self->search_base ? resolve_search_dir(self->search_base, text, &query) : NULL;
 
@@ -468,10 +474,39 @@ static void on_search_changed(SfeSearchBar* bar, const char* text, gpointer data
         show_dir(self, dir); /* keeps the query while loading */
 }
 
+static gboolean on_search_timer(gpointer data)
+{
+    SfePane* self = data;
+    self->search_timer = 0;
+    apply_search(self);
+    return G_SOURCE_REMOVE;
+}
+
+/* Keys that act on the matches need them up to date. */
+static void flush_search(SfePane* self)
+{
+    if (self->search_timer != 0)
+        apply_search(self);
+}
+
+/* Searching a big folder takes a while, so it waits until typing pauses
+ * for 100 ms, and runs below drawing: the typed letter shows first. */
+#define SEARCH_DELAY_MS 100
+
+static void on_search_changed(SfeSearchBar* bar, const char* text, gpointer data)
+{
+    (void)bar;
+    (void)text;
+    SfePane* self = data;
+    g_clear_handle_id(&self->search_timer, g_source_remove);
+    self->search_timer = g_timeout_add_full(G_PRIORITY_DEFAULT_IDLE, SEARCH_DELAY_MS, on_search_timer, self, NULL);
+}
+
 static void on_search_move(SfeSearchBar* bar, int delta, gpointer data)
 {
     (void)bar;
     SfePane* self = data;
+    flush_search(self);
     GtkTreePath* path = highlighted(self);
     int rows = n_rows(self);
 
@@ -533,6 +568,7 @@ static void on_filter_clear(GtkButton* button, gpointer data)
  * nothing typed, the search just closes where it is. */
 static void search_activate(SfePane* self)
 {
+    flush_search(self);
     const char* query = NULL;
     g_autoptr(GFile) dir = resolve_search_dir(self->search_base ? self->search_base : self->dir,
         sfe_search_bar_get_text(self->search), &query);
@@ -2509,6 +2545,7 @@ void sfe_pane_set_active(SfePane* self, bool active)
 static void sfe_pane_dispose(GObject* object)
 {
     SfePane* self = SFE_PANE(object);
+    g_clear_handle_id(&self->search_timer, g_source_remove);
 
     if (self->config_handler != 0) {
         g_signal_handler_disconnect(sfe_app(), self->config_handler);

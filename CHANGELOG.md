@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Search waits until typing pauses for 100 ms, and draws the typed letter
+  before searching, so typing stays smooth in big folders (typing
+  "file9999" in 100,000 files: 0.35 s of work instead of 1.7 s). Enter and
+  Up / Down still act on everything typed.
 - Folders you leave stay loaded for 5 minutes (up to 512 MiB, the oldest
   dropped first; *Settings* → Memory), and changes on disk are picked up
   meanwhile. Going back to a folder of 100,000 files takes 0.65 s of work
