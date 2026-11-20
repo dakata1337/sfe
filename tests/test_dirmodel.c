@@ -51,6 +51,20 @@ static void wait_for(int* value, int want)
     g_assert_cmpint(*value, >=, want);
 }
 
+/* Runs the main loop until *pointer is cleared (a weak pointer to rows
+ * being freed), or 5 s pass: a dropped folder's rows go once the file
+ * queries it still has running return. */
+static void wait_freed(gpointer* pointer)
+{
+    bool late = false;
+    guint timer = g_timeout_add(5000, timed_out, &late);
+    while (*pointer != NULL && !late)
+        g_main_context_iteration(NULL, TRUE);
+    if (!late)
+        g_source_remove(timer);
+    g_assert_null(*pointer);
+}
+
 static int rows(SfeDirModel* model)
 {
     GtkTreeModel* m = sfe_dir_model_get_model(model);
@@ -235,7 +249,7 @@ static void test_cache(void)
     cfg->cache_mb = 0;
     sfe_dir_model_load(m, other);
     wait_for(&c.loaded, 4);
-    g_assert_null(store);
+    wait_freed(&store);
 
     /* The cache off: dropped too. */
     cfg->cache_mb = 512;
@@ -246,7 +260,7 @@ static void test_cache(void)
     g_object_add_weak_pointer(store, &store);
     sfe_dir_model_load(m, other);
     wait_for(&c.loaded, 6);
-    g_assert_null(store);
+    wait_freed(&store);
     cfg->cache_minutes = 5;
 
     /* Deleted while cached: dropped. */
@@ -261,13 +275,7 @@ static void test_cache(void)
     wait_for(&c.loaded, 8);
     g_assert_nonnull(store);
     g_assert_cmpint(g_rmdir(doomed_path), ==, 0);
-    bool late = false;
-    guint timer = g_timeout_add(5000, timed_out, &late);
-    while (store != NULL && !late)
-        g_main_context_iteration(NULL, TRUE);
-    if (!late)
-        g_source_remove(timer);
-    g_assert_null(store);
+    wait_freed(&store);
 
     g_object_unref(m);
     g_autofree char* cmd = g_strdup_printf("rm -rf '%s' '%s'", path, other_path);
