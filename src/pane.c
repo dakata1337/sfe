@@ -74,6 +74,8 @@ struct _SfePane {
     /* A drag-select (rubber band) in progress, in content coordinates: GTK
      * draws it only over the files, sfe draws the rest. */
     bool band_pressed, band_active;
+    bool band_own; /* grid band started on a file or below the items: GTK does not band there, we do */
+    GHashTable* band_base; /* with Ctrl: row indexes (+1) selected before the band */
     double band_x1, band_y1, band_x2, band_y2;
     /* Grid: where a Shift-selection starts (the last item picked without
      * Shift), or NULL for the cursor. */
@@ -1020,6 +1022,16 @@ static void on_scroll_value(GtkAdjustment* adjustment, gpointer data)
 
 /* Event coordinates (relative to the view's bin window, also while the
  * pointer is outside it) to content coordinates. */
+/* An event on the grid's outer window (below the items) in the inner
+ * window's coordinates, which the rest of the grid code uses. */
+static void grid_event_to_bin(GtkWidget* view, GdkWindow* window, double* x, double* y)
+{
+    if (!GTK_IS_ICON_VIEW(view) || window != gtk_widget_get_window(view))
+        return;
+    *x += gtk_adjustment_get_value(gtk_scrollable_get_hadjustment(GTK_SCROLLABLE(view)));
+    *y += gtk_adjustment_get_value(gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(view)));
+}
+
 static void event_to_content(GtkWidget* view, double x, double y, double* cx, double* cy)
 {
     if (GTK_IS_ICON_VIEW(view)) { /* the bin window is the content */
@@ -1039,15 +1051,59 @@ static void band_press(SfePane* self, GtkWidget* view, GdkEventButton* event)
         return;
     self->band_pressed = true;
     self->band_active = false;
+    self->band_own = false;
+    g_clear_pointer(&self->band_base, g_hash_table_unref);
     event_to_content(view, event->x, event->y, &self->band_x1, &self->band_y1);
     self->band_x2 = self->band_x1;
     self->band_y2 = self->band_y1;
-    /* The grid starts a band only on empty space (on a file it drags). */
-    if (GTK_IS_ICON_VIEW(view)) {
-        GtkTreePath* path = gtk_icon_view_get_path_at_pos(GTK_ICON_VIEW(view), (int)event->x, (int)event->y);
-        self->band_pressed = path == NULL;
+    if (!GTK_IS_ICON_VIEW(view) || (event->state & GDK_SHIFT_MASK))
+        return; /* (Shift+click selects a run instead) */
+
+    /* GTK bands only from empty space on its inner window; on a file (the
+     * views do not drag files) or below the items, sfe does. */
+    GtkIconView* grid = GTK_ICON_VIEW(view);
+    GtkTreePath* path = gtk_icon_view_get_path_at_pos(grid, (int)event->x, (int)event->y);
+    bool below = event->window == gtk_widget_get_window(view);
+    self->band_own = path != NULL || below;
+    if (self->band_own && (event->state & GDK_CONTROL_MASK)) {
+        self->band_base = g_hash_table_new(NULL, NULL);
+        GList* sel = gtk_icon_view_get_selected_items(grid);
+        for (GList* l = sel; l != NULL; l = l->next)
+            g_hash_table_add(self->band_base, GINT_TO_POINTER(gtk_tree_path_get_indices(l->data)[0] + 1));
+        g_list_free_full(sel, (GDestroyNotify)gtk_tree_path_free);
+    } else if (below) {
+        gtk_icon_view_unselect_all(grid); /* a click in empty space, as GTK does above */
+    }
+    gtk_tree_path_free(path);
+}
+
+/* The band's items: the visible ones it touches (and the earlier selection
+ * with Ctrl). Items scrolled away keep what they had. */
+static void band_select(SfePane* self)
+{
+    GtkIconView* grid = GTK_ICON_VIEW(self->grid);
+    GtkTreePath *start = NULL, *end = NULL;
+    if (!gtk_icon_view_get_visible_range(grid, &start, &end))
+        return;
+    double vx = gtk_adjustment_get_value(gtk_scrollable_get_hadjustment(GTK_SCROLLABLE(grid)));
+    double vy = gtk_adjustment_get_value(gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(grid)));
+    double x1 = MIN(self->band_x1, self->band_x2), x2 = MAX(self->band_x1, self->band_x2);
+    double y1 = MIN(self->band_y1, self->band_y2), y2 = MAX(self->band_y1, self->band_y2);
+    int last = gtk_tree_path_get_indices(end)[0];
+    for (int i = gtk_tree_path_get_indices(start)[0]; i <= last; i++) {
+        GtkTreePath* path = gtk_tree_path_new_from_indices(i, -1);
+        GdkRectangle r; /* in widget coordinates */
+        if (gtk_icon_view_get_cell_rect(grid, path, NULL, &r)) {
+            bool hit = r.x + vx < x2 && r.x + vx + r.width > x1 && r.y + vy < y2 && r.y + vy + r.height > y1;
+            if (hit || (self->band_base && g_hash_table_contains(self->band_base, GINT_TO_POINTER(i + 1))))
+                gtk_icon_view_select_path(grid, path);
+            else
+                gtk_icon_view_unselect_path(grid, path);
+        }
         gtk_tree_path_free(path);
     }
+    gtk_tree_path_free(start);
+    gtk_tree_path_free(end);
 }
 
 static gboolean on_view_motion(GtkWidget* view, GdkEventMotion* event, gpointer data)
@@ -1055,7 +1111,17 @@ static gboolean on_view_motion(GtkWidget* view, GdkEventMotion* event, gpointer 
     SfePane* self = data;
     if (!self->band_pressed || !(event->state & GDK_BUTTON1_MASK))
         return FALSE;
+    grid_event_to_bin(view, event->window, &event->x, &event->y);
     event_to_content(view, event->x, event->y, &self->band_x2, &self->band_y2);
+    if (self->band_own) {
+        if (!self->band_active && !gtk_drag_check_threshold(view, (int)self->band_x1, (int)self->band_y1,
+                (int)self->band_x2, (int)self->band_y2))
+            return FALSE;
+        self->band_active = true;
+        band_select(self);
+        gtk_widget_queue_draw(view);
+        return TRUE;
+    }
     self->band_active = GTK_IS_ICON_VIEW(view) || gtk_tree_view_is_rubber_banding_active(GTK_TREE_VIEW(view));
     if (self->band_active)
         gtk_widget_queue_draw(view);
@@ -1068,7 +1134,8 @@ static gboolean on_view_release(GtkWidget* view, GdkEventButton* event, gpointer
     SfePane* self = data;
     if (self->band_active)
         gtk_widget_queue_draw(view);
-    self->band_pressed = self->band_active = false;
+    self->band_pressed = self->band_active = self->band_own = false;
+    g_clear_pointer(&self->band_base, g_hash_table_unref);
     return FALSE;
 }
 
@@ -1081,7 +1148,7 @@ static gboolean on_view_draw_after(GtkWidget* view, cairo_t* cr, gpointer data)
         return FALSE;
     double x1 = MIN(self->band_x1, self->band_x2), x2 = MAX(self->band_x1, self->band_x2);
     double y1 = MIN(self->band_y1, self->band_y2), y2 = MAX(self->band_y1, self->band_y2);
-    double end = self->content_end[which];
+    double end = self->band_own ? -G_MAXDOUBLE : self->content_end[which];
     if (y2 <= end)
         return FALSE; /* all over the files: GTK drew it */
 
@@ -1097,8 +1164,10 @@ static gboolean on_view_draw_after(GtkWidget* view, cairo_t* cr, gpointer data)
         dy = wy;
     }
     cairo_save(cr);
-    cairo_rectangle(cr, 0, end + dy, gtk_widget_get_allocated_width(view), gtk_widget_get_allocated_height(view));
-    cairo_clip(cr); /* only where GTK could not draw */
+    if (!self->band_own) {
+        cairo_rectangle(cr, 0, end + dy, gtk_widget_get_allocated_width(view), gtk_widget_get_allocated_height(view));
+        cairo_clip(cr); /* only where GTK could not draw */
+    }
     GtkStyleContext* style = gtk_widget_get_style_context(view);
     gtk_style_context_save(style);
     gtk_style_context_add_class(style, GTK_STYLE_CLASS_RUBBERBAND);
@@ -1871,6 +1940,7 @@ static gboolean on_view_button_press(GtkWidget* view, GdkEventButton* event, gpo
     SfePane* self = data;
 
     sfe_pane_visual_end(self); /* the mouse takes over the selection */
+    grid_event_to_bin(view, event->window, &event->x, &event->y);
     band_press(self, view, event);
     if (GTK_IS_ICON_VIEW(view) && event->type == GDK_BUTTON_PRESS && event->button == GDK_BUTTON_PRIMARY
         && grid_click(self, event))
@@ -2053,14 +2123,16 @@ static GtkWidget* build_filter_badge(SfePane* self)
     return box;
 }
 
-/* GtkIconView takes scrolling only on its inner window, which ends at the
+/* GtkIconView takes the mouse only on its inner window, which ends at the
  * last row. Scrolled into the room after the files, the wheel there went
- * past the grid and its scrolled window never saw it. */
+ * past the grid and its scrolled window never saw it; presses there (a
+ * click, a menu, a band) were lost too. */
 static void on_grid_realized(GtkWidget* grid, gpointer data)
 {
     (void)data;
     GdkWindow* window = gtk_widget_get_window(grid);
-    gdk_window_set_events(window, gdk_window_get_events(window) | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK);
+    gdk_window_set_events(window, gdk_window_get_events(window) | GDK_SCROLL_MASK | GDK_SMOOTH_SCROLL_MASK
+        | GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK | GDK_BUTTON_MOTION_MASK);
 }
 
 static GtkWidget* build_grid(SfePane* self)
@@ -2330,6 +2402,7 @@ static void sfe_pane_dispose(GObject* object)
     g_clear_pointer(&self->visual_base, g_hash_table_unref);
     g_clear_object(&self->search_base);
     g_clear_pointer(&self->filter, g_free);
+    g_clear_pointer(&self->band_base, g_hash_table_unref);
     g_clear_object(&self->dir);
     G_OBJECT_CLASS(sfe_pane_parent_class)->dispose(object);
 }

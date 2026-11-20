@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Grid view: a drag-selection can start on a file or in the empty space
+  after the files (only empty space between files worked; the views do not
+  drag files, so pressing on one and dragging did nothing). A click or
+  right-click below the files, scrolled to the end, counts as empty space.
 - Grid view: the mouse wheel works over the empty space after the files.
   Scrolled to the end, the wheel over that space did nothing (GTK's grid
   takes scrolling only where it has items).

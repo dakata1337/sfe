@@ -202,7 +202,7 @@ The letters that matched are marked in each name.
 **Filter.** After Enter, the view keeps showing only the matches and a badge
 in its bottom right corner says so (`Filtered: no  1 / 7`). The filtered
 files are ordinary files: select them, use visual mode, copy, cut, paste,
-rename, trash, drag or open them as usual. The badge's count follows files
+rename, trash or open them as usual. The badge's count follows files
 that come and go. **Esc** (or the badge's ✕) shows all files again and
 keeps the selection; Ctrl+F puts the filter back into the search to change
 it; going to another folder ends it.
