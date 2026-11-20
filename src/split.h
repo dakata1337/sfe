@@ -62,8 +62,10 @@ bool sfe_split_swap(SfeSplit* self, int step);
 
 /* The name of the pane at `index`: "left" with one pane; "left" / "right"
  * side by side or "top" / "bottom" stacked with two; "left", "right-top",
- * "right-bottom" with three. NULL past the last pane. */
+ * "right-bottom" with three, or "top", "middle", "bottom" in a narrow window
+ * (where the views stack). NULL past the last pane. */
 const char* sfe_split_position_name(SfeSplit* self, int index);
 
-/* The pane with that position name, or NULL. */
+/* The pane with that position name, or NULL; the wide and the narrow names
+ * both work. */
 SfePane* sfe_split_find_position(SfeSplit* self, const char* name);

@@ -506,7 +506,7 @@ visual mode too, and `<Esc>` leaves it; those keep the selection.
 | `mount` | `<device>` | mount a drive and open it |
 | `unmount` | `<device>` | unmount a drive |
 | `eject` | `<device>` | unmount and power off a removable drive |
-| `split` | `next\|previous\|move\|vertical\|horizontal\|absolute` | the split commands above; `move next\|previous` moves the view; `absolute left\|right\|right-top\|right-bottom\|top\|bottom` focuses a position, offering only the ones that exist |
+| `split` | `next\|previous\|move\|vertical\|horizontal\|absolute` | the split commands above; `move next\|previous` moves the view; `absolute left\|right\|right-top\|right-bottom\|top\|middle\|bottom` focuses a position, offering only the ones that exist (in a narrow window, where the views stack, top / middle / bottom; the side-by-side names still work there) |
 | `q` (`quit`) | | close the active view (the window if it is the last) |
 | `bookmark` | `[<folder>…]` | bookmark folders: the ones given, else the selected folders, else this one |
 | `unbookmark` | `[<bookmark>…]` | remove sfe's bookmarks the same way |

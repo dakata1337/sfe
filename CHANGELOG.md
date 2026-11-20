@@ -7,6 +7,11 @@ release: see the top of that script).
 
 ## Unreleased
 
+- In a narrow window, where the views stack, `split absolute` offers them
+  as top / middle / bottom (or top / bottom) instead of left / right-top /
+  right-bottom. The side-by-side names still work, so key bindings using
+  them keep working.
+
 ## 3.0.2
 
 - Grid view: a drag-selection can start on a file or in the empty space

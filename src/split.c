@@ -229,26 +229,35 @@ bool sfe_split_swap(SfeSplit* self, int step)
     return true;
 }
 
-const char* sfe_split_position_name(SfeSplit* self, int index)
+/* `narrow`: the names as the views stand in a narrow window (stacked). */
+static const char* position_name(SfeSplit* self, int index, bool narrow)
 {
     static const char* const one[] = { "left" };
     static const char* const side[] = { "left", "right" };
     static const char* const stacked[] = { "top", "bottom" };
     static const char* const three[] = { "left", "right-top", "right-bottom" };
+    static const char* const column[] = { "top", "middle", "bottom" };
 
     if (index < 0 || index >= self->n_panes)
         return NULL;
     switch (self->n_panes) {
     case 1: return one[index];
-    case 2: return self->stacked ? stacked[index] : side[index];
-    default: return three[index];
+    case 2: return self->stacked || narrow ? stacked[index] : side[index];
+    default: return narrow ? column[index] : three[index];
     }
 }
 
+const char* sfe_split_position_name(SfeSplit* self, int index)
+{
+    return position_name(self, index, self->narrow);
+}
+
+/* The names of either layout work, so key bindings keep working when the
+ * window gets narrow or wide. */
 SfePane* sfe_split_find_position(SfeSplit* self, const char* name)
 {
     for (int i = 0; i < self->n_panes; i++) {
-        if (g_strcmp0(sfe_split_position_name(self, i), name) == 0)
+        if (g_strcmp0(position_name(self, i, false), name) == 0 || g_strcmp0(position_name(self, i, true), name) == 0)
             return self->panes[i];
     }
     return NULL;
