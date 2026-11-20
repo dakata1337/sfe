@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+- The command line and the status corner no longer join letters such as
+  "ffi" into one glyph (some monospace fonts, e.g. Nimbus Mono, do).
 - Search can look in subfolders too: turn on *Search in subfolders*
   (`search_recursive`) in Settings. Matches below the folder show their
   path (`photos/2024/beach.jpg`), and Enter keeps them as a filter like

@@ -611,18 +611,21 @@ menu.sfe-menu {
     border-color: transparent;
     box-shadow: none;
     font-family: monospace;
+    font-feature-settings: "liga=0, clig=0, dlig=0"; /* typed text as typed: no "ffi" glyph */
     padding: 0;
     min-height: 26px;
 }
 
 .sfe-window .sfe-cmdbar-prompt {
     font-family: monospace;
+    font-feature-settings: "liga=0, clig=0, dlig=0"; /* typed text as typed: no "ffi" glyph */
     font-weight: bold;
     color: @sfe_accent;
 }
 
 .sfe-window .sfe-cmdbar-message {
     font-family: monospace;
+    font-feature-settings: "liga=0, clig=0, dlig=0"; /* typed text as typed: no "ffi" glyph */
 }
 
 .sfe-window .sfe-cmdbar-failed .sfe-cmdbar-message {
@@ -641,6 +644,7 @@ menu.sfe-menu {
 .sfe-window .sfe-cmdbar-list row {
     padding: 3px 12px;
     font-family: monospace;
+    font-feature-settings: "liga=0, clig=0, dlig=0"; /* typed text as typed: no "ffi" glyph */
     color: @sfe_fg;
 }
 
@@ -672,6 +676,7 @@ menu.sfe-menu {
     padding: 2px 10px;
     margin: 10px;
     font-family: monospace;
+    font-feature-settings: "liga=0, clig=0, dlig=0"; /* typed text as typed: no "ffi" glyph */
 }
 
 /* What can follow a pending chord, above showcmd. */
@@ -686,6 +691,7 @@ menu.sfe-menu {
 
 .sfe-window .sfe-keyhint-key {
     font-family: monospace;
+    font-feature-settings: "liga=0, clig=0, dlig=0"; /* typed text as typed: no "ffi" glyph */
     font-weight: bold;
     color: @sfe_accent;
 }
