@@ -6,6 +6,22 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 
 ## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
 
+### M4. Cursor keys in a view showing a message moved the focus out of sight
+
+- **Found by:** the monkey, seed 4146712566, at action 193
+  (`WIDGET_REALIZED_FOR_EVENT` in `gtk_widget_event`); the new log line
+  showed the focus on an unrealized grid hidden behind the view's message.
+- **Cause:** a view that cannot show its files (a folder without read
+  permission, "Cannot open this folder") shows a message in their place.
+  `move_cursor`, `jump_cursor`, `visual_start` and `sfe_pane_set_view`
+  (`src/pane.c`) grabbed the focus for the hidden grid or list anyway, so
+  after `j`, `k`, `G`, `gg`, `v` or Ctrl+1/2 the keys went to a widget
+  nobody sees; when it had never been realized, GTK logged a critical.
+- **Fix:** they focus through `sfe_pane_focus_view`, which already picks
+  the message when it is showing.
+- **Test:** `/ui/keys-in-message-view` (the focus must stay on screen after
+  each of those keys; fails without the fix).
+
 ### M3. "Open With → Other Application" on a file just gone gave criticals
 
 - **Found by:** the monkey, seed 2096012554, at action 357: Delete

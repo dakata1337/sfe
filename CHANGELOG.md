@@ -13,6 +13,8 @@ release: see the top of that script).
 - File dialogs (portal): a program saving several files can no longer name
   one "..", "." or "/" to get a file outside the folder you chose. Found by
   fuzzing.
+- In a view that cannot open its folder, cursor keys (j, k, G, gg, v,
+  Ctrl+1/2) no longer move the keyboard focus to the hidden file list.
 - Closing a split no longer makes GTK log criticals while the views go.
 - Open With → Other Application does nothing for a file that was just
   deleted, instead of making GTK log criticals.

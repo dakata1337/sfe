@@ -334,6 +334,40 @@ static void test_open_with_gone_file(void)
     close_window(win);
 }
 
+/* Found by the UI monkey: in a view showing a message instead of files
+ * ("Cannot open this folder"), cursor keys gave the focus to the view
+ * hidden behind it; later keys went to a widget nobody sees (and, when it
+ * had never been realized, made GTK log a critical). The focus must stay on
+ * something on screen. */
+static void assert_focus_on_screen(SfeWindow* win, const char* after)
+{
+    GtkWidget* focus = gtk_window_get_focus(GTK_WINDOW(win));
+    if (focus != NULL && !gtk_widget_is_drawable(focus))
+        g_error("after %s the focus is on a hidden %s", after, G_OBJECT_TYPE_NAME(focus));
+}
+
+static void test_keys_in_message_view(void)
+{
+    g_autofree char* dir = make_folder("message");
+    g_autofree char* locked = g_build_filename(dir, "locked", NULL);
+    g_mkdir(locked, 0000);
+    SfeWindow* win = open_window(dir);
+    run(win, "cd locked");
+    settle(200);
+    sfe_pane_focus_view(active(win));
+    struct { guint keyval; GdkModifierType mods; const char* name; } keys[] = {
+        { GDK_KEY_j, 0, "j" }, { GDK_KEY_k, 0, "k" }, { GDK_KEY_G, GDK_SHIFT_MASK, "G" },
+        { GDK_KEY_g, 0, "g" }, { GDK_KEY_g, 0, "gg" }, { GDK_KEY_v, 0, "v" },
+        { GDK_KEY_2, GDK_CONTROL_MASK, "Ctrl+2" }, { GDK_KEY_Menu, GDK_CONTROL_MASK | GDK_SHIFT_MASK, "Ctrl+Shift+Menu" },
+    };
+    for (size_t i = 0; i < G_N_ELEMENTS(keys); i++) {
+        key(win, keys[i].keyval, keys[i].mods);
+        assert_focus_on_screen(win, keys[i].name);
+    }
+    g_chmod(locked, 0755);
+    close_window(win);
+}
+
 /* Every widget in the Settings window that edits an option (found by
  * their "sfe-option" data), with its internal children. */
 static void collect_options(GtkWidget* w, gpointer list)
@@ -816,6 +850,7 @@ int main(int argc, char** argv)
     g_test_add_func("/ui/sidebar-rows-transparent", test_sidebar_rows_transparent);
     g_test_add_func("/ui/split-close-repeatedly", test_split_close_repeatedly);
     g_test_add_func("/ui/open-with-gone-file", test_open_with_gone_file);
+    g_test_add_func("/ui/keys-in-message-view", test_keys_in_message_view);
     if (monkey)
         g_test_add_func("/ui/monkey", test_monkey);
     int status = g_test_run();

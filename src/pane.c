@@ -1658,7 +1658,7 @@ void sfe_pane_set_view(SfePane* self, SfeViewMode mode)
     }
     g_list_free_full(selected, g_object_unref);
     if (had_focus)
-        gtk_widget_grab_focus(active_view(self));
+        sfe_pane_focus_view(self);
 }
 
 GList* sfe_pane_get_all_files(SfePane* self)
@@ -1800,7 +1800,7 @@ static void move_cursor(SfePane* self, GtkMovementStep step, int count, bool mod
     GList* keep = modify ? selected_paths(self) : NULL;
 
     cursor_scrolls(self);
-    gtk_widget_grab_focus(view);
+    sfe_pane_focus_view(self);
     if (query.n_params >= 4)
         g_signal_emit_by_name(view, "move-cursor", step, count, FALSE, modify, &handled);
     else
@@ -1821,7 +1821,7 @@ static void jump_cursor(SfePane* self, int index, bool visual)
     GtkTreePath* path = gtk_tree_path_new_from_indices(index, -1);
     GList* keep = visual ? selected_paths(self) : NULL;
     cursor_scrolls(self);
-    gtk_widget_grab_focus(active_view(self));
+    sfe_pane_focus_view(self);
     if (self->view == SFE_VIEW_GRID) {
         GtkIconView* grid = GTK_ICON_VIEW(self->grid);
         gtk_icon_view_set_cursor(grid, path, NULL, FALSE);
@@ -2018,7 +2018,7 @@ static void visual_start(SfePane* self)
         return;
     self->visual = true;
     g_hash_table_remove_all(self->visual_base);
-    gtk_widget_grab_focus(active_view(self));
+    sfe_pane_focus_view(self);
     start_chunk(self);
     apply_visual(self);
 }
@@ -2827,6 +2827,9 @@ void sfe_pane_focus_location(SfePane* self)
     gtk_widget_grab_focus(self->entry); /* selects the whole path */
 }
 
+/* The files, or the message in their place ("Cannot open this folder"):
+ * the view behind a message is not realized, and keys sent to it made GTK
+ * log criticals (found by the UI monkey). Keyboard paths focus through here. */
 void sfe_pane_focus_view(SfePane* self)
 {
     bool message = gtk_stack_get_visible_child(GTK_STACK(self->stack)) == self->message_box;
