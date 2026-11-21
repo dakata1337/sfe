@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.2.2
+
 - Drag and drop files: between splits, between sfe windows and with other
   applications. Drag from a selected file to take the whole selection;
   dragging from an unselected file still draws a selection rectangle. A drop

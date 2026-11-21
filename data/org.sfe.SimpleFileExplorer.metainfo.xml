@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="3.2.2" date="2026-11-21">
+      <description>
+        <p>Drag and drop files between splits, windows and applications; the tests pass where /tmp is a tmpfs.</p>
+      </description>
+    </release>
     <release version="3.2.1" date="2026-11-20">
       <description>
         <p>File dialogs open at 1200 x 800</p>
