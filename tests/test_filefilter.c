@@ -46,6 +46,11 @@ static void test_errors(void)
     g_assert_nonnull(error);
     g_autoptr(GPtrArray) none = sfe_file_filters_parse("@a(sa(us)) []", NULL);
     g_assert_cmpuint(none->len, ==, 0);
+
+    /* Found by fuzzing: invalid UTF-8 in a pattern made GLib log a critical. */
+    g_autoptr(GError) utf8_error = NULL;
+    g_assert_null(sfe_file_filters_parse("[('Images', [(uint32 0, '*.\333\321g')])]", &utf8_error));
+    g_assert_nonnull(utf8_error);
 }
 
 int main(int argc, char** argv)

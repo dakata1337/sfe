@@ -155,6 +155,10 @@ char** sfe_keymap_parse(const char* sequence, GError** error)
         g_set_error_literal(error, SFE_KEYMAP_ERROR, 0, "empty key sequence");
         goto fail;
     }
+    if (!g_utf8_validate(sequence, -1, NULL)) { /* g_utf8_next_char() would step past the end */
+        g_set_error_literal(error, SFE_KEYMAP_ERROR, 0, "key sequence is not valid UTF-8");
+        goto fail;
+    }
     while (*p != '\0') {
         char* token = NULL;
         if (*p == '<' && strchr(p, '>') != NULL && strchr(p, '>') > p + 1) {

@@ -234,6 +234,19 @@ static void test_syntax_error(void)
     g_assert_error(error, SFE_CONFIG_ERROR, 0);
 }
 
+/* Found by fuzzing: a stray Latin-1 byte (here in a key binding) made the
+ * key parser read past the end of the string. */
+static void test_invalid_utf8(void)
+{
+    g_autoptr(GError) error = NULL;
+    const char* text = "[general]\nview = \"list\"\n[keys]\n\"<C-w>\366\" = \"split vertical\"\n";
+    SfeConfig* cfg = sfe_config_parse(text, strlen(text), &error);
+
+    g_assert_null(cfg);
+    g_assert_error(error, SFE_CONFIG_ERROR, 0);
+    g_assert_true(g_str_has_prefix(error->message, "(line 4) "));
+}
+
 static void test_missing_file_gives_defaults(void)
 {
     g_autoptr(GError) error = NULL;
@@ -318,6 +331,7 @@ int main(int argc, char** argv)
     g_test_add_func("/config/keys", test_keys);
     g_test_add_func("/config/visual-keys", test_visual_keys);
     g_test_add_func("/config/syntax-error", test_syntax_error);
+    g_test_add_func("/config/invalid-utf8", test_invalid_utf8);
     g_test_add_func("/config/missing-file", test_missing_file_gives_defaults);
     g_test_add_func("/config/save-and-load", test_save_and_load);
     g_test_add_func("/config/decimal-comma-locale", test_decimal_comma_locale);

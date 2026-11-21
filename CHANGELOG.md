@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- A config.toml that is not UTF-8 (a stray byte from an editor saving in
+  another encoding) is reported as an error with its line, instead of
+  making sfe read past the end of a key binding. Found by fuzzing.
+
 ## 3.2.4
 
 - Fixed a crash on every change in Settings, and the config being ignored at

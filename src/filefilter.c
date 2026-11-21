@@ -28,6 +28,10 @@ SfeFileFilter* sfe_file_filter_new_folders_only(void)
 
 GPtrArray* sfe_file_filters_parse(const char* text, GError** error)
 {
+    if (!g_utf8_validate(text, -1, NULL)) { /* g_variant_parse() would complain (a critical) */
+        g_set_error_literal(error, G_VARIANT_PARSE_ERROR, G_VARIANT_PARSE_ERROR_FAILED, "filters are not valid UTF-8");
+        return NULL;
+    }
     g_autoptr(GVariant) v = g_variant_parse(G_VARIANT_TYPE("a(sa(us))"), text, NULL, NULL, error);
     if (v == NULL)
         return NULL;

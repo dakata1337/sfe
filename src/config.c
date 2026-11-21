@@ -426,6 +426,14 @@ SfeConfig* sfe_config_parse(const char* text, gsize len, GError** error)
         g_set_error(error, SFE_CONFIG_ERROR, 0, "config file is too large");
         return NULL;
     }
+    const char* bad = NULL;
+    if (!g_utf8_validate_len(text, len, &bad)) { /* tomlc17 does not check; later code relies on it */
+        int line = 1;
+        for (const char* p = text; p < bad; p++)
+            line += *p == '\n';
+        g_set_error(error, SFE_CONFIG_ERROR, 0, "(line %d) not valid UTF-8", line);
+        return NULL;
+    }
 
     /* tomlc17 reads floats with strtod(), which follows LC_NUMERIC: in a
      * locale with a decimal comma (bg_BG, de_DE, ...) "1.0" failed to parse. */

@@ -232,6 +232,15 @@ static void test_layered(void)
     g_assert_cmpint(sfe_keymap_lookup_layered(visual, normal, g, 1, NULL, NULL), ==, SFE_KEYS_PREFIX);
 }
 
+/* Found by fuzzing: a lead byte without its continuation bytes made the
+ * parser step past the end of the string. */
+static void test_invalid_utf8(void)
+{
+    g_autoptr(GError) error = NULL;
+    g_assert_null(sfe_keymap_parse("g\366", &error));
+    g_assert_nonnull(error);
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -242,5 +251,6 @@ int main(int argc, char** argv)
     g_test_add_func("/keymap/defaults", test_defaults);
     g_test_add_func("/keymap/continuations", test_continuations);
     g_test_add_func("/keymap/layered", test_layered);
+    g_test_add_func("/keymap/invalid-utf8", test_invalid_utf8);
     return g_test_run();
 }
