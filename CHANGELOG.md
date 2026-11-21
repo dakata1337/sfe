@@ -7,6 +7,9 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Sidebar and Settings rows no longer show as dark boxes with themes that
+  paint list rows (KDE's Breeze).
+
 ## 3.2.2
 
 - Drag and drop files: between splits, between sfe windows and with other

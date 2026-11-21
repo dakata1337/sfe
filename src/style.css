@@ -130,7 +130,10 @@
     padding: 4px 0;
 }
 
+/* Rows are transparent at rest: some themes (KDE's Breeze) paint them in
+ * the view colour, which made each one a dark box. */
 .sfe-sidebar row {
+    background-color: transparent;
     margin: 1px 8px;
     padding: 5px 8px;
     border-radius: 6px;
@@ -720,6 +723,7 @@ menu.sfe-menu {
 }
 
 .sfe-settings stacksidebar row {
+    background-color: transparent;
     margin: 1px 8px;
     padding: 7px 12px;
     border-radius: 6px;
