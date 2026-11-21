@@ -81,6 +81,10 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   instead of a broken file).
 - **Test:** `/portalconf/seed-encoding-key`.
 
+Apart from that, all 11 targets ran the full hour without a finding;
+portalconf, restarted with the fix, ran another 50 minutes (9.8 million
+inputs) clean.
+
 ## Round 5 (2026-11-21, 1800 s, all 11 targets with `-p`)
 
 Nothing found. The corpora keep growing (config 11,167 inputs, rename
