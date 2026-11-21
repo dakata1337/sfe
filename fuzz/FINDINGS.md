@@ -4,6 +4,20 @@ Every problem the fuzz targets found, newest first: what it was, how it
 could happen in sfe, and the fix with its regression test. Problems in a
 harness (not in sfe) are listed too, so the same mistake is not repeated.
 
+## Round 3 (2026-11-21, 600 s per target)
+
+### 7. Finding 6 was fixed in only one place (`portalreq`)
+
+- **Found by:** `fuzz-portalreq` (the same critical, from line 166).
+- **Input:** a `#choice ID VALUE` line from the dialog whose value is not
+  UTF-8.
+- **Cause:** round 2 added the UTF-8 check after the `#filter` and
+  `#choice` branches, so only URI lines were checked.
+- **Fix:** every line is checked first, at the top of the loop.
+- **Test:** `/portalreq/current-filter-alone` (now with a `#choice` line).
+- **Lesson:** put an input check where the input enters, not next to the
+  line that crashed.
+
 ## Round 2 (2026-11-21, 180 s per target)
 
 ### 4. Long counter width in mass rename padded to a billion characters (`rename`)

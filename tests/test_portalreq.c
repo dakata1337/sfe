@@ -121,9 +121,11 @@ static void test_current_filter_alone(void)
 
     /* Found by fuzzing: a line that is not UTF-8 made GLib log a critical
      * (GVariant strings must be UTF-8); it is skipped. */
-    g_autoptr(GVariant) skipped = sfe_portal_request_results(r, "file:///tmp/\377.txt\nfile:///tmp/b.txt\n");
+    g_autoptr(GVariant) skipped = sfe_portal_request_results(r,
+        "file:///tmp/\377.txt\n#choice enc \377\nfile:///tmp/b.txt\n");
     g_autoptr(GVariant) uris = g_variant_lookup_value(skipped, "uris", G_VARIANT_TYPE_STRING_ARRAY);
     g_assert_cmpuint(g_variant_n_children(uris), ==, 1);
+    g_assert_null(g_variant_lookup_value(skipped, "choices", NULL)); /* (round 3: a #choice line too) */
 }
 
 /* A current_filter missing from the list is added to its end. */
