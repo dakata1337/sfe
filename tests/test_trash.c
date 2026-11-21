@@ -96,6 +96,7 @@ int main(int argc, char** argv)
 {
     root = g_dir_make_tmp("sfe-trash-XXXXXX", NULL);
     g_setenv("XDG_DATA_HOME", root, TRUE); /* before GLib reads it */
+    g_setenv("HOME", root, TRUE); /* GLib uses the home trash only on $HOME's device (a tmpfs /tmp is not) */
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/trash/restore", test_restore);
     g_test_add_func("/trash/delete-lists", test_delete_lists);

@@ -12,6 +12,8 @@ release: see the top of that script).
   dragging from an unselected file still draws a selection rectangle. A drop
   on a folder goes into it, elsewhere into the view's folder. It moves on the
   same file system and copies to another; hold Ctrl to copy, Shift to move.
+- The trash and undo tests pass when `/tmp` is a tmpfs (CachyOS and others
+  mount it so; the package build failed there).
 
 ## 3.2.1
 
