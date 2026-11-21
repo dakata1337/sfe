@@ -82,6 +82,8 @@ char** sfe_cmdline_split(const char* line, GError** error)
 
 char* sfe_cmdline_quote(const char* arg)
 {
+    if (*arg == '\0')
+        return g_strdup("\"\""); /* an empty argument, not none */
     GString* out = g_string_new(NULL);
     for (const char* p = arg; *p != '\0'; p++) {
         if (strchr(" \t'\"\\", *p) != NULL)

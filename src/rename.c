@@ -101,7 +101,8 @@ static char* expand_template(const char* tpl, const char* stem, const char* ext,
         else if (strcmp(key, "n") == 0)
             g_string_append_printf(out, "%d", counter);
         else if (g_str_has_prefix(key, "n:") && key[2] != '\0' && strspn(key + 2, "0123456789") == strlen(key + 2))
-            g_string_append_printf(out, "%0*d", MIN(atoi(key + 2), 32), counter);
+            /* Not atoi(): it overflowed on long widths, and a negative width padded to a billion characters. */
+            g_string_append_printf(out, "%0*d", (int)MIN(g_ascii_strtoull(key + 2, NULL, 10), 32), counter);
         else
             g_string_append_len(out, p, close - p + 1);
         p = close + 1;

@@ -14,6 +14,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+root=$PWD
 seconds=60
 jobs=1
 while getopts "t:j:h" opt; do
@@ -43,14 +44,20 @@ for t in "${targets[@]}"; do
     crashes=fuzz/crashes/$t
     mkdir -p "$corpus" "$crashes"
     echo "==> $t (${seconds}s)"
-    if ! build-fuzz/fuzz/fuzz-"$t" "$corpus" fuzz/corpus/"$t" \
-        -max_total_time="$seconds" -jobs="$jobs" -workers="$jobs" -print_final_stats=1 \
-        -artifact_prefix="$crashes/" >build-fuzz/fuzz-"$t".log 2>&1; then
+    # libFuzzer writes each job's log as fuzz-N.log in the current folder:
+    # a folder per target, so targets running at the same time do not mix.
+    work=build-fuzz/work/$t
+    mkdir -p "$work"
+    parallel=()
+    [ "$jobs" -gt 1 ] && parallel=(-jobs="$jobs" -workers="$jobs")
+    if ! (cd "$work" && "$root"/build-fuzz/fuzz/fuzz-"$t" "$root/$corpus" "$root"/fuzz/corpus/"$t" \
+        -max_total_time="$seconds" "${parallel[@]}" -print_final_stats=1 \
+        -artifact_prefix="$root/$crashes/") >build-fuzz/fuzz-"$t".log 2>&1; then
         found=1
         echo "    found a problem: $(ls -t "$crashes" | head -1) (log: build-fuzz/fuzz-$t.log)"
         grep -m3 -E "ERROR: AddressSanitizer|runtime error|invariant failed|SUMMARY" build-fuzz/fuzz-"$t".log | sed 's/^/    /' || true
     else
-        grep -E "^stat::number_of_executed_units|^cov:" build-fuzz/fuzz-"$t".log | tail -1 | sed 's/^/    /' || true
+        grep -h "^stat::number_of_executed_units" build-fuzz/fuzz-"$t".log "$work"/fuzz-*.log 2>/dev/null | sed 's/^/    /' || true
         echo "    nothing found; corpus: $(ls "$corpus" | wc -l) inputs"
     fi
 done

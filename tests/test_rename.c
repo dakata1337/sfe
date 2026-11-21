@@ -56,6 +56,11 @@ static void test_template_and_counter(void)
 
     SfeRenameRule unknown = { .template_ = "{name}{oops}{ext}", .counter_start = 1, .counter_step = 1 };
     ASSERT_RENAME(&unknown, "a.txt", false, 0, "a{oops}.txt");
+
+    /* Found by fuzzing: a long width overflowed atoi() into a negative
+     * printf width, which padded to a billion characters. Capped at 32. */
+    SfeRenameRule wide = { .template_ = "{n:1111111111111115}", .counter_start = 7, .counter_step = 1 };
+    ASSERT_RENAME(&wide, "a", false, 0, "00000000000000000000000000000007");
 }
 
 static void test_find_replace(void)

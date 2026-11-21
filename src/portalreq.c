@@ -168,7 +168,7 @@ GVariant* sfe_portal_request_results(const SfePortalRequest* r, const char* outp
             }
             continue;
         }
-        if (lines[i][0] == '#')
+        if (lines[i][0] == '#' || !g_utf8_validate(lines[i], -1, NULL)) /* (GVariant strings must be UTF-8) */
             continue;
         if (r->save_names == NULL) {
             g_variant_builder_add(&uris, "s", lines[i]);

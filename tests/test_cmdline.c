@@ -59,6 +59,12 @@ static void test_quote_round_trip(void)
     g_assert_cmpstr(q, ==, "My\\ Files");
     g_autofree char* tilde = sfe_cmdline_quote("~/Documents");
     g_assert_cmpstr(tilde, ==, "~/Documents"); /* left readable */
+
+    /* Found by fuzzing: an empty argument quoted to nothing, so it vanished. */
+    g_autofree char* empty = sfe_cmdline_quote("");
+    g_auto(GStrv) back = sfe_cmdline_split(empty, NULL);
+    g_assert_cmpuint(g_strv_length(back), ==, 1);
+    g_assert_cmpstr(back[0], ==, "");
 }
 
 static GPtrArray* candidates(void)

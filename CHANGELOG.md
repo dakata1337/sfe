@@ -10,6 +10,8 @@ release: see the top of that script).
 - A config.toml that is not UTF-8 (a stray byte from an editor saving in
   another encoding) is reported as an error with its line, instead of
   making sfe read past the end of a key binding. Found by fuzzing.
+- Mass rename: a very long counter width (`{n:1111111111111115}`) no longer
+  freezes sfe; widths are capped at 32 digits. Found by fuzzing.
 
 ## 3.2.4
 

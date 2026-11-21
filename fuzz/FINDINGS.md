@@ -4,6 +4,47 @@ Every problem the fuzz targets found, newest first: what it was, how it
 could happen in sfe, and the fix with its regression test. Problems in a
 harness (not in sfe) are listed too, so the same mistake is not repeated.
 
+## Round 2 (2026-11-21, 180 s per target)
+
+### 4. Long counter width in mass rename padded to a billion characters (`rename`)
+
+- **Found by:** `fuzz-rename` (out of memory).
+- **Input:** the template `{n:1111111111111115}`.
+- **Cause:** `expand_template` (`src/rename.c`) read the width with
+  `atoi()`, which overflows (undefined behaviour) and here gave a negative
+  number. `MIN(width, 32)` kept it, and a negative `printf` width means
+  "left-align in that many characters": sfe froze building a string of over
+  a billion characters while the user typed a long width in the dialog.
+- **Fix:** the width is read with `g_ascii_strtoull` (saturates instead of
+  overflowing) and capped at 32.
+- **Test:** `/rename/template-counter`.
+
+### 5. An empty argument quoted to nothing (`cmdline`)
+
+- **Found by:** `fuzz-cmdline` (quote/split round trip).
+- **Cause:** `sfe_cmdline_quote("")` returned an empty string, which splits
+  into no argument at all, not into one empty argument.
+- **Fix:** it returns `""`.
+- **Test:** `/cmdline/quote`.
+
+### 6. A non-UTF-8 line from the dialog made the portal log a critical (`portalreq`)
+
+- **Found by:** `fuzz-portalreq` (critical from `g_variant_builder_add`).
+- **Cause:** `sfe_portal_request_results` put every line `sfe --choose`
+  printed into a GVariant string, which must be UTF-8. sfe prints URIs
+  (ASCII) and choice values, so this needs a broken dialog; the reply to
+  the requesting program would have been malformed.
+- **Fix:** such lines are skipped.
+- **Test:** `/portalreq/current-filter-alone`.
+
+### Tooling mistake
+
+- With `-jobs`, libFuzzer writes `fuzz-N.log` into the current folder;
+  targets run at the same time all wrote into the repository root, so
+  their summaries mixed (the crash files were right). `tools/fuzz.sh` now
+  runs each target in `build-fuzz/work/TARGET` and passes `-jobs` only
+  for `-j` > 1.
+
 ## Round 1 (2026-11-21, 90 s per target)
 
 ### 1. Key binding with invalid UTF-8 read past the string (`keymap`, `config`)
