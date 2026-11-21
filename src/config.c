@@ -1,9 +1,11 @@
+#define _POSIX_C_SOURCE 200809L /* newlocale(), uselocale() */
 #include "config.h"
 
 #include "keymap.h"
 #include <errno.h>
 #include <glib/gstdio.h>
 #include <limits.h>
+#include <locale.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
@@ -425,7 +427,15 @@ SfeConfig* sfe_config_parse(const char* text, gsize len, GError** error)
         return NULL;
     }
 
+    /* tomlc17 reads floats with strtod(), which follows LC_NUMERIC: in a
+     * locale with a decimal comma (bg_BG, de_DE, ...) "1.0" failed to parse. */
+    locale_t c_locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t)0);
+    locale_t old_locale = c_locale ? uselocale(c_locale) : (locale_t)0;
     toml_result_t res = toml_parse(text, (int)len);
+    if (c_locale) {
+        uselocale(old_locale);
+        freelocale(c_locale);
+    }
     if (!res.ok) {
         g_set_error(error, SFE_CONFIG_ERROR, 0, "%s", res.errmsg);
         toml_free(res);

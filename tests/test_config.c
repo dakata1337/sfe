@@ -2,6 +2,7 @@
 #include "util.h"
 
 #include <glib/gstdio.h>
+#include <locale.h>
 #include <string.h>
 
 static SfeConfig* parse(const char* text)
@@ -278,6 +279,33 @@ static void test_home_paths(void)
     g_assert_cmpstr(d, ==, "~/Documents");
 }
 
+/* A locale with a decimal comma must not break reading "1.25" (or the copy
+ * every Settings change makes, which aborted). */
+static void test_decimal_comma_locale(void)
+{
+    const char* names[] = { "bg_BG.UTF-8", "de_DE.UTF-8", "fr_FR.UTF-8", "ru_RU.UTF-8", NULL };
+    g_autofree char* saved = g_strdup(setlocale(LC_NUMERIC, NULL));
+    const char* found = NULL;
+    for (int i = 0; names[i] != NULL && found == NULL; i++)
+        if (setlocale(LC_NUMERIC, names[i]) != NULL && strcmp(localeconv()->decimal_point, ",") == 0)
+            found = names[i];
+    if (found == NULL) {
+        setlocale(LC_NUMERIC, saved);
+        g_test_skip("no locale with a decimal comma installed");
+        return;
+    }
+    const char* text = "[general]\nui_scale = 1.25\n";
+    g_autoptr(GError) error = NULL;
+    SfeConfig* cfg = sfe_config_parse(text, strlen(text), &error);
+    g_assert_no_error(error);
+    g_assert_cmpfloat(cfg->ui_scale, ==, 1.25);
+    SfeConfig* copy = sfe_config_copy(cfg);
+    g_assert_cmpfloat(copy->ui_scale, ==, 1.25);
+    sfe_config_free(copy);
+    sfe_config_free(cfg);
+    setlocale(LC_NUMERIC, saved);
+}
+
 int main(int argc, char** argv)
 {
     g_test_init(&argc, &argv, NULL);
@@ -292,6 +320,7 @@ int main(int argc, char** argv)
     g_test_add_func("/config/syntax-error", test_syntax_error);
     g_test_add_func("/config/missing-file", test_missing_file_gives_defaults);
     g_test_add_func("/config/save-and-load", test_save_and_load);
+    g_test_add_func("/config/decimal-comma-locale", test_decimal_comma_locale);
     g_test_add_func("/util/home-paths", test_home_paths);
     return g_test_run();
 }

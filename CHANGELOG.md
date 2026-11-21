@@ -7,6 +7,10 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Fixed a crash on every change in Settings, and the config being ignored at
+  start ("error parsing float"), in languages that write decimals with a
+  comma (Bulgarian, German, French, Russian, ...).
+
 ## 3.2.3
 
 - Sidebar and Settings rows no longer show as dark boxes with themes that
