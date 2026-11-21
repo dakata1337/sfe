@@ -117,3 +117,35 @@ test_dirmodel = executable('test-dirmodel',
   build_by_default: false,
 )
 test('dirmodel', test_dirmodel)
+
+# The real windows on a headless display (broadwayd), driven by keys, :
+# commands and the Settings widgets; skipped (exit 77) without broadwayd.
+# Run again in a decimal-comma language (the Settings crash of 3.2.4 only
+# happened there) when one is installed.
+test_ui = executable('test-ui',
+    'test_ui.c', ui_src, resources, commit_h,
+    dependencies: [core_dep, gtk_dep, m_dep],
+    build_by_default: false,
+)
+test('ui', test_ui, timeout: 120, is_parallel: false)
+test('ui-theme', test_ui, timeout: 120, is_parallel: false,
+    env: {
+        'GTK_THEME': 'FakeBreeze',
+        'XDG_DATA_DIRS': meson.current_source_dir() / 'data' + ':/usr/local/share:/usr/share',
+    },
+)
+
+# A decimal-comma language, built here so it needs no system locale: sfe's
+# config parsing broke in those (3.2.4). Runs the config and widget tests.
+localedef = find_program('localedef', required: false)
+fs = import('fs')
+if localedef.found() and fs.exists('/usr/share/i18n/locales/bg_BG')
+    locale_dir = meson.current_build_dir() / 'locale'
+    run_command('mkdir', '-p', locale_dir, check: false)
+    made = run_command(localedef, '-i', 'bg_BG', '-f', 'UTF-8', locale_dir / 'bg_BG.UTF-8', check: false)
+    if fs.is_dir(locale_dir / 'bg_BG.UTF-8')
+        bg_env = { 'LOCPATH': locale_dir, 'LC_ALL': 'bg_BG.UTF-8' }
+        test('config-bg', test_config, env: bg_env)
+        test('ui-bg', test_ui, timeout: 120, is_parallel: false, env: bg_env)
+    endif
+endif

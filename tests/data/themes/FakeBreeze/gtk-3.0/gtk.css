@@ -1,0 +1,5 @@
+/* A stand-in for KDE's Breeze in one respect: list rows painted in the view
+ * colour (sfe's sidebar rows showed as dark boxes with it, 3.2.3). Used by
+ * the ui-theme test. */
+@import url("resource:///org/gtk/libgtk/theme/Adwaita/gtk-contained-dark.css");
+row { background-color: #141618; border-radius: 4px; }

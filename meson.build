@@ -136,7 +136,6 @@ ui_src = files(
     'src/dirmodel.c',
     'src/dirtree.c',
     'src/icons.c',
-    'src/main.c',
     'src/opsbar.c',
     'src/pane.c',
     'src/pathentry.c',
@@ -154,6 +153,7 @@ ui_src = files(
 executable(
     'sfe',
     ui_src,
+    'src/main.c', # (not in ui_src: tests/test_ui.c links ui_src with its own main)
     resources,
     commit_h,
     dependencies: [core_dep, gtk_dep, m_dep],
