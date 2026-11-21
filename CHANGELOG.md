@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.2.3
+
 - Sidebar and Settings rows no longer show as dark boxes with themes that
   paint list rows (KDE's Breeze).
 
