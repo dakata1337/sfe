@@ -1,0 +1,43 @@
+[[actions.directories]]
+name = "Open terminal here"
+command = "foot -D %f"
+
+[[actions.files]]
+name = "Open terminal here"
+command = "foot -D %d"
+
+[[actions.files]]
+name = "Edit in Neovim"
+command = "foot nvim %f"
+```
+```toml
+[keys]
+"<C-w>v" = "split vertical"
+"gd" = "cd ~/Downloads"
+"x" = ""
+```
+```toml
+[keys.visual]
+"x" = "cut"
+```
+```toml
+[general]
+start_path = "~"
+show_hidden = false
+ui_scale = 1.0
+view = "grid"        # grid | list
+sort_by = "name"     # name | size | modified | type
+sort_order = "ascending"  # ascending | descending
+search_delay_ms = 100     # search when typing pauses this long
+search_recursive = false  # search also in the folders below
+cache_minutes = 5    # keep folders you left loaded (0: off)
+cache_mb = 512       # memory for them; the oldest go first
+
+[preview]
+thumbnails = true
+thumbnail_max_mb = 50
+folder_covers = true  # cover.jpg / folder.png instead of the folder icon
+
+[open]               # program per extension; %f is the file
+mp4 = "mpv %f"
+pdf = "zathura %f"

@@ -36,6 +36,15 @@ add_project_arguments(
 )
 add_project_arguments('-DG_LOG_DOMAIN="sfe"', language: 'c')
 
+# Fuzzing: the code under test gets coverage instrumentation; the targets
+# in fuzz/ link libFuzzer. Sanitizers come from b_sanitize (tools/fuzz.sh).
+if get_option('fuzzing')
+    if cc.get_id() != 'clang'
+        error('-Dfuzzing=true needs clang: CC=clang meson setup ...')
+    endif
+    add_project_arguments('-fsanitize=fuzzer-no-link', language: 'c')
+endif
+
 # Headers of system libraries are included as -isystem so -Wpedantic only
 # applies to our own code.
 glib_dep = dependency('glib-2.0', version: '>= 2.70', include_type: 'system')
@@ -211,3 +220,6 @@ install_subdir(
 gnome.post_install(gtk_update_icon_cache: true, update_desktop_database: true)
 
 subdir('tests')
+if get_option('fuzzing')
+    subdir('fuzz')
+endif

@@ -1,0 +1,9 @@
+[[actions.files]]
+name = "Edit"
+command = "vim %f"
+
+[keys]
+"<C-w>v" = "split vertical"
+
+[open_with]
+mp4 = "mpv %f"
