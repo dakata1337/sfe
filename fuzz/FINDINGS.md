@@ -4,6 +4,12 @@ Every problem the fuzz targets found, newest first: what it was, how it
 could happen in sfe, and the fix with its regression test. Problems in a
 harness (not in sfe) are listed too, so the same mistake is not repeated.
 
+## Round 4 (2026-11-21, 900 s, all 11 targets at once with `-p`)
+
+Nothing found: about 190 million inputs over the 11 targets. `trashinfo`
+and `portalconf` reach little of sfe's own code (their parsing is GLib's
+keyfile reader, which is not instrumented), so their clean result says less.
+
 ## Round 3 (2026-11-21, 600 s per target, 4 new targets)
 
 ### 7. Finding 6 was fixed in only one place (`portalreq`)
