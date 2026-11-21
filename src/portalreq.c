@@ -81,7 +81,16 @@ SfePortalRequest* sfe_portal_request_new(const char* method, const char* parent_
         g_autoptr(GVariant) files = g_variant_lookup_value(options, "files", G_VARIANT_TYPE_BYTESTRING_ARRAY);
         for (gsize i = 0; files != NULL && i < g_variant_n_children(files); i++) {
             g_autoptr(GVariant) f = g_variant_get_child_value(files, i);
-            g_ptr_array_add(r->save_names, g_path_get_basename(g_variant_get_bytestring(f)));
+            /* Names from the program asking (maybe sandboxed), each meant as
+             * one file inside the chosen folder. g_path_get_basename() keeps
+             * "/", "." and "..", which would name the folder itself or its
+             * parent: outside what the user chose. */
+            char* name = g_path_get_basename(g_variant_get_bytestring(f));
+            if (strcmp(name, "/") == 0 || strcmp(name, ".") == 0 || strcmp(name, "..") == 0) {
+                g_free(name);
+                name = g_strdup("file");
+            }
+            g_ptr_array_add(r->save_names, name);
         }
     } else { /* OpenFile */
         folder_dialog = option_bool(options, "directory");

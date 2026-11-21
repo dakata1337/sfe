@@ -36,7 +36,7 @@ static void add_entry(GPtrArray* list, GFile* file, const char* label, int confi
     b->file = g_object_ref(file);
     b->config_index = config_index;
     if (label != NULL && *label != '\0') {
-        b->label = g_strdup(label);
+        b->label = g_utf8_make_valid(label, -1); /* other programs write the GTK file; GTK needs UTF-8 */
     } else {
         g_autofree char* path = g_file_get_path(file);
         b->label = g_filename_display_basename(path ? path : "/");

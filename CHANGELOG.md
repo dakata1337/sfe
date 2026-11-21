@@ -10,6 +10,11 @@ release: see the top of that script).
 - A config.toml that is not UTF-8 (a stray byte from an editor saving in
   another encoding) is reported as an error with its line, instead of
   making sfe read past the end of a key binding. Found by fuzzing.
+- File dialogs (portal): a program saving several files can no longer name
+  one "..", "." or "/" to get a file outside the folder you chose. Found by
+  fuzzing.
+- Bookmarks from the GTK bookmarks file with a label in another encoding
+  show readable (with a replacement character) instead of garbled.
 - Mass rename: a very long counter width (`{n:1111111111111115}`) no longer
   freezes sfe; widths are capped at 32 digits. Found by fuzzing.
 

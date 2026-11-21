@@ -20,7 +20,8 @@ static void test_list(void)
         "file://%s\n" /* duplicate of the sfe bookmark: dropped */
         "sftp://host/path Remote\n" /* not local: dropped */
         "\n"
-        "file:///tmp\n",
+        "file:///tmp\n"
+        "file:///opt Caf\351\n", /* Latin-1 label (fuzzing): shown as "Caf\uFFFD" */
         docs);
 
     g_assert_no_error(error);
@@ -29,7 +30,7 @@ static void test_list(void)
     g_ptr_array_add(cfg->bookmarks, g_strdup("/mnt/data"));
 
     g_autoptr(GPtrArray) list = sfe_bookmarks_list(cfg, gtk_file);
-    g_assert_cmpuint(list->len, ==, 4);
+    g_assert_cmpuint(list->len, ==, 5);
     g_assert_cmpstr(g_file_peek_path(at(list, 0)->file), ==, docs);
     g_assert_cmpstr(at(list, 0)->label, ==, "Documents");
     g_assert_cmpint(at(list, 0)->config_index, ==, 0);
@@ -37,6 +38,7 @@ static void test_list(void)
     g_assert_cmpstr(at(list, 2)->label, ==, "Work Stuff");
     g_assert_cmpint(at(list, 2)->config_index, ==, -1);
     g_assert_cmpstr(at(list, 3)->label, ==, "tmp");
+    g_assert_cmpstr(at(list, 4)->label, ==, "Caf\uFFFD");
 
     cfg->show_gtk_bookmarks = false;
     g_autoptr(GPtrArray) own = sfe_bookmarks_list(cfg, gtk_file);

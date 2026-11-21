@@ -166,6 +166,18 @@ static void test_save_files(void)
     g_assert_cmpstr(uris[0], ==, "file:///home/alex/Pictures/one.png");
     g_assert_cmpstr(uris[1], ==, "file:///home/alex/Pictures/two.png");
     g_free(uris);
+
+    /* Found by fuzzing: names that are not a file inside the folder ("..",
+     * "/", ".") would have pointed outside the folder the user chose. */
+    g_autoptr(SfePortalRequest) bad = request("SaveFiles", "{'files': <[b'..', b'/', b'.']>}");
+    g_autoptr(GVariant) bad_results = sfe_portal_request_results(bad, "file:///nonexistent/Pictures\n");
+    const char** bad_uris = NULL;
+    g_assert_true(g_variant_lookup(bad_results, "uris", "^a&s", &bad_uris));
+    g_assert_cmpuint(g_strv_length((char**)bad_uris), ==, 3);
+    g_assert_cmpstr(bad_uris[0], ==, "file:///nonexistent/Pictures/file");
+    g_assert_cmpstr(bad_uris[1], ==, "file:///nonexistent/Pictures/file%20(2)");
+    g_assert_cmpstr(bad_uris[2], ==, "file:///nonexistent/Pictures/file%20(3)");
+    g_free(bad_uris);
 }
 
 /* Files the program would write over get free names instead. */
