@@ -27,4 +27,25 @@ command), and wait for results with `WAIT_UNTIL(...)`, never a fixed sleep:
 file jobs finish in the background (wait for the undo history to grow
 before undoing, for example).
 
+## Monkey
+
+`tools/ui-monkey.sh` sends random but reproducible input to the real
+windows: keys from the whole keyboard with modifiers (to whatever window or
+dialog is on top), `:` commands with random arguments, actions, and files
+changing on disk. After every action sfe must still run and log no warning
+or critical. It is not part of `meson test` (it is random, and can trip
+over GTK itself), and runs as long as you like:
+
+```bash
+tools/ui-monkey.sh -b build -n 2000 -r 10    # 10 runs of 2000 actions
+tools/ui-monkey.sh -b build -s 8 -n 500      # replay seed 8
+```
+
+On a failure it prints the seed and the last 40 actions (with the focused
+widget of each key). Timing still varies, so a replay may need a few tries.
+It cannot touch anything outside its folder: `PATH` holds only `bwrap` (for
+GTK's image loaders), GIO sees no applications, its data dirs are out of
+its reach, and a view that leaves its folder is sent back after every
+action. Findings: `fuzz/FINDINGS.md`, section "UI monkey".
+
 The parsers are also fuzzed: see `fuzz/README.md`.

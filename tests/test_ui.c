@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE /* symlink() */
 /* Widget tests: the real application and windows, driven the way a user
  * drives them (key presses, : commands, the Settings widgets), on a
  * headless GTK display (broadwayd) in a throwaway home folder.
@@ -7,6 +8,7 @@
  * and in a decimal-comma language / another theme by the "ui-bg" and
  * "ui-theme" tests (tests/meson.build). */
 #include "actions.h"
+#include "cmdline.h"
 #include "app.h"
 #include "commands.h"
 #include "pane.h"
@@ -18,6 +20,8 @@
 #include <glib/gstdio.h>
 #include <locale.h>
 #include <signal.h>
+#include <stdarg.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #ifdef __linux__
@@ -25,6 +29,7 @@
 #endif
 
 static char* root; /* HOME, XDG_* and the test folders are in here */
+static char* tools; /* monkey only: its data dirs and programs, out of its reach */
 static GPid broadway;
 static SfeApplication* app;
 
@@ -349,6 +354,284 @@ static void test_settings_every_option(void)
     close_window(win);
 }
 
+
+/* ------------------------------------------------------------------------ */
+/* Monkey: random but reproducible input (SFE_MONKEY_STEPS, SFE_MONKEY_SEED) */
+/* ------------------------------------------------------------------------ */
+
+/* Random keys, : commands and actions on a window over a test folder; after
+ * every one sfe must still run and log no warning or critical (both are
+ * fatal under g_test). Nothing can act outside the throwaway folder: PATH
+ * is empty (no programs, no umount), GIO sees no applications, and a view
+ * that leaves the sandbox is sent back after every single key. On failure
+ * the seed and the last actions are printed: replay with the same seed. */
+
+#define MONKEY_LOG 40
+static char* monkey_log[MONKEY_LOG];
+static guint monkey_logged;
+static guint32 monkey_seed;
+
+static void monkey_note(const char* format, ...) G_GNUC_PRINTF(1, 2);
+static void monkey_note(const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    g_free(monkey_log[monkey_logged % MONKEY_LOG]);
+    monkey_log[monkey_logged % MONKEY_LOG] = g_strdup_vprintf(format, args);
+    va_end(args);
+    monkey_logged++;
+}
+
+static void monkey_dump(int sig)
+{
+    fprintf(stderr, "\n*** monkey: signal %d after %u actions, SFE_MONKEY_SEED=%u; last actions:\n", sig,
+        monkey_logged, monkey_seed);
+    guint first = monkey_logged > MONKEY_LOG ? monkey_logged - MONKEY_LOG : 0;
+    for (guint i = first; i < monkey_logged; i++)
+        fprintf(stderr, "  %5u  %s\n", i, monkey_log[i % MONKEY_LOG]);
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+/* The window keys go to: a dialog or other window on top, else `main`. */
+static GtkWindow* key_target(SfeWindow* main)
+{
+    GList* tops = gtk_window_list_toplevels();
+    GtkWindow* target = GTK_WINDOW(main);
+    for (GList* l = tops; l != NULL; l = l->next) {
+        GtkWindow* w = l->data;
+        if (gtk_widget_get_mapped(GTK_WIDGET(w)) && gtk_window_get_window_type(w) == GTK_WINDOW_TOPLEVEL
+            && w != GTK_WINDOW(main) && (gtk_window_get_modal(w) || gtk_window_get_transient_for(w) != NULL))
+            target = w;
+    }
+    g_list_free(tops);
+    return target;
+}
+
+static void send_key(GtkWindow* win, guint keyval, GdkModifierType mods)
+{
+    GdkWindow* gdk = gtk_widget_get_window(GTK_WIDGET(win));
+    if (gdk == NULL)
+        return;
+    GdkDisplay* display = gtk_widget_get_display(GTK_WIDGET(win));
+    GdkDevice* keyboard = gdk_seat_get_keyboard(gdk_display_get_default_seat(display));
+    GdkKeymapKey* keys = NULL;
+    int n = 0;
+    guint16 code = 0;
+    if (gdk_keymap_get_entries_for_keyval(gdk_keymap_get_for_display(display), keyval, &keys, &n) && n > 0)
+        code = (guint16)keys[0].keycode;
+    g_free(keys);
+    for (int i = 0; i < 2; i++) {
+        GdkEvent* e = gdk_event_new(i == 0 ? GDK_KEY_PRESS : GDK_KEY_RELEASE);
+        e->key.window = g_object_ref(gdk);
+        e->key.send_event = TRUE;
+        e->key.time = GDK_CURRENT_TIME;
+        e->key.state = mods;
+        e->key.keyval = keyval;
+        e->key.hardware_keycode = code;
+        gdk_event_set_device(e, keyboard);
+        gtk_main_do_event(e);
+        gdk_event_free(e);
+    }
+}
+
+static bool inside(GFile* dir, const char* top)
+{
+    g_autoptr(GFile) root_file = g_file_new_for_path(top);
+    return g_file_equal(dir, root_file) || g_file_has_prefix(dir, root_file);
+}
+
+/* Every view of every window back into the sandbox folder `top`. */
+static void monkey_guard(const char* top)
+{
+    GList* tops = gtk_window_list_toplevels();
+    for (GList* l = tops; l != NULL; l = l->next) {
+        if (!SFE_IS_WINDOW(l->data))
+            continue;
+        SfeSplit* split = sfe_window_get_split(l->data);
+        for (int i = 0; i < sfe_split_get_n_panes(split); i++) {
+            SfePane* pane = sfe_split_get_pane(split, i);
+            GFile* dir = sfe_pane_get_dir(pane);
+            if (dir != NULL && !inside(dir, top)) {
+                g_autoptr(GFile) back = g_file_new_for_path(top);
+                sfe_pane_navigate(pane, back);
+            }
+        }
+    }
+    g_list_free(tops);
+}
+
+static const char* pick(GRand* r, const char* const* list, int n)
+{
+    return list[g_rand_int_range(r, 0, n)];
+}
+
+/* A name in the active view, or a new one (sometimes with a space). */
+static char* random_name(GRand* r, SfePane* pane)
+{
+    if (g_rand_boolean(r)) {
+        GList* files = sfe_pane_get_all_files(pane);
+        guint n = g_list_length(files);
+        char* name = n ? g_file_get_basename(g_list_nth_data(files, g_rand_int_range(r, 0, (int)n))) : NULL;
+        g_list_free_full(files, g_object_unref);
+        if (name != NULL) {
+            char* quoted = sfe_cmdline_quote(name);
+            g_free(name);
+            return quoted;
+        }
+    }
+    return g_rand_boolean(r) ? g_strdup_printf("f%u", g_rand_int_range(r, 0, 20))
+                             : g_strdup_printf("new\\ %u.txt", g_rand_int_range(r, 0, 20));
+}
+
+static void monkey_command(GRand* r, SfeWindow* win)
+{
+    static const char* const fixed[] = { "cd sub", "cd ..", "cd", "yank", "cut", "paste", "undo", "split vertical",
+        "split horizontal", "split next", "split previous", "split move right", "split move down", "q",
+        "view grid", "view list", "sort name", "sort size descending", "sort modified", "sort type ascending",
+        "sort", "hidden toggle", "sidebar toggle", "tree toggle", "select all", "select toggle", "cursor down",
+        "cursor up", "cursor first", "cursor last", "visual", "visual swap", "visual off", "center", "settings",
+        "settings keys", "bookmark", "unbookmark", "mass_rename", "mass_rename files", "trash", "delete",
+        "rename", "command_line" };
+    static const char* const with_name[] = { "mkdir", "touch", "trash", "cd", "yank", "cut", "bookmark",
+        "rename" };
+    g_autofree char* line = NULL;
+    int kind = g_rand_int_range(r, 0, 10);
+    SfePane* pane = active(win);
+    if (kind < 5) {
+        line = g_strdup(pick(r, fixed, G_N_ELEMENTS(fixed)));
+    } else if (kind < 8) {
+        g_autofree char* name = random_name(r, pane);
+        line = g_strdup_printf("%s %s", pick(r, with_name, G_N_ELEMENTS(with_name)), name);
+    } else {
+        g_autofree char* a = random_name(r, pane);
+        g_autofree char* b = random_name(r, pane);
+        static const char* const two[] = { "cp", "mv", "rename", "ln" };
+        line = g_strdup_printf("%s %s %s", pick(r, two, G_N_ELEMENTS(two)), a, b);
+    }
+    monkey_note(":%s", line);
+    sfe_command_run(win, line, NULL); /* (errors are fine: random arguments) */
+}
+
+static void monkey_key(GRand* r, SfeWindow* win)
+{
+    static const guint named[] = { GDK_KEY_Escape, GDK_KEY_Return, GDK_KEY_BackSpace, GDK_KEY_Tab,
+        GDK_KEY_ISO_Left_Tab, GDK_KEY_Up, GDK_KEY_Down, GDK_KEY_Left, GDK_KEY_Right, GDK_KEY_Home, GDK_KEY_End,
+        GDK_KEY_Page_Up, GDK_KEY_Page_Down, GDK_KEY_Delete, GDK_KEY_F2, GDK_KEY_F5, GDK_KEY_F10, GDK_KEY_space,
+        GDK_KEY_Menu };
+    static const char printable[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:/.-?! \"'<>\\";
+    guint keyval;
+    if (g_rand_int_range(r, 0, 4) == 0)
+        keyval = named[g_rand_int_range(r, 0, G_N_ELEMENTS(named))];
+    else
+        keyval = gdk_unicode_to_keyval((guchar)printable[g_rand_int_range(r, 0, sizeof printable - 1)]);
+    static const GdkModifierType mods[] = { 0, 0, 0, 0, 0, 0, GDK_CONTROL_MASK, GDK_CONTROL_MASK, GDK_SHIFT_MASK,
+        GDK_CONTROL_MASK | GDK_SHIFT_MASK, GDK_MOD1_MASK };
+    GdkModifierType mod = mods[g_rand_int_range(r, 0, G_N_ELEMENTS(mods))];
+    if (keyval >= 'A' && keyval <= 'Z')
+        mod |= GDK_SHIFT_MASK;
+    GtkWindow* target = key_target(win);
+    GtkWidget* focus = gtk_window_get_focus(target);
+    monkey_note("key %s%s%s%s to %s (focus %s)", mod & GDK_CONTROL_MASK ? "Ctrl+" : "",
+        mod & GDK_MOD1_MASK ? "Alt+" : "", mod & GDK_SHIFT_MASK ? "Shift+" : "",
+        gdk_keyval_name(keyval) ? gdk_keyval_name(keyval) : "?", G_OBJECT_TYPE_NAME(target),
+        focus ? G_OBJECT_TYPE_NAME(focus) : "none");
+    send_key(target, keyval, mod);
+}
+
+static void monkey_action(GRand* r, SfeWindow* win)
+{
+    size_t n = 0;
+    const SfeAction* actions = sfe_actions_get(&n);
+    const char* name = actions[g_rand_int_range(r, 0, (int)n)].name;
+    monkey_note("action %s", name);
+    g_action_group_activate_action(G_ACTION_GROUP(win), name, NULL);
+}
+
+/* Files changing on disk under the view, as other programs do. */
+static void monkey_disk(GRand* r, const char* dir)
+{
+    g_autofree char* path = g_strdup_printf("%s/disk%u", dir, g_rand_int_range(r, 0, 8));
+    if (g_file_test(path, G_FILE_TEST_EXISTS)) {
+        monkey_note("disk: remove %s", path);
+        g_remove(path);
+    } else {
+        monkey_note("disk: create %s", path);
+        g_file_set_contents(path, "x", 1, NULL);
+    }
+}
+
+/* Windows beyond the first few (Ctrl+N), dialogs left open: closed now and
+ * then, so input keeps reaching the main window. */
+static SfeWindow* monkey_tidy(SfeWindow* main, const char* dir, bool close_dialogs)
+{
+    GList* tops = gtk_window_list_toplevels();
+    for (GList* l = tops; l != NULL; l = l->next) /* (destroying one window destroys its dialogs too) */
+        g_object_ref(l->data);
+    bool main_alive = false;
+    int windows = 0;
+    for (GList* l = tops; l != NULL; l = l->next) {
+        if (gtk_widget_in_destruction(l->data))
+            continue;
+        if (l->data == (gpointer)main)
+            main_alive = true;
+        if (SFE_IS_WINDOW(l->data) && ++windows > 3 && l->data != (gpointer)main)
+            gtk_widget_destroy(l->data);
+        else if (close_dialogs && !SFE_IS_WINDOW(l->data) && gtk_widget_get_mapped(l->data)
+            && gtk_window_get_window_type(l->data) == GTK_WINDOW_TOPLEVEL)
+            gtk_widget_destroy(l->data);
+    }
+    g_list_free_full(tops, g_object_unref);
+    if (!main_alive) { /* :q on the last view closed it */
+        monkey_note("(window closed: a new one)");
+        main = open_window(dir);
+    }
+    return main;
+}
+
+/* Warnings stay fatal, except GTK's about icon loading: its image loaders
+ * run in a sandbox with a timeout, which a busy machine can miss. */
+static gboolean monkey_fatal(const char* domain, GLogLevelFlags level, const char* message, gpointer data)
+{
+    (void)domain, (void)level, (void)data;
+    return strstr(message, "Could not load a pixbuf from icon theme") == NULL;
+}
+
+static void test_monkey(void)
+{
+    g_test_log_set_fatal_handler(monkey_fatal, NULL);
+    guint steps = (guint)g_ascii_strtoull(g_getenv("SFE_MONKEY_STEPS"), NULL, 10);
+    const char* seed = g_getenv("SFE_MONKEY_SEED");
+    monkey_seed = seed ? (guint32)g_ascii_strtoull(seed, NULL, 10) : (guint32)g_get_real_time();
+    g_test_message("SFE_MONKEY_SEED=%u, %u steps", monkey_seed, steps);
+    signal(SIGABRT, monkey_dump);
+    signal(SIGSEGV, monkey_dump);
+
+    g_autofree char* dir = make_folder("monkey");
+    SfeWindow* win = open_window(dir);
+    GRand* r = g_rand_new_with_seed(monkey_seed);
+    for (guint i = 0; i < steps; i++) {
+        int kind = g_rand_int_range(r, 0, 100);
+        if (kind < 60)
+            monkey_key(r, win);
+        else if (kind < 80)
+            monkey_command(r, win);
+        else if (kind < 90)
+            monkey_action(r, win);
+        else if (kind < 95)
+            monkey_disk(r, dir);
+        else
+            send_key(key_target(win), GDK_KEY_Escape, 0);
+        settle(g_rand_int_range(r, 2, 25));
+        monkey_guard(dir); /* (not root: the config and trash are there) */
+        win = monkey_tidy(win, dir, i % 50 == 49);
+    }
+    g_rand_free(r);
+    signal(SIGABRT, SIG_DFL);
+    signal(SIGSEGV, SIG_DFL);
+    g_test_message("%u actions, all fine", monkey_logged);
+}
+
 /* ------------------------------------------------------------------------ */
 
 static void stop_broadway(void)
@@ -402,6 +685,8 @@ static bool start_broadway(void)
 
 static void remove_tree(const char* path)
 {
+    if (!g_file_test(path, G_FILE_TEST_IS_SYMLINK))
+        g_chmod(path, 0700); /* (the monkey may have taken permissions away) */
     GDir* dir = g_file_test(path, G_FILE_TEST_IS_SYMLINK) ? NULL : g_dir_open(path, 0, NULL);
     const char* name;
     while (dir != NULL && (name = g_dir_read_name(dir)) != NULL) {
@@ -432,12 +717,40 @@ int main(int argc, char** argv)
     g_setenv("GDK_BACKEND", "broadway", TRUE);
     g_setenv("NO_AT_BRIDGE", "1", TRUE);
 
+    bool monkey = g_getenv("SFE_MONKEY_STEPS") != NULL;
+    if (monkey) { /* GIO must see no applications: data dirs without them */
+        tools = g_dir_make_tmp("sfe-ui-tools-XXXXXX", NULL);
+        g_autofree char* share = g_build_filename(tools, "share", NULL);
+        g_mkdir_with_parents(share, 0755);
+        GDir* usr = g_dir_open("/usr/share", 0, NULL); /* all of /usr/share but the applications */
+        const char* name;
+        while (usr != NULL && (name = g_dir_read_name(usr)) != NULL) {
+            if (strcmp(name, "applications") == 0)
+                continue;
+            g_autofree char* from = g_build_filename("/usr/share", name, NULL);
+            g_autofree char* to = g_build_filename(share, name, NULL);
+            symlink(from, to);
+        }
+        if (usr != NULL)
+            g_dir_close(usr);
+        g_setenv("XDG_DATA_DIRS", share, TRUE);
+    }
     if (!start_broadway()) {
         g_print("1..0 # SKIP broadwayd is not installed or did not start\n");
         remove_tree(root);
         return 77;
     }
     g_test_init(&argc, &argv, NULL);
+    if (monkey) { /* no programs: no xdg-open, umount, thumbnailers (after broadwayd started) */
+        g_autofree char* bin = g_build_filename(tools, "programs", NULL);
+        g_mkdir_with_parents(bin, 0755);
+        g_autofree char* bwrap = g_find_program_in_path("bwrap"); /* except the image loaders' sandbox (glycin) */
+        if (bwrap != NULL) {
+            g_autofree char* link = g_build_filename(bin, "bwrap", NULL);
+            symlink(bwrap, link);
+        }
+        g_setenv("PATH", bin, TRUE);
+    }
 
     app = sfe_application_new();
     g_application_set_flags(G_APPLICATION(app), g_application_get_flags(G_APPLICATION(app)) | G_APPLICATION_NON_UNIQUE);
@@ -453,9 +766,13 @@ int main(int argc, char** argv)
     g_test_add_func("/ui/split", test_split);
     g_test_add_func("/ui/settings-every-option", test_settings_every_option);
     g_test_add_func("/ui/sidebar-rows-transparent", test_sidebar_rows_transparent);
+    if (monkey)
+        g_test_add_func("/ui/monkey", test_monkey);
     int status = g_test_run();
 
     stop_broadway();
     remove_tree(root);
+    if (tools != NULL)
+        remove_tree(tools);
     return status;
 }

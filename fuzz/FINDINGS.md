@@ -4,6 +4,35 @@ Every problem the fuzz targets found, newest first: what it was, how it
 could happen in sfe, and the fix with its regression test. Problems in a
 harness (not in sfe) are listed too, so the same mistake is not repeated.
 
+## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
+
+### M1. GLib critical "g_signal_handler_disconnect: handler_id > 0" (open)
+
+- **Found by:** the monkey, seed 8, at action 273 (3 of 5 replays; timing
+  dependent; another run hit it at 243).
+- **Actions before it:** keys in the Settings window with the focus on
+  its page list (Shift+C, 1, Return, Shift+Space), then `:visual` in the
+  main window.
+- **Where:** inside GTK while handling events; no sfe function is on the
+  stack. sfe's own disconnects (`split.c` one-shot size handler,
+  `prefs.c` config handler on destroy) were read and look correct.
+- **Status:** open. Needs GTK's debug symbols to see which GTK code
+  disconnects, and whether it happens on Wayland too or only on the
+  headless broadway display.
+
+### Harness mistakes (not sfe)
+
+- The monkey moved the sandbox's data folder away (`:cut share`, the
+  folder was reachable with `cd ..`), so GTK lost its icon theme and
+  aborted. The sandbox tools now live in a separate folder, and views are
+  kept inside the monkey's own folder.
+- An empty `PATH` broke GTK's image loaders, which run in a `bwrap`
+  sandbox (glycin); `PATH` now holds only `bwrap`.
+- Destroying a window also destroys its dialogs: the cleanup walked a
+  list of already destroyed dialogs (a critical). It now holds references.
+- The monkey can take permissions away (the Properties dialog), so cleanup
+  restores them before deleting.
+
 ## Round 4 (2026-11-21, 900 s, all 11 targets at once with `-p`)
 
 Nothing found: about 190 million inputs over the 11 targets. `trashinfo`
