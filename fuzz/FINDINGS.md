@@ -33,6 +33,12 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 - The monkey can take permissions away (the Properties dialog), so cleanup
   restores them before deleting.
 
+## Round 5 (2026-11-21, 1800 s, all 11 targets with `-p`)
+
+Nothing found. The corpora keep growing (config 11,167 inputs, rename
+3,780, thumbnailer 2,685), so new paths are still being reached, just no
+new failures.
+
 ## Round 4 (2026-11-21, 900 s, all 11 targets at once with `-p`)
 
 Nothing found: about 190 million inputs over the 11 targets. `trashinfo`
