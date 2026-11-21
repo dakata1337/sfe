@@ -2863,6 +2863,13 @@ void sfe_pane_set_active(SfePane* self, bool active)
 static void sfe_pane_dispose(GObject* object)
 {
     SfePane* self = SFE_PANE(object);
+    /* The views let go of the rows first: closing a split while they still
+     * showed them made GTK draw through an already destroyed cell area
+     * during the teardown (found by the UI monkey). */
+    if (self->grid != NULL)
+        gtk_icon_view_set_model(GTK_ICON_VIEW(self->grid), NULL);
+    if (self->list != NULL)
+        gtk_tree_view_set_model(GTK_TREE_VIEW(self->list), NULL);
     g_clear_handle_id(&self->search_timer, g_source_remove);
 
     if (self->config_handler != 0) {
@@ -2891,6 +2898,7 @@ static void sfe_pane_dispose(GObject* object)
     drop_reset(self);
     g_clear_object(&self->dir);
     G_OBJECT_CLASS(sfe_pane_parent_class)->dispose(object);
+    self->grid = self->list = NULL; /* destroyed with the children; dispose can run again */
 }
 
 static void sfe_pane_class_init(SfePaneClass* klass)

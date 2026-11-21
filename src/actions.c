@@ -229,7 +229,10 @@ static gpointer ref_copy(gconstpointer object, gpointer data)
 
 static void run_open_with_other(const SfeActionTarget* t)
 {
-    if (t->files == NULL)
+    /* GTK 3's chooser reads the file's type without checking that it could:
+     * a file gone meanwhile (still selected while its row goes) gave GLib
+     * criticals (found by the UI monkey). */
+    if (t->files == NULL || !g_file_query_exists(t->files->data, NULL))
         return;
     GtkWidget* dialog = gtk_app_chooser_dialog_new(GTK_WINDOW(t->window), GTK_DIALOG_MODAL, t->files->data);
     /* Both classes, so its app list, entries and buttons use the palette. */

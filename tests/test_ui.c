@@ -292,6 +292,48 @@ static void test_sidebar_rows_transparent(void)
     close_window(win);
 }
 
+/* Found by the UI monkey: closing a split whose views still showed their
+ * rows made GTK draw through a destroyed cell area during the teardown. */
+static void test_split_close_repeatedly(void)
+{
+    g_autofree char* dir = make_folder("split-close");
+    SfeWindow* win = open_window(dir);
+    SfeSplit* split = sfe_window_get_split(win);
+    for (int i = 0; i < 20; i++) {
+        run(win, "split horizontal");
+        WAIT_UNTIL(sfe_split_get_n_panes(split) == 2);
+        run(win, i % 3 ? "view list" : "view grid");
+        WAIT_UNTIL(n_entries(active(win)) > 0);
+        run(win, "select all"); /* (the monkey had everything selected) */
+        run(win, "q");
+        WAIT_UNTIL(sfe_split_get_n_panes(split) == 1);
+    }
+    close_window(win);
+}
+
+/* Found by the UI monkey: "Open With → Other Application" for a file that
+ * was gone (still selected while its row went) gave GLib criticals from
+ * GTK's app chooser. */
+static void test_open_with_gone_file(void)
+{
+    g_autofree char* dir = make_folder("open-with");
+    SfeWindow* win = open_window(dir);
+    SfePane* pane = active(win);
+    sfe_pane_reveal(pane, "a.txt"); /* selects it */
+    GList* sel = sfe_pane_get_selected_files(pane);
+    g_assert_cmpuint(g_list_length(sel), ==, 1);
+    g_list_free_full(sel, g_object_unref);
+    g_autofree char* path = g_build_filename(dir, "a.txt", NULL);
+    g_remove(path);
+    g_action_group_activate_action(G_ACTION_GROUP(win), "open-with-other", NULL); /* before the row goes */
+    settle(100);
+    GList* tops = gtk_window_list_toplevels();
+    for (GList* l = tops; l != NULL; l = l->next)
+        g_assert_false(GTK_IS_APP_CHOOSER_DIALOG(l->data));
+    g_list_free(tops);
+    close_window(win);
+}
+
 /* Every widget in the Settings window that edits an option (found by
  * their "sfe-option" data), with its internal children. */
 static void collect_options(GtkWidget* w, gpointer list)
@@ -536,6 +578,10 @@ static void monkey_key(GRand* r, SfeWindow* win)
         mod & GDK_MOD1_MASK ? "Alt+" : "", mod & GDK_SHIFT_MASK ? "Shift+" : "",
         gdk_keyval_name(keyval) ? gdk_keyval_name(keyval) : "?", G_OBJECT_TYPE_NAME(target),
         focus ? G_OBJECT_TYPE_NAME(focus) : "none");
+    if (focus != NULL && !gtk_widget_get_realized(focus)) { /* a real display never delivers keys there */
+        g_autofree char* where = gtk_widget_path_to_string(gtk_widget_get_path(focus));
+        monkey_note("  the focus is not realized: %s", where);
+    }
     send_key(target, keyval, mod);
 }
 
@@ -612,6 +658,8 @@ static void test_monkey(void)
     GRand* r = g_rand_new_with_seed(monkey_seed);
     for (guint i = 0; i < steps; i++) {
         int kind = g_rand_int_range(r, 0, 100);
+        if (kind >= 60 && kind < 90 && gtk_grab_get_current() != NULL)
+            kind = 0; /* a menu has the input: a user can only press keys (which go to it) */
         if (kind < 60)
             monkey_key(r, win);
         else if (kind < 80)
@@ -766,6 +814,8 @@ int main(int argc, char** argv)
     g_test_add_func("/ui/split", test_split);
     g_test_add_func("/ui/settings-every-option", test_settings_every_option);
     g_test_add_func("/ui/sidebar-rows-transparent", test_sidebar_rows_transparent);
+    g_test_add_func("/ui/split-close-repeatedly", test_split_close_repeatedly);
+    g_test_add_func("/ui/open-with-gone-file", test_open_with_gone_file);
     if (monkey)
         g_test_add_func("/ui/monkey", test_monkey);
     int status = g_test_run();

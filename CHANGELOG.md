@@ -13,6 +13,9 @@ release: see the top of that script).
 - File dialogs (portal): a program saving several files can no longer name
   one "..", "." or "/" to get a file outside the folder you chose. Found by
   fuzzing.
+- Closing a split no longer makes GTK log criticals while the views go.
+- Open With → Other Application does nothing for a file that was just
+  deleted, instead of making GTK log criticals.
 - Settings → System → File dialogs never writes a portals.conf that cannot
   be read back (an "Encoding" key copied from the system file could do
   that). Found by fuzzing.

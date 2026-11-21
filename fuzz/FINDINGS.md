@@ -6,6 +6,31 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 
 ## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
 
+### M3. "Open With → Other Application" on a file just gone gave criticals
+
+- **Found by:** the monkey, seed 2096012554, at action 357: Delete
+  (to the trash) and then the action, before the file's row had left.
+- **Cause:** `run_open_with_other` (`src/actions.c`) opened GTK 3's app
+  chooser for the file; the chooser reads the file's type without checking
+  that it could (`g_file_info_get_content_type(NULL)`). Also when another
+  program deletes a file you have selected.
+- **Fix:** the action does nothing for a file that no longer exists.
+- **Test:** `/ui/open-with-gone-file` (fails without the fix).
+
+### M2. Closing a split made GTK draw through a destroyed cell area
+
+- **Found by:** the monkey, seed 3809231066, at action 90 (`close-pane`
+  after `:select all`); every replay.
+- **Cause:** `sfe_pane_dispose` dropped the folder model and then let GTK
+  destroy the views, which were still showing the rows: during the
+  teardown GTK drew a cell through its already destroyed cell area
+  (`gtk_cell_area_apply_attributes: GTK_IS_CELL_AREA`).
+- **Fix:** both views let go of the model first thing in dispose (and the
+  pane forgets the destroyed views afterwards: dispose can run twice, which
+  the first version of the fix tripped over).
+- **Test:** `/ui/split-close-repeatedly` (split, select all, close, 20
+  times; fails without the fix).
+
 ### M1. GLib critical "g_signal_handler_disconnect: handler_id > 0" (open)
 
 - **Found by:** the monkey, seed 8, at action 273 (3 of 5 replays; timing
@@ -32,6 +57,10 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   list of already destroyed dialogs (a critical). It now holds references.
 - The monkey can take permissions away (the Properties dialog), so cleanup
   restores them before deleting.
+- The monkey ran `:q` while a context menu was open; with the menu holding
+  the input that cannot happen (a user's keys go to the menu), and the next
+  key reached the closed view's menu (`WIDGET_REALIZED_FOR_EVENT`). While a
+  menu or other grab is active, the monkey now only presses keys.
 
 ## Round 6 (2026-11-21, 3600 s, all 11 targets with `-p`)
 
