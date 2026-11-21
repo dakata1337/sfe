@@ -33,6 +33,25 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 - The monkey can take permissions away (the Properties dialog), so cleanup
   restores them before deleting.
 
+## Round 6 (2026-11-21, 3600 s, all 11 targets with `-p`)
+
+### 10. Turning sfe on could write a portals.conf that nothing can load (`portalconf`)
+
+- **Found by:** `fuzz-portalconf` (invariant: turned on, but the file does
+  not use sfe), after 8 minutes.
+- **Input:** no user file yet, and a system file whose `[preferred]`
+  group (not its first) holds an `Encoding=` key.
+- **Cause:** GKeyFile treats a key named `Encoding` as its own and checks
+  it only in the first group. The system file loaded, sfe copied its
+  `[preferred]` keys into a new file where `[preferred]` is the first
+  group, and that file failed to load: in sfe, and in xdg-desktop-portal,
+  which reads it with the same parser (file dialogs would stop following
+  the file until it was fixed by hand).
+- **Fix:** the `Encoding` key is not copied, and `sfe_portal_conf_set`
+  now checks that the text loads again before writing it (an error
+  instead of a broken file).
+- **Test:** `/portalconf/seed-encoding-key`.
+
 ## Round 5 (2026-11-21, 1800 s, all 11 targets with `-p`)
 
 Nothing found. The corpora keep growing (config 11,167 inputs, rename

@@ -79,6 +79,8 @@ bool sfe_portal_conf_set(const char* path, const char* seed, bool use_sfe, GErro
         if (seed != NULL && g_key_file_load_from_file(base, seed, G_KEY_FILE_NONE, NULL)) {
             g_auto(GStrv) keys = g_key_file_get_keys(base, GROUP, NULL, NULL);
             for (int i = 0; keys != NULL && keys[i] != NULL; i++) {
+                if (strcmp(keys[i], "Encoding") == 0)
+                    continue; /* GKeyFile's own; in the first group (ours here) it breaks loading */
                 g_autofree char* value = g_key_file_get_value(base, GROUP, keys[i], NULL);
                 g_key_file_set_value(kf, GROUP, keys[i], value);
             }
@@ -95,7 +97,14 @@ bool sfe_portal_conf_set(const char* path, const char* seed, bool use_sfe, GErro
         g_set_error(error, G_FILE_ERROR, g_file_error_from_errno(errno), "Cannot create %s", dir);
         return false;
     }
-    return g_key_file_save_to_file(kf, path, error);
+    /* Never write a file that does not load again: xdg-desktop-portal reads
+     * it with the same parser, and file dialogs would stop following it. */
+    gsize len = 0;
+    g_autofree char* text = g_key_file_to_data(kf, &len, NULL);
+    g_autoptr(GKeyFile) check = g_key_file_new();
+    if (!g_key_file_load_from_data(check, text, len, G_KEY_FILE_NONE, error))
+        return false;
+    return g_file_set_contents(path, text, (gssize)len, error);
 }
 
 bool sfe_portal_installed(void)

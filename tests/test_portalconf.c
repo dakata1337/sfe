@@ -58,6 +58,21 @@ static void test_new_file(void)
 }
 
 /* A file the user wrote keeps its other keys and comments. */
+/* Found by fuzzing: an "Encoding" key in the seed's [preferred] (not its
+ * first group, so it loaded) was copied into ours, where [preferred] is the
+ * first group: GKeyFile then refused the file, and so would the portal. */
+static void test_seed_encoding_key(void)
+{
+    g_autofree char* seed = write_file("system/enc.conf", "[other]\nx=1\n[preferred]\nEncoding=\ndefault=gtk\n");
+    g_autofree char* path = g_build_filename(root, "enc", "portals.conf", NULL);
+    g_assert_true(sfe_portal_conf_set(path, seed, true, NULL));
+    g_assert_true(sfe_portal_conf_uses_sfe(path));
+    g_autofree char* text = NULL;
+    g_assert_true(g_file_get_contents(path, &text, NULL, NULL));
+    g_assert_null(strstr(text, "Encoding"));
+    g_assert_nonnull(strstr(text, "default=gtk"));
+}
+
 static void test_existing_file(void)
 {
     g_autofree char* path = write_file("own/hyprland-portals.conf",
@@ -81,6 +96,7 @@ int main(int argc, char** argv)
     g_test_add_func("/portalconf/desktop", test_desktop);
     g_test_add_func("/portalconf/new-file", test_new_file);
     g_test_add_func("/portalconf/existing-file", test_existing_file);
+    g_test_add_func("/portalconf/seed-encoding-key", test_seed_encoding_key);
     int status = g_test_run();
     g_autofree char* cmd = g_strdup_printf("rm -rf '%s'", root);
     g_spawn_command_line_sync(cmd, NULL, NULL, NULL, NULL);

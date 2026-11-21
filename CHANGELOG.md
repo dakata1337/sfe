@@ -13,6 +13,9 @@ release: see the top of that script).
 - File dialogs (portal): a program saving several files can no longer name
   one "..", "." or "/" to get a file outside the folder you chose. Found by
   fuzzing.
+- Settings → System → File dialogs never writes a portals.conf that cannot
+  be read back (an "Encoding" key copied from the system file could do
+  that). Found by fuzzing.
 - Bookmarks from the GTK bookmarks file with a label in another encoding
   show readable (with a replacement character) instead of garbled.
 - Mass rename: a very long counter width (`{n:1111111111111115}`) no longer
