@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.2.4
+
 - Fixed a crash on every change in Settings, and the config being ignored at
   start ("error parsing float"), in languages that write decimals with a
   comma (Bulgarian, German, French, Russian, ...).

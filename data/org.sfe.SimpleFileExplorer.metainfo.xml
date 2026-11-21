@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="3.2.4" date="2026-11-21">
+      <description>
+        <p>Fixes a crash on every Settings change, and the config being ignored, in languages with a decimal comma.</p>
+      </description>
+    </release>
     <release version="3.2.3" date="2026-11-21">
       <description>
         <p>Sidebar and Settings rows no longer show as dark boxes with KDE's Breeze theme.</p>
