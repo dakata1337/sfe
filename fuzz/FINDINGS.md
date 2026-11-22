@@ -78,6 +78,13 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   key reached the closed view's menu (`WIDGET_REALIZED_FOR_EVENT`). While a
   menu or other grab is active, the monkey now only presses keys.
 
+## Round 7 (2026-11-22, 7200 s, all 11 targets with `-p`)
+
+Nothing found. Corpora: config 16,653 inputs, thumbnailer 5,487, rename
+5,223, cmdline 3,067, portalreq 2,708. Rounds 4 to 7 (90 minutes to 2 hours
+each) found only finding 10; the parsers look solid, and the UI monkey is
+where new bugs turn up now.
+
 ## Round 6 (2026-11-21, 3600 s, all 11 targets with `-p`)
 
 ### 10. Turning sfe on could write a portals.conf that nothing can load (`portalconf`)
