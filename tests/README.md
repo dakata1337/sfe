@@ -46,12 +46,19 @@ With `-j` each run gets its own core, spread over every CCD (the order of
 `tools/fuzz.sh -p`, from `tools/cpus.sh`), and its own headless display. A
 monkey mostly waits for sfe to settle (about 20% of a core), so more jobs
 than cores is fine: beyond the CPU count, jobs share CPUs in the same order.
+Memory: each run's broadwayd grows by about 40 MB per 1000 actions and
+gives it back only when the run ends, so mind jobs x steps (24 jobs of
+20000 actions take about 20 GB). Now and then a run, or its broadwayd, is
+killed with SIGKILL from outside the test (not for memory: the kernel's
+OOM count stays 0, and nothing in the test sends it; seen about once in 40
+runs of 10000 actions with `-j 24`); the script reports such a run as
+killed from outside and does not count it as a failure.
 
 On a failure it prints the seed and the last 40 actions (with the focused
 widget of each key). Timing still varies, so a replay may need a few tries.
 It cannot touch anything outside its folder: `PATH` holds only `bwrap` (for
 GTK's image loaders), GIO sees no applications, its data dirs are out of
 its reach, and a view that leaves its folder is sent back after every
-action. Findings: `fuzz/FINDINGS.md`, section "UI monkey".
+action. Findings: `tests/fuzz/FINDINGS.md`, section "UI monkey".
 
-The parsers are also fuzzed: see `fuzz/README.md`.
+The parsers are also fuzzed: see `tests/fuzz/README.md`.

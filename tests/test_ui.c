@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/file.h>
 #include <sys/wait.h>
 #ifdef __linux__
 #include <sys/prctl.h>
@@ -369,6 +371,58 @@ static void test_keys_in_message_view(void)
     close_window(win);
 }
 
+/* Found by the UI monkey ("handler_id > 0" critical, M1): the view moved
+ * to a new place (a split) while a scroll animation ran. GTK then jumps to
+ * where the animation was heading; up from the empty space after the
+ * files, sfe set the view back down from inside that jump, and GTK ended
+ * the animation a second time. */
+static void test_split_during_scroll(void)
+{
+    g_autofree char* dir = make_folder("split-scroll");
+    for (int i = 0; i < 80; i++) {
+        g_autofree char* path = g_strdup_printf("%s/file%02d", dir, i);
+        g_file_set_contents(path, "x", 1, NULL);
+    }
+    SfeWindow* win = open_window(dir);
+    run(win, "view list");
+    sfe_pane_focus_view(active(win));
+    settle(1200); /* (past the cursor's own scroll) */
+    GtkWidget* sw = gtk_widget_get_parent(gtk_window_get_focus(GTK_WINDOW(win)));
+    g_assert_true(GTK_IS_SCROLLED_WINDOW(sw));
+    gboolean handled = FALSE;
+    g_signal_emit_by_name(sw, "scroll-child", GTK_SCROLL_END, FALSE, &handled); /* into the empty space */
+    settle(500);
+    g_signal_emit_by_name(sw, "scroll-child", GTK_SCROLL_PAGE_BACKWARD, FALSE, &handled); /* animated */
+    run(win, "split horizontal"); /* before its first frame (top / bottom: also when narrow) */
+    settle(300);
+    close_window(win);
+}
+
+/* Found by the UI monkey: with list as the default view, a new window
+ * showed the grid until the files loaded, while the list already had the
+ * focus; a key pressed before then went to a view never shown (a GTK
+ * critical). */
+static void test_new_window_list_view(void)
+{
+    g_autofree char* dir = make_folder("new-list");
+    SfeConfig* cfg = sfe_application_dup_config(app);
+    SfeViewMode was = cfg->view;
+    cfg->view = SFE_VIEW_LIST;
+    sfe_application_set_config(app, cfg);
+
+    g_autoptr(GFile) file = g_file_new_for_path(dir);
+    SfeWindow* win = sfe_window_new(app, file);
+    gtk_window_present(GTK_WINDOW(win));
+    WAIT_UNTIL(gtk_widget_get_mapped(GTK_WIDGET(win)));
+    assert_focus_on_screen(win, "opening");
+    key(win, GDK_KEY_j, 0);
+    close_window(win);
+
+    cfg = sfe_application_dup_config(app);
+    cfg->view = was;
+    sfe_application_set_config(app, cfg);
+}
+
 /* Every widget in the Settings window that edits an option (found by
  * their "sfe-option" data), with its internal children. */
 static void collect_options(GtkWidget* w, gpointer list)
@@ -643,9 +697,14 @@ static void monkey_disk(GRand* r, const char* dir)
 }
 
 /* Windows beyond the first few (Ctrl+N), dialogs left open: closed now and
- * then, so input keeps reaching the main window. */
+ * then, so input keeps reaching the main window. Not while a popup (a menu,
+ * the emoji chooser) has the input: a user cannot close a window then, and
+ * GTK is not ready for it (the emoji chooser logged a critical when its
+ * dialog went before it had loaded). */
 static SfeWindow* monkey_tidy(SfeWindow* main, const char* dir, bool close_dialogs)
 {
+    GtkWidget* grab = gtk_grab_get_current();
+    bool popup = grab != NULL && !GTK_IS_WINDOW(grab);
     GList* tops = gtk_window_list_toplevels();
     for (GList* l = tops; l != NULL; l = l->next) /* (destroying one window destroys its dialogs too) */
         g_object_ref(l->data);
@@ -656,11 +715,14 @@ static SfeWindow* monkey_tidy(SfeWindow* main, const char* dir, bool close_dialo
             continue;
         if (l->data == (gpointer)main)
             main_alive = true;
-        if (SFE_IS_WINDOW(l->data) && ++windows > 3 && l->data != (gpointer)main)
+        if (popup)
+            continue;
+        if ((SFE_IS_WINDOW(l->data) && ++windows > 3 && l->data != (gpointer)main)
+            || (close_dialogs && !SFE_IS_WINDOW(l->data) && gtk_widget_get_mapped(l->data)
+                && gtk_window_get_window_type(l->data) == GTK_WINDOW_TOPLEVEL)) {
+            monkey_note("close %s", G_OBJECT_TYPE_NAME(l->data));
             gtk_widget_destroy(l->data);
-        else if (close_dialogs && !SFE_IS_WINDOW(l->data) && gtk_widget_get_mapped(l->data)
-            && gtk_window_get_window_type(l->data) == GTK_WINDOW_TOPLEVEL)
-            gtk_widget_destroy(l->data);
+        }
     }
     g_list_free_full(tops, g_object_unref);
     if (!main_alive) { /* :q on the last view closed it */
@@ -674,11 +736,16 @@ static SfeWindow* monkey_tidy(SfeWindow* main, const char* dir, bool close_dialo
     return main;
 }
 
-/* Warnings stay fatal, except GTK's about icon loading: its image loaders
- * run in a sandbox with a timeout, which a busy machine can miss. */
+/* Warnings stay fatal, except two of GTK's own: about icon loading (its
+ * image loaders run in a sandbox with a timeout, which a busy machine can
+ * miss), and its emoji chooser (Ctrl+. in a text field) freeing data it had
+ * not loaded yet when its dialog closes quickly (FINDINGS.md, M6). sfe's own
+ * GVariants all go through g_autoptr, which takes NULL. */
 static gboolean monkey_fatal(const char* domain, GLogLevelFlags level, const char* message, gpointer data)
 {
-    (void)domain, (void)level, (void)data;
+    (void)level, (void)data;
+    if (g_strcmp0(domain, "GLib") == 0 && strstr(message, "g_variant_unref: assertion 'value != NULL'") != NULL)
+        return FALSE;
     return strstr(message, "Could not load a pixbuf from icon theme") == NULL;
 }
 
@@ -742,7 +809,8 @@ static void die_with_parent(gpointer data)
 /* broadwayd on a free display; false when it is not installed. It is
  * ready when it prints "Listening on ..." (its socket is abstract: no file
  * to wait for). Its output comes through a pipe, so it does not hold the
- * test's output open after we stop it. */
+ * test's output open after we stop it; its errors go to the test's log
+ * (why it dropped a run's connection). */
 static bool start_broadway(void)
 {
     g_autofree char* program = g_find_program_in_path("broadwayd");
@@ -752,10 +820,19 @@ static bool start_broadway(void)
      * display: the next one is tried when broadwayd cannot listen there. */
     int first = 100 + (int)(getpid() % 800);
     for (int display = first; display < first + 20; display++) {
+        /* Held until the test exits: broadwayd can take longer than our
+         * check below to fail on a display another run has, under load. */
+        g_autofree char* lock = g_strdup_printf("%s/sfe-test-broadway-%d.lock", g_get_tmp_dir(), display);
+        int fd = open(lock, O_RDWR | O_CREAT | O_CLOEXEC, 0600);
+        if (fd < 0 || flock(fd, LOCK_EX | LOCK_NB) != 0) {
+            if (fd >= 0)
+                close(fd);
+            continue;
+        }
         g_autofree char* arg = g_strdup_printf(":%d", display);
         char* argv[] = { program, arg, NULL };
         int out = -1;
-        if (!g_spawn_async_with_pipes(NULL, argv, NULL, G_SPAWN_STDERR_TO_DEV_NULL | G_SPAWN_DO_NOT_REAP_CHILD,
+        if (!g_spawn_async_with_pipes(NULL, argv, NULL, G_SPAWN_DO_NOT_REAP_CHILD,
                 die_with_parent, NULL, &broadway, NULL, &out, NULL, NULL))
             return false;
         GIOChannel* channel = g_io_channel_unix_new(out);
@@ -779,8 +856,30 @@ static bool start_broadway(void)
             return true;
         }
         stop_broadway();
+        close(fd);
     }
     return false;
+}
+
+/* At an exit before the test stopped broadwayd (GDK exits with "Unable to
+ * read from broadway server" when it loses the display): did broadwayd
+ * die, or close the connection? */
+static void report_broadway(void)
+{
+    if (broadway <= 0)
+        return;
+    int status = 0;
+    pid_t done = 0;
+    for (int i = 0; i < 20 && done == 0; i++) {
+        g_usleep(10000);
+        done = waitpid(broadway, &status, WNOHANG);
+    }
+    if (done != broadway)
+        fprintf(stderr, "*** broadwayd still running\n");
+    else if (WIFSIGNALED(status))
+        fprintf(stderr, "*** broadwayd killed by signal %d\n", WTERMSIG(status));
+    else
+        fprintf(stderr, "*** broadwayd exited with status %d\n", WEXITSTATUS(status));
 }
 
 static void remove_tree(const char* path)
@@ -840,6 +939,7 @@ int main(int argc, char** argv)
         remove_tree(root);
         return 77;
     }
+    atexit(report_broadway);
     g_test_init(&argc, &argv, NULL);
     if (monkey) { /* no programs: no xdg-open, umount, thumbnailers (after broadwayd started) */
         g_autofree char* bin = g_build_filename(tools, "programs", NULL);
@@ -869,6 +969,8 @@ int main(int argc, char** argv)
     g_test_add_func("/ui/split-close-repeatedly", test_split_close_repeatedly);
     g_test_add_func("/ui/open-with-gone-file", test_open_with_gone_file);
     g_test_add_func("/ui/keys-in-message-view", test_keys_in_message_view);
+    g_test_add_func("/ui/new-window-list-view", test_new_window_list_view);
+    g_test_add_func("/ui/split-during-scroll", test_split_during_scroll);
     if (monkey)
         g_test_add_func("/ui/monkey", test_monkey);
     int status = g_test_run();

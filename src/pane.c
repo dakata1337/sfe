@@ -73,6 +73,8 @@ struct _SfePane {
     double scroll_wanted[2]; /* where it was scrolled to */
     double content_end[2]; /* where its last row ends */
     bool padding; /* our own changes to the adjustments */
+    guint pull_source; /* a pending on_pull_back() */
+    bool pull[2]; /* which views it sets back */
     gint64 cursor_scroll_until; /* a keyboard cursor move scrolls until then (monotonic time) */
     /* A drag-select (rubber band) in progress, in content coordinates: GTK
      * draws it only over the files, sfe draws the rest. */
@@ -1077,6 +1079,29 @@ static bool user_input(void)
     }
 }
 
+/* Sets the views back for on_scroll_value(), after GTK's own change to the
+ * value: set inside it (GTK jumping to the end of a scroll animation as the
+ * view moves to a split), GTK ended the animation a second time. */
+static gboolean on_pull_back(gpointer data)
+{
+    SfePane* self = data;
+    self->pull_source = 0;
+    GtkWidget* views[] = { self->grid, self->list };
+    for (int i = 0; i < 2; i++) {
+        if (!self->pull[i])
+            continue;
+        self->pull[i] = false;
+        GtkAdjustment* adjustment = gtk_scrollable_get_vadjustment(GTK_SCROLLABLE(views[i]));
+        double wanted = MIN(self->scroll_wanted[i], gtk_adjustment_get_upper(adjustment) - gtk_adjustment_get_page_size(adjustment));
+        if (gtk_adjustment_get_value(adjustment) < wanted) {
+            self->padding = true;
+            gtk_adjustment_set_value(adjustment, wanted);
+            self->padding = false;
+        }
+    }
+    return G_SOURCE_REMOVE;
+}
+
 /* Remembers where the user scrolled to. A view pulls itself back from the
  * empty space after the files when it re-measures (the window resized,
  * lost or got the focus: it keeps the last row in view); with no input
@@ -1095,9 +1120,9 @@ static void on_scroll_value(GtkAdjustment* adjustment, gpointer data)
     bool was_in_space = self->content_end[which] > 0 && wanted > self->content_end[which] - page;
     bool cursor_moving = g_get_monotonic_time() < self->cursor_scroll_until;
     if (was_in_space && value < wanted && !user_input() && !cursor_moving) {
-        self->padding = true;
-        gtk_adjustment_set_value(adjustment, MIN(wanted, gtk_adjustment_get_upper(adjustment) - page));
-        self->padding = false;
+        self->pull[which] = true;
+        if (self->pull_source == 0)
+            self->pull_source = g_idle_add(on_pull_back, self);
         return;
     }
     self->scroll_wanted[which] = value;
@@ -2883,6 +2908,7 @@ static void sfe_pane_dispose(GObject* object)
         g_cancellable_cancel(self->thumb_cancel);
     g_clear_object(&self->thumb_cancel);
     g_clear_handle_id(&self->thumb_source, g_source_remove);
+    g_clear_handle_id(&self->pull_source, g_source_remove);
     g_clear_handle_id(&self->columns_source, g_source_remove);
     g_clear_handle_id(&self->selection_source, g_source_remove);
     if (self->model != NULL) {
@@ -2995,6 +3021,10 @@ static void sfe_pane_init(SfePane* self)
     self->view = sfe_config()->view;
     apply_config(self);
     gtk_widget_show_all(GTK_WIDGET(self));
+    /* the configured view from the start, not only once the files load: it
+     * gets the focus before then, and keys to a view never shown are lost
+     * (and make GTK log a critical) */
+    gtk_stack_set_visible_child(GTK_STACK(self->stack), gtk_widget_get_parent(active_view(self)));
     update_buttons(self);
 }
 

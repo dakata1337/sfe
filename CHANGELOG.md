@@ -7,6 +7,12 @@ release: see the top of that script).
 
 ## Unreleased
 
+- Moving a view to a split while it was still scrolling (up from the empty
+  space after the files) made GTK log a critical. Found by the UI monkey.
+- With list as the default view, a new window showed the grid until its
+  files loaded, and a key pressed in that moment was lost. Found by the UI
+  monkey.
+
 ## 3.2.5
 
 - A config.toml with a `\U` escape beyond Unicode (above U+10FFFF) is

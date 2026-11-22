@@ -13,17 +13,27 @@ set -euo pipefail
 
 source "$(dirname "$0")/cpus.sh"
 
-# One run; prints one line (and the failure's details).
+# One run; prints one line (and the failure's details). A run killed from
+# outside (SIGKILL to it or its display) is reported but not a failure.
 one_run() {
     local s=$1 cpu=$2
-    local log=$build/ui-monkey-$s.log pin=()
+    local log=$build/ui-monkey-$s.log pin=() status=0
     [ -n "$cpu" ] && pin=(taskset -c "$cpu")
-    if SFE_MONKEY_STEPS=$steps SFE_MONKEY_SEED=$s "${pin[@]}" "$build"/tests/test-ui -p /ui/monkey >"$log" 2>&1; then
+    SFE_MONKEY_STEPS=$steps SFE_MONKEY_SEED=$s "${pin[@]}" "$build"/tests/test-ui -p /ui/monkey >"$log" 2>&1 || status=$?
+    if [ $status = 0 ]; then
         echo "seed $s: $steps actions, fine"
         rm -f "$log"
         return 0
     fi
+    if [ $status = 137 ] || grep -q "broadwayd killed by signal 9" "$log"; then
+        echo "seed $s: killed from outside (SIGKILL), not counted (log: $log)"
+        return 0
+    fi
     echo "seed $s: FAILED (log: $log)"
+    if grep -q -E "(read from|write to) (broadway )?server" "$log"; then
+        echo "    the display went away; $(grep -m1 -o 'broadwayd .*' "$log" || echo "broadwayd: ?")"
+        return 1
+    fi
     grep -m1 -E "FATAL|ERROR|AddressSanitizer|runtime error|SKIP" "$log" | sed 's/^/    /' || true
     grep -A6 '\*\*\* monkey' "$log" | sed 's/^/    /' || true
     return 1

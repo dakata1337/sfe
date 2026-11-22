@@ -6,6 +6,52 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 
 ## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
 
+### M8. Two GTK criticals seen too rarely to trace (open)
+
+- "gtk_widget_get_preferred_height_for_width: assertion 'width >= 0'":
+  twice in one gdb batch (120 runs of 6000 actions), never since. The
+  stack is all GTK: a text field's context menu (the Menu key) being
+  placed (`gtk_menu_popup_at_rect`) and sized with a negative width;
+  probably menu placement on the headless display, which has no real
+  monitor geometry.
+- "gtk_widget_get_has_tooltip: assertion 'GTK_IS_WIDGET (widget)'": once
+  (under strace, so no action log or backtrace) in about 1.2 million
+  actions. sfe has no tooltip code of its own; GTK's tooltips still
+  pointed at a destroyed widget. Keyboard tooltip mode (Ctrl+F1) with the
+  focused pane closed was probed and is fine.
+- Left open: neither came back in 720,000 actions under gdb afterwards.
+
+### M7. With list as the default view, a new window's first key went nowhere
+
+- **Found by:** the monkey (2 of 48 runs of 10000 actions): right after
+  `:q` closed the last window and a new one opened, the first key logged
+  "gtk_widget_event: assertion 'WIDGET_REALIZED_FOR_EVENT'"; the monkey's
+  note: the focus (the list) was not realized.
+- **Cause:** a new pane showed the grid until its files loaded, whatever
+  the configured view; the list view already had the focus. A key pressed
+  in that moment (typing right after opening a window) went to a view not
+  on screen. The monkey had switched the default view in Settings.
+- **Fix:** `pane.c` shows the configured view from the start.
+- **Test:** `/ui/new-window-list-view`: default view list, a new window,
+  the focus must be on screen at once and a key must not log anything.
+  Fails without the fix.
+
+### M6. GTK's emoji chooser closed before it loaded (GTK, not sfe)
+
+- **Found by:** the monkey with `-j`: "g_variant_unref: assertion 'value
+  != NULL'" (9 failed runs of 20000 actions), and once an abort in
+  `gtk_widget_get_frame_clock`, mostly while the monkey closed the Rename
+  Files dialog.
+- **Cause:** Ctrl+. in a text field opens GTK's emoji chooser, which loads
+  its emoji in idle steps; destroyed before then, it frees data it does
+  not have yet. A user gets there too: Ctrl+., Escape, Escape quickly in a
+  dialog (probed: the critical). In a normal session it is a warning on
+  stderr, nothing breaks.
+- **Harness:** the monkey no longer closes windows while a popup (a menu,
+  the chooser) has the input, as a user cannot either (the frame clock
+  abort came from that), and it tolerates this one GTK critical instead of
+  stopping.
+
 ### M5. Copying a folder into a symlink to itself copied endlessly
 
 - **Found by:** the monkey, seed 3995308520 (passed, but left a folder
@@ -65,29 +111,30 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 - **Test:** `/ui/split-close-repeatedly` (split, select all, close, 20
   times; fails without the fix).
 
-### M1. GLib critical "g_signal_handler_disconnect: handler_id > 0" (open)
+### M1. GLib critical "g_signal_handler_disconnect: handler_id > 0" (fixed)
 
-- **Found by:** the monkey, seed 8, at action 273 (3 of 5 replays; timing
-  dependent; another run hit it at 243).
-- **Actions before it:** keys in the Settings window with the focus on
-  its page list (Shift+C, 1, Return, Shift+Space), then `:visual` in the
-  main window.
-- **Where:** inside GTK while handling events; no sfe function is on the
-  stack. sfe's own disconnects (`split.c` one-shot size handler,
-  `prefs.c` config handler on destroy) were read and look correct.
-- **Investigated (2026-11-22):** the code from when it was found
-  (`ace90ad`) still hits it on the first replay of seed 8. No debug
-  symbols exist for this system's GTK 3 and GLib: they are Artix's own
-  builds, which neither debuginfod.archlinux.org nor
-  debuginfod.artixlinux.org knows, and Artix has no debug packages. A gdb
-  breakpoint on `g_signal_handler_disconnect` with handler 0 (to print the
-  object's type without symbols) slows every disconnect enough that the
-  bug no longer happens: 6 runs clean. It depends on timing.
-- **Status:** not seen on the current code: the same seed now takes another
-  path (M2–M4 fixes, harness changes), and about 60,000 random actions
-  since have not hit it. Left open as a probable GTK-internal race; finding
-  it would need GTK 3.24.52 built with symbols (no install needed:
-  `LD_LIBRARY_PATH`).
+- **Found by:** the monkey, seed 8, at action 273; for a long time not
+  again, then 4 times in about 60 runs of 20000 actions with `-j` (2026-11-22):
+  a busy machine makes it likely.
+- **Cause:** a view moved to a new place (a split, `:visual swap`) while a
+  scroll animation ran. GTK then jumps the view to where the animation was
+  heading (`gtk_adjustment_enable_animation()` with the new frame clock),
+  which tells sfe the view moved. Up from the empty space after the
+  files, sfe set the view back down (`on_scroll_value()`, which keeps that
+  space when the view re-measures) from inside that jump; that ends GTK's
+  animation, and GTK then ended it a second time, disconnecting handler 0.
+- **How it was found:** no symbols exist for this GTK (Artix builds), but
+  gdb disables address randomisation, so the address from a crash's
+  backtrace could be disassembled at a breakpoint: the code that logs is
+  GTK's animation teardown, and a gdb breakpoint on
+  `gdk_frame_clock_end_updating` showed sfe's handler ending it first.
+  Running monkeys under gdb, 24 at a time, gave the backtraces.
+- **Fix:** `pane.c` sets the view back from an idle callback
+  (`on_pull_back()`), after GTK's own change, checking again there whether
+  it is still needed.
+- **Test:** `/ui/split-during-scroll`: in the empty space after 80 files,
+  an animated Page Up, then `:split horizontal` before its first frame.
+  Fails without the fix (the critical), passes with it.
 
 ### Harness mistakes (not sfe)
 
@@ -109,6 +156,19 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   files to show; by then its folder was unreadable (the Properties dialog)
   or empty, so it timed out (seed 3419482463, action 1262). Reopening now
   restores the folder's permissions and waits only for the window.
+- With `-j`, runs failed with "Unable to read from broadway server":
+  two runs could pick the same display, and the second broadwayd (which
+  fails to bind only after printing that it listens) could take longer
+  than the 200 ms check under load; the run then drew on the other run's
+  display and lost it when that run ended. Each display now has a lock
+  file, held for the whole run. Since then, about one run in 40 (of
+  10000 actions, `-j 24`) still loses its display or dies: the test now
+  reports how broadwayd ended, and it was SIGKILL, also to `test-ui`
+  itself. Not memory (the kernel's `oom_kill` count is 0 for the whole
+  uptime), and strace on 48 runs showed no process of the test sending
+  any SIGKILL: something outside the test (not found; tracing other
+  processes' signals needs root). `tools/ui-monkey.sh` reports these runs
+  as killed from outside and does not count them.
 
 ## Round 8 (2026-11-22, 14400 s, all 11 targets with `-p`)
 
