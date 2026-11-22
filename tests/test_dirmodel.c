@@ -4,6 +4,7 @@
 #include "app.h"
 #include "dirmodel.h"
 #include <glib/gstdio.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 /* dirmodel.c's icons read the config; the defaults do. */
@@ -171,6 +172,50 @@ static void test_shared(void)
 /* Recursive search: files in the folders below match by their path, rows
  * carry the right file; hidden folders and the folder's own files are not
  * walked twice. */
+static void spin(int ms)
+{
+    gint64 end = g_get_monotonic_time() + ms * 1000;
+    while (g_get_monotonic_time() < end)
+        if (!g_main_context_iteration(NULL, FALSE))
+            g_usleep(1000);
+}
+
+static bool has_row(SfeDirModel* model, const char* name)
+{
+    GtkTreePath* path = sfe_dir_model_find(model, name);
+    gtk_tree_path_free(path);
+    return path != NULL;
+}
+
+/* Changes on disk, known from the monitor's events alone (no second look
+ * at the disk): a file saved through a temporary one and a rename shows
+ * under its own name only; one deleted right after it came, not at all. */
+static void test_monitor_events(void)
+{
+    g_autofree char* path = g_dir_make_tmp("sfe-dirmodel-XXXXXX", NULL);
+    g_autoptr(GFile) dir = g_file_new_for_path(path);
+    Counts c = { 0 };
+    SfeDirModel* model = open_model(dir, &c);
+    for (int i = 0; i < 10; i++) {
+        g_autofree char* name = g_strdup_printf("saved%d.txt", i);
+        touch(path, name); /* (a temporary file, then a rename) */
+    }
+    for (int i = 0; i < 10; i++) {
+        g_autofree char* gone = g_strdup_printf("%s/gone%d.txt", path, i);
+        FILE* fp = fopen(gone, "w");
+        fputs("x", fp);
+        fclose(fp);
+        g_unlink(gone);
+    }
+    wait_for(&c.added, 10);
+    spin(300); /* (any late ones) */
+    g_assert_cmpint(rows(model), ==, 10);
+    g_assert_true(has_row(model, "saved0.txt"));
+    g_assert_true(has_row(model, "saved9.txt"));
+    g_assert_false(has_row(model, "gone0.txt"));
+    g_object_unref(model);
+}
+
 /* Sorting: by each key, folders first in both orders, names as the tie. */
 static void test_sort(void)
 {
@@ -331,6 +376,7 @@ int main(int argc, char** argv)
         return 77; /* skipped */
     }
     g_test_add_func("/dirmodel/shared", test_shared);
+    g_test_add_func("/dirmodel/monitor-events", test_monitor_events);
     g_test_add_func("/dirmodel/sort", test_sort);
     g_test_add_func("/dirmodel/recursive", test_recursive);
     g_test_add_func("/dirmodel/cache", test_cache);

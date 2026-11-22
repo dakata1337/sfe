@@ -25,6 +25,8 @@ typedef struct {
     GHashTable* infos; /* file name -> GFileInfo*, every file incl. hidden */
     GHashTable* thumbs; /* file name -> GdkPixbuf*, or NO_THUMB (none to be had) */
     GFileMonitor* monitor;
+    GHashTable* queries; /* file name -> number of its newest query (monitor) */
+    guint last_query;
     bool loading;
     bool building; /* filling fresh stores, not reacting to changes */
     gint64 cached_since; /* no pane shows it, kept for a while (0: not cached) */
@@ -625,6 +627,7 @@ static void folder_unref(Folder* f)
     folder_unlist(f);
     g_signal_handlers_disconnect_by_data(gtk_icon_theme_get_default(), f);
     clear_contents(f);
+    g_hash_table_unref(f->queries);
     g_clear_object(&f->cancel);
     g_clear_object(&f->dir);
     g_free(f);
@@ -656,6 +659,7 @@ static Folder* folder_get(GFile* dir)
     f->grid_size = 64;
     f->list_size = 16;
     f->scale = 1;
+    f->queries = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     /* Connected "after" so the icon cache is already cleared. */
     g_signal_connect_after(gtk_icon_theme_get_default(), "changed", G_CALLBACK(on_icon_theme_changed), f);
     g_hash_table_insert(folders, f->uri, f);
@@ -763,22 +767,41 @@ static void folder_detach(Folder* f, SfeDirModel* model)
 /* Directory monitor                                                         */
 /* ------------------------------------------------------------------------ */
 
+typedef struct {
+    Folder* folder;
+    char* name;
+    guint number;
+} Query;
+
 static void on_query_done(GObject* source, GAsyncResult* res, gpointer data)
 {
-    Folder* f = data;
+    Query* q = data;
+    Folder* f = q->folder;
     g_autoptr(GFileInfo) info = g_file_query_info_finish(G_FILE(source), res, NULL);
 
-    /* Ignore a file renamed or deleted meanwhile (that event was already
-     * handled: adding it now would leave a ghost, e.g. a download's .part). */
-    if (info != NULL && f->store != NULL && g_file_query_exists(G_FILE(source), NULL))
+    /* Only the newest query of a file that is still there: one renamed or
+     * deleted meanwhile (that event was already handled) would be a ghost,
+     * e.g. a download's .part. Known from the events, not by asking the
+     * disk again: on a slow network folder that stalled every change. */
+    bool newest = GPOINTER_TO_UINT(g_hash_table_lookup(f->queries, q->name)) == q->number;
+    if (newest)
+        g_hash_table_remove(f->queries, q->name);
+    if (info != NULL && f->store != NULL && newest)
         add_or_update(f, info);
     folder_unref(f);
+    g_free(q->name);
+    g_free(q);
 }
 
 static void query_and_update(Folder* f, GFile* file)
 {
+    Query* q = g_new0(Query, 1);
+    q->folder = folder_ref(f);
+    q->name = g_file_get_basename(file);
+    q->number = ++f->last_query;
+    g_hash_table_replace(f->queries, g_strdup(q->name), GUINT_TO_POINTER(q->number));
     g_file_query_info_async(file, SFE_FILE_ATTRIBUTES, G_FILE_QUERY_INFO_NONE,
-        G_PRIORITY_DEFAULT, f->cancel, on_query_done, folder_ref(f));
+        G_PRIORITY_DEFAULT, f->cancel, on_query_done, q);
 }
 
 static bool is_child(Folder* f, GFile* file)
@@ -852,9 +875,11 @@ static void on_dir_changed(GFileMonitor* monitor, GFile* file, GFile* other,
         break;
     case G_FILE_MONITOR_EVENT_DELETED:
     case G_FILE_MONITOR_EVENT_MOVED_OUT:
+        g_hash_table_remove(f->queries, name); /* (a query on its way: too late) */
         remove_file(f, name);
         break;
     case G_FILE_MONITOR_EVENT_RENAMED:
+        g_hash_table_remove(f->queries, name);
         remove_file(f, name);
         if (is_child(f, other))
             query_and_update(f, other);
