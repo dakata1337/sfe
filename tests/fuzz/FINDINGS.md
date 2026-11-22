@@ -6,6 +6,20 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 
 ## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
 
+### M11. A context menu gone before its delayed destroy
+
+- **Found by:** the monkey under gdb (seed 1537113065):
+  "gtk_widget_destroy: assertion 'GTK_IS_WIDGET (widget)'" from
+  `destroy_menu()` (`ctxmenu.c`), called from an idle.
+- **Cause:** a closed context menu is destroyed from an idle callback (GTK
+  closes it before running the chosen item), which held no reference.
+  The menu goes with the view it is attached to: when that closed first
+  (an item that closes the window or the pane, or the window closed),
+  the idle destroyed a freed widget.
+- **Fix:** the idle holds a reference to the menu, and is added once.
+- **Test:** `/ui/menu-gone-before-destroy`: the menu closed, the window
+  destroyed before the idle. Fails without the fix.
+
 ### M10. In the tests, worker threads ran GTK code (harness; sfe hardened)
 
 - **Found by:** `/ui/question-gone-without-answer` (M9) failing now and

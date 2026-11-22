@@ -134,11 +134,16 @@ static gboolean destroy_menu(gpointer menu)
     return G_SOURCE_REMOVE;
 }
 
-/* GTK emits "deactivate" before running the chosen item. */
+/* GTK emits "deactivate" before running the chosen item. Held until then:
+ * the menu goes with its view when that closes first (an item closing the
+ * window). */
 static void destroy_menu_later(GtkMenuShell* menu, gpointer data)
 {
     (void)data;
-    g_idle_add(destroy_menu, menu);
+    if (g_object_get_data(G_OBJECT(menu), "sfe-closing") != NULL)
+        return;
+    g_object_set_data(G_OBJECT(menu), "sfe-closing", GINT_TO_POINTER(1));
+    g_idle_add_full(G_PRIORITY_DEFAULT_IDLE, destroy_menu, g_object_ref(menu), g_object_unref);
 }
 
 /* Submenus (Open With) are separate menus: style them too. */

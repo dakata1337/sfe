@@ -15,6 +15,9 @@ release: see the top of that script).
 - Closing a window while it asked about a file that already exists left
   that copy waiting for an answer in the background. Found by the UI
   monkey.
+- A context menu item that closes the window (or the window closing while
+  a menu was just closed) made sfe destroy the freed menu a moment later.
+  Found by the UI monkey.
 
 ## 3.2.5
 

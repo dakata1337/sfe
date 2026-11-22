@@ -469,6 +469,22 @@ static void test_question_gone_without_answer(void)
     close_window(win);
 }
 
+/* Found by the UI monkey: a context menu closed (it is destroyed a moment
+ * later) and its view gone before that moment (the window closed): the
+ * menu went with its view, and the late destroy hit a freed widget. */
+static void test_menu_gone_before_destroy(void)
+{
+    g_autofree char* dir = make_folder("menu-gone");
+    SfeWindow* win = open_window(dir);
+    sfe_pane_focus_view(active(win));
+    key(win, GDK_KEY_Menu, 0);
+    WAIT_UNTIL(gtk_grab_get_current() != NULL && GTK_IS_MENU(gtk_grab_get_current()));
+    GtkWidget* menu = gtk_grab_get_current();
+    gtk_menu_shell_deactivate(GTK_MENU_SHELL(menu)); /* closed: destroyed when idle */
+    gtk_widget_destroy(GTK_WIDGET(win)); /* before then */
+    settle(100);
+}
+
 /* Every widget in the Settings window that edits an option (found by
  * their "sfe-option" data), with its internal children. */
 static void collect_options(GtkWidget* w, gpointer list)
@@ -1036,6 +1052,7 @@ int main(int argc, char** argv)
     g_test_add_func("/ui/keys-in-message-view", test_keys_in_message_view);
     g_test_add_func("/ui/new-window-list-view", test_new_window_list_view);
     g_test_add_func("/ui/question-gone-without-answer", test_question_gone_without_answer);
+    g_test_add_func("/ui/menu-gone-before-destroy", test_menu_gone_before_destroy);
     g_test_add_func("/ui/split-during-scroll", test_split_during_scroll);
     if (monkey)
         g_test_add_func("/ui/monkey", test_monkey);
