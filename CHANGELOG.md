@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.2.6
+
 - Moving a view to a split while it was still scrolling (up from the empty
   space after the files) made GTK log a critical. Found by the UI monkey.
 - With list as the default view, a new window showed the grid until its

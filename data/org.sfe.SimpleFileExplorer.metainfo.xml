@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="3.2.6" date="2026-11-22">
+      <description>
+        <p>Undo works for files trashed on other drives, thumbnailers run in a sandbox, and big folders are much faster in list view. Also fixes found by the UI monkey: a stuck copy, a menu use-after-free and a scroll critical.</p>
+      </description>
+    </release>
     <release version="3.2.5" date="2026-11-22">
       <description>
         <p>Fixes found by fuzzing and UI testing: a config crash, a portal path escape, endless copies through symlinks, a mass-rename freeze, and more.</p>
