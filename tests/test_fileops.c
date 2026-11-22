@@ -235,6 +235,68 @@ static void test_move_and_delete(void)
     remove_root(root);
 }
 
+/* A folder on another filesystem than `root` (moves there copy, then
+ * delete the source), or NULL. */
+static char* other_filesystem(const char* root)
+{
+    GStatBuf a, b;
+    g_autofree char* cwd = g_get_current_dir();
+    const char* candidates[] = { "/dev/shm", cwd };
+    if (g_stat(root, &a) != 0)
+        return NULL;
+    for (size_t i = 0; i < G_N_ELEMENTS(candidates); i++) {
+        g_autofree char* tmpl = g_build_filename(candidates[i], "sfe-ops-other-XXXXXX", NULL);
+        if (g_stat(candidates[i], &b) == 0 && b.st_dev != a.st_dev && g_mkdtemp(tmpl) != NULL)
+            return g_steal_pointer(&tmpl);
+    }
+    return NULL;
+}
+
+/* Across filesystems a move is a copy, then the source is deleted: that
+ * must only happen when everything was copied. A file that cannot be read
+ * (skipped) keeps the whole source folder. */
+static void test_move_across_filesystems(void)
+{
+    g_autofree char* root = make_root();
+    g_autofree char* other = other_filesystem(root);
+    if (other == NULL) {
+        g_test_skip("no second filesystem to move to");
+        remove_root(root);
+        return;
+    }
+    write_file(root, "src/ok/a.txt", "A");
+    write_file(root, "src/ok/sub/b.txt", "B");
+    write_file(root, "src/part/a.txt", "A");
+    write_file(root, "src/part/locked.txt", "L");
+    g_autofree char* locked = path(root, "src/part/locked.txt");
+    g_chmod(locked, 0000);
+    g_autoptr(GFile) dst = g_file_new_for_path(other);
+
+    g_autoptr(GFile) ok = file_at(root, "src/ok");
+    g_autoptr(GList) ok_list = one(ok);
+    Run run = run_op(SFE_OP_MOVE, ok_list, dst, SFE_ANSWER_SKIP, false);
+    g_assert_cmpint(run.questions, ==, 0);
+    g_assert_false(exists(root, "src/ok")); /* moved: the source went */
+    g_autofree char* b = read_file(other, "ok/sub/b.txt");
+    g_assert_cmpstr(b, ==, "B");
+
+    g_autoptr(GFile) part = file_at(root, "src/part");
+    g_autoptr(GList) part_list = one(part);
+    run = run_op(SFE_OP_MOVE, part_list, dst, SFE_ANSWER_SKIP, false);
+    if (access(locked, R_OK) == 0) { /* (root reads it anyway) */
+        g_chmod(locked, 0644);
+        g_test_skip("running as root");
+    } else {
+        g_assert_cmpint(run.last_kind, ==, SFE_QUESTION_ERROR); /* the unreadable file, skipped */
+        g_assert_true(exists(root, "src/part/a.txt")); /* the source stays whole */
+        g_assert_true(exists(root, "src/part/locked.txt"));
+        g_assert_true(exists(other, "part/a.txt")); /* (the copy made so far stays too) */
+    }
+    g_chmod(locked, 0644);
+    remove_root(root);
+    remove_root(other);
+}
+
 /* Found by the UI monkey: into a symlink to itself (Work -> Projects), a
  * folder's copy copied its own output until the paths were too long. */
 static void test_into_itself_through_symlink(void)
@@ -317,5 +379,6 @@ int main(int argc, char** argv)
     g_test_add_func("/fileops/move-and-delete", test_move_and_delete);
     g_test_add_func("/fileops/cancel", test_cancel_from_question);
     g_test_add_func("/fileops/into-itself-through-symlink", test_into_itself_through_symlink);
+    g_test_add_func("/fileops/move-across-filesystems", test_move_across_filesystems);
     return g_test_run();
 }
