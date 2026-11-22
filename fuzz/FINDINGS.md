@@ -101,6 +101,9 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   a parse error reported with its line, like any other mistake in the file.
 - **Test:** `/config/escape-beyond-unicode` (fails without the fix).
 
+Apart from that, all 11 targets ran the full 4 hours without a finding;
+config, restarted with the fix, ran another 3.5 hours (21,273 inputs) clean.
+
 ## Round 7 (2026-11-22, 7200 s, all 11 targets with `-p`)
 
 Nothing found. Corpora: config 16,653 inputs, thumbnailer 5,487, rename
