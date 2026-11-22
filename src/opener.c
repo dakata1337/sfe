@@ -81,6 +81,20 @@ static char* local_path(GFile* file)
     return path ? path : g_file_get_uri(file);
 }
 
+/* %d and %f in one pass: a folder name with "%f" in it stays as it is. */
+static char* expand(const char* arg, const char* dir, const char* file)
+{
+    GString* out = g_string_new(NULL);
+    for (const char* p = arg; *p != '\0'; p++) {
+        if (p[0] == '%' && (p[1] == 'd' || p[1] == 'f')) {
+            g_string_append(out, *++p == 'd' ? dir : file);
+            continue;
+        }
+        g_string_append_c(out, *p);
+    }
+    return g_string_free(out, FALSE);
+}
+
 char** sfe_build_user_command(const char* command, GList* files, GFile* dir, GError** error)
 {
     g_auto(GStrv) template = NULL;
@@ -97,8 +111,7 @@ char** sfe_build_user_command(const char* command, GList* files, GFile* dir, GEr
                 g_ptr_array_add(argv, local_path(l->data));
             continue;
         }
-        g_autofree char* with_dir = replace_all(*arg, "%d", dir_path);
-        g_ptr_array_add(argv, replace_all(with_dir, "%f", first));
+        g_ptr_array_add(argv, expand(*arg, dir_path, first));
     }
     g_ptr_array_add(argv, NULL);
     return (char**)g_ptr_array_free(argv, FALSE);

@@ -105,6 +105,12 @@ static void test_user_command(void)
     g_assert_cmpstr(inner[1], ==, "--in=/x/a b.txt");
     g_assert_cmpstr(inner[2], ==, "--cwd=/home/me/My Dir");
 
+    /* a folder named with "%f" in it is passed as it is */
+    g_autoptr(GFile) odd = g_file_new_for_path("/home/me/100%fun");
+    g_auto(GStrv) literal = sfe_build_user_command("echo %d %f", files, odd, &error);
+    g_assert_cmpstr(literal[1], ==, "/home/me/100%fun");
+    g_assert_cmpstr(literal[2], ==, "/x/a b.txt");
+
     g_auto(GStrv) none = sfe_build_user_command("echo %f", NULL, dir, &error);
     g_assert_cmpuint(g_strv_length(none), ==, 1);
     g_list_free(files);
