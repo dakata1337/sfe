@@ -149,3 +149,9 @@ if localedef.found() and fs.exists('/usr/share/i18n/locales/bg_BG')
         test('ui-bg', test_ui, timeout: 120, is_parallel: false, env: bg_env)
     endif
 endif
+
+# Fuzz targets for the parsers (tests/fuzz, libFuzzer): only with
+# -Dfuzzing=true, which tools/fuzz.sh sets up.
+if get_option('fuzzing')
+    subdir('fuzz')
+endif

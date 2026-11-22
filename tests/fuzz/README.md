@@ -19,7 +19,7 @@ target gets N cores.
 
 The first run sets up `build-fuzz/` (needs clang). Inputs that reach new
 code are kept in `build-fuzz/corpus/TARGET`, so later runs continue where
-the last one stopped; `fuzz/corpus/TARGET` holds the hand-written seeds.
+the last one stopped; `tests/fuzz/corpus/TARGET` holds the hand-written seeds.
 
 | Target | Code | Input | Checks |
 |---|---|---|---|
@@ -37,11 +37,11 @@ the last one stopped; `fuzz/corpus/TARGET` holds the hand-written seeds.
 
 ## When something is found
 
-The run stops and saves the input as `fuzz/crashes/TARGET/crash-…` (or
+The run stops and saves the input as `tests/fuzz/crashes/TARGET/crash-…` (or
 `leak-…`, `timeout-…`). Reproduce it, with the full report:
 
 ```bash
-build-fuzz/fuzz/fuzz-config fuzz/crashes/config/crash-…
+build-fuzz/tests/fuzz/fuzz-config tests/fuzz/crashes/config/crash-…
 ```
 
 Fix the bug, add the input's essence as a case to the matching test in
@@ -49,10 +49,10 @@ Fix the bug, add the input's essence as a case to the matching test in
 
 ## Adding a target
 
-Write `fuzz/fuzz_NAME.c` with `LLVMFuzzerTestOneInput()` (see `common.h`
+Write `tests/fuzz/fuzz_NAME.c` with `LLVMFuzzerTestOneInput()` (see `common.h`
 for `FUZZ_CHECK` and the log setup), add NAME to the list in
-`fuzz/meson.build` and to `tools/fuzz.sh`, and put a few typical inputs in
-`fuzz/corpus/NAME/`. A target that reads files gets a temporary folder from
+`tests/fuzz/meson.build` and to `tools/fuzz.sh`, and put a few typical inputs in
+`tests/fuzz/corpus/NAME/`. A target that reads files gets a temporary folder from
 `fuzz_tmpdir()` (on tmpfs, removed at exit; it is also `HOME` and
 `XDG_DATA_HOME`) and writes the input there with `fuzz_write()`. Only GTK-free code (the `sfe-core` library) can be
 fuzzed this way.

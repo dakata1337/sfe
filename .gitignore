@@ -16,5 +16,5 @@
 !/thirdparty/tomlc17/src/tomlc17.c
 !/thirdparty/tomlc17/src/tomlc17.h
 /build-fuzz/
-/fuzz/crashes/
+/tests/fuzz/crashes/
 /build-cov/

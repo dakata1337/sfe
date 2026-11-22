@@ -11,9 +11,9 @@
 # SMT siblings, as the scheduler kept them all on one CCD.
 #
 # Builds build-fuzz/ with clang. Each target's corpus grows in
-# build-fuzz/corpus/TARGET, seeded from fuzz/corpus/TARGET. A crash or a
-# failed invariant is saved as fuzz/crashes/TARGET/crash-* (reproduce:
-# build-fuzz/fuzz/fuzz-TARGET FILE). Exits 1 if any target found one.
+# build-fuzz/corpus/TARGET, seeded from tests/fuzz/corpus/TARGET. A crash or
+# a failed invariant is saved as tests/fuzz/crashes/TARGET/crash-* (reproduce:
+# build-fuzz/tests/fuzz/fuzz-TARGET FILE). Exits 1 if any target found one.
 set -euo pipefail
 
 # CPUs in the order to hand them out: alternating between L3 caches, first
@@ -50,7 +50,7 @@ cpu_order() {
 # Runs one target; prints its summary. $2: CPU list for taskset, or empty.
 run_target() {
     local t=$1 cpus=$2
-    local corpus=build-fuzz/corpus/$t crashes=fuzz/crashes/$t work=build-fuzz/work/$t
+    local corpus=build-fuzz/corpus/$t crashes=tests/fuzz/crashes/$t work=build-fuzz/work/$t
     mkdir -p "$corpus" "$crashes" "$work"
     local parallel=() pin=()
     [ "$jobs" -gt 1 ] && parallel=(-jobs="$jobs" -workers="$jobs")
@@ -58,7 +58,7 @@ run_target() {
     local out="==> $t (${seconds}s${cpus:+, CPUs $cpus})"
     # libFuzzer writes each job's log as fuzz-N.log in the current folder:
     # a folder per target, so targets running at the same time do not mix.
-    if ! (cd "$work" && "${pin[@]}" "$root"/build-fuzz/fuzz/fuzz-"$t" "$root/$corpus" "$root"/fuzz/corpus/"$t" \
+    if ! (cd "$work" && "${pin[@]}" "$root"/build-fuzz/tests/fuzz/fuzz-"$t" "$root/$corpus" "$root"/tests/fuzz/corpus/"$t" \
         -max_total_time="$seconds" "${parallel[@]}" -print_final_stats=1 \
         -artifact_prefix="$root/$crashes/") >build-fuzz/fuzz-"$t".log 2>&1; then
         out+=$'\n'"    found a problem: $(ls -t "$crashes" | head -1) (log: build-fuzz/fuzz-$t.log)"
@@ -93,7 +93,7 @@ main() {
         CC=clang meson setup build-fuzz -Dfuzzing=true -Dbuildtype=debugoptimized \
             -Db_sanitize=address,undefined -Db_lundef=false
     fi
-    ninja -C build-fuzz $(printf 'fuzz/fuzz-%s ' "${targets[@]}")
+    ninja -C build-fuzz $(printf 'tests/fuzz/fuzz-%s ' "${targets[@]}")
 
     # UBSan reports stop the run like a crash.
     export UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1

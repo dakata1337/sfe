@@ -1,2 +1,2 @@
-# Fuzz targets (fuzz/, libFuzzer): needs clang. tools/fuzz.sh sets it up.
+# Fuzz targets (tests/fuzz/, libFuzzer): needs clang. tools/fuzz.sh sets it up.
 option('fuzzing', type: 'boolean', value: false, description: 'Build the fuzz targets (clang, libFuzzer)')

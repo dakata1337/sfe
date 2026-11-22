@@ -37,7 +37,7 @@ add_project_arguments(
 add_project_arguments('-DG_LOG_DOMAIN="sfe"', language: 'c')
 
 # Fuzzing: the code under test gets coverage instrumentation; the targets
-# in fuzz/ link libFuzzer. Sanitizers come from b_sanitize (tools/fuzz.sh).
+# in tests/fuzz/ link libFuzzer. Sanitizers come from b_sanitize (tools/fuzz.sh).
 if get_option('fuzzing')
     if cc.get_id() != 'clang'
         error('-Dfuzzing=true needs clang: CC=clang meson setup ...')
@@ -220,6 +220,3 @@ install_subdir(
 gnome.post_install(gtk_update_icon_cache: true, update_desktop_database: true)
 
 subdir('tests')
-if get_option('fuzzing')
-    subdir('fuzz')
-endif
