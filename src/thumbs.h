@@ -61,6 +61,13 @@ const SfeThumbnailer* sfe_thumbnailers_find(GPtrArray* thumbnailers, const char*
 
 /* The command line of a thumbnailer for one file: %i path, %u URI,
  * %o output file, %s size in pixels, %% a percent sign. */
+/* Thumbnailers read any file (a crafted download): they run in bubblewrap
+ * when it works here, as GNOME's do: the system read-only, no network, a
+ * private /tmp (with `input` in it again when it was there), only
+ * `writable` (their output folder) writable. */
+bool sfe_thumb_sandbox_works(void);
+char** sfe_thumb_sandboxed(char* const* argv, const char* input, const char* writable);
+
 char** sfe_thumbnailer_argv(const SfeThumbnailer* t, const char* path, const char* uri, const char* output, int size,
     GError** error);
 

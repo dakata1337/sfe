@@ -319,10 +319,46 @@ static void forward_cancel(GCancellable* cancel, gpointer data)
     g_cancellable_cancel(data);
 }
 
-/* Runs a program, stopping it after TIMEOUT_S or when `cancel` fires. */
-static bool run(char** argv, GCancellable* cancel, GError** error)
+bool sfe_thumb_sandbox_works(void)
 {
-    g_autoptr(GSubprocess) proc = g_subprocess_newv((const char* const*)argv,
+    static gsize once;
+    static bool works;
+    if (g_once_init_enter(&once)) {
+        g_autofree char* bwrap = g_find_program_in_path("bwrap");
+        char* argv[] = { bwrap, "--ro-bind", "/", "/", "--unshare-all", "--die-with-parent", "true", NULL };
+        int status = -1;
+        works = bwrap != NULL
+            && g_spawn_sync(NULL, argv, NULL, G_SPAWN_STDOUT_TO_DEV_NULL | G_SPAWN_STDERR_TO_DEV_NULL, NULL, NULL, NULL,
+                NULL, &status, NULL)
+            && g_spawn_check_wait_status(status, NULL);
+        if (!works)
+            g_debug("thumbnailers run without a sandbox (bwrap %s)", bwrap ? "does not work here" : "is not installed");
+        g_once_init_leave(&once, 1);
+    }
+    return works;
+}
+
+char** sfe_thumb_sandboxed(char* const* argv, const char* input, const char* writable)
+{
+    GPtrArray* out = g_ptr_array_new();
+    const char* const before[] = { "bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc", "--tmpfs", "/tmp",
+        "--ro-bind", input, input, /* (back, when it was in /tmp) */
+        "--bind", writable, writable, "--unshare-all", "--die-with-parent", "--new-session", "--" };
+    for (size_t i = 0; i < G_N_ELEMENTS(before); i++)
+        g_ptr_array_add(out, g_strdup(before[i]));
+    for (char* const* a = argv; *a != NULL; a++)
+        g_ptr_array_add(out, g_strdup(*a));
+    g_ptr_array_add(out, NULL);
+    return (char**)g_ptr_array_free(out, FALSE);
+}
+
+/* Runs a program that reads `input` and writes `output`, stopping it after
+ * TIMEOUT_S or when `cancel` fires; in the sandbox when it works here. */
+static bool run(char** argv, const char* input, const char* output, GCancellable* cancel, GError** error)
+{
+    g_autofree char* writable = g_path_get_dirname(output);
+    g_auto(GStrv) sandboxed = sfe_thumb_sandbox_works() ? sfe_thumb_sandboxed(argv, input, writable) : NULL;
+    g_autoptr(GSubprocess) proc = g_subprocess_newv((const char* const*)(sandboxed ? sandboxed : argv),
         G_SUBPROCESS_FLAGS_STDOUT_SILENCE | G_SUBPROCESS_FLAGS_STDERR_SILENCE, error);
     if (proc == NULL)
         return false;
@@ -343,22 +379,26 @@ static bool run(char** argv, GCancellable* cancel, GError** error)
 }
 
 /* A program writes a PNG (or JPEG) to a temporary file, which is loaded. */
-static GdkPixbuf* from_program(char** argv, const char* output, int size, GCancellable* cancel, GError** error)
+static GdkPixbuf* from_program(char** argv, const char* input, const char* output, int size, GCancellable* cancel,
+    GError** error)
 {
-    bool ok = run(argv, cancel, error);
+    bool ok = run(argv, input, output, cancel, error);
     GdkPixbuf* pixbuf = NULL;
     if (ok) {
         g_autoptr(GdkPixbuf) raw = gdk_pixbuf_new_from_file(output, error);
         pixbuf = raw ? fit(raw, size) : NULL;
     }
     g_unlink(output);
+    g_autofree char* dir = g_path_get_dirname(output);
+    g_rmdir(dir);
     return pixbuf;
 }
 
+/* In a folder of its own: the only place a sandboxed thumbnailer can write. */
 static char* temp_output(void)
 {
-    g_autofree char* name = g_strdup_printf("sfe-thumb-%u-%u.png", (unsigned)getpid(), g_random_int());
-    return g_build_filename(g_get_tmp_dir(), name, NULL);
+    g_autofree char* dir = g_dir_make_tmp("sfe-thumb-XXXXXX", NULL);
+    return g_build_filename(dir ? dir : g_get_tmp_dir(), "out.png", NULL);
 }
 
 /* A frame a few seconds in (the very first is often black), else the first. */
@@ -372,7 +412,7 @@ static GdkPixbuf* video_frame(const char* path, int size, GCancellable* cancel, 
         char* argv[] = { "ffmpeg", "-nostdin", "-y", "-loglevel", "error", "-ss", (char*)seeks[i], "-i", (char*)path,
             "-frames:v", "1", "-vf", scale, "-f", "image2", "-c:v", "png", output, NULL };
         g_clear_error(&last);
-        GdkPixbuf* pixbuf = from_program(argv, output, size, cancel, &last);
+        GdkPixbuf* pixbuf = from_program(argv, path, output, size, cancel, &last);
         if (pixbuf != NULL)
             return pixbuf;
         if (g_cancellable_is_cancelled(cancel))
@@ -400,7 +440,7 @@ static GdkPixbuf* make(GPtrArray* thumbnailers, const char* path, const char* ur
     if (t != NULL) {
         g_autofree char* output = temp_output();
         g_auto(GStrv) argv = sfe_thumbnailer_argv(t, path, uri, output, size, error);
-        return argv ? from_program(argv, output, size, cancel, error) : NULL;
+        return argv ? from_program(argv, path, output, size, cancel, error) : NULL;
     }
     if (is_video(content_type) && have_ffmpeg())
         return video_frame(path, size, cancel, error);

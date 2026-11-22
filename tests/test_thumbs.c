@@ -144,6 +144,34 @@ static void test_thumbnailers(void)
     g_assert_false(sfe_thumb_supported(list, "text/x-sfe-missing"));
 }
 
+/* A thumbnailer runs in the sandbox (when bubblewrap works here): it can
+ * write its output, and nothing else. */
+static void test_thumbnailer_sandbox(void)
+{
+    char* cmd[] = { "cp", "a", "b", NULL };
+    g_auto(GStrv) wrapped = sfe_thumb_sandboxed(cmd, "/tmp/in.pdf", "/tmp/sfe-thumb-x");
+    g_autofree char* joined = g_strjoinv(" ", wrapped);
+    g_assert_true(g_str_has_prefix(joined, "bwrap --ro-bind / / "));
+    g_assert_nonnull(strstr(joined, "--tmpfs /tmp --ro-bind /tmp/in.pdf /tmp/in.pdf --bind /tmp/sfe-thumb-x /tmp/sfe-thumb-x --unshare-all"));
+    g_assert_true(g_str_has_suffix(joined, " -- cp a b"));
+
+    if (!sfe_thumb_sandbox_works()) {
+        g_test_skip("bubblewrap does not work here");
+        return;
+    }
+    write_text("sandbox/thumbnailers/escape.thumbnailer",
+        "[Thumbnailer Entry]\nExec=sh -c \"cp %i %o; echo x > %i.escaped\"\nMimeType=text/x-sfe-escape;\n");
+    g_autofree char* data = in_root("sandbox");
+    const char* dirs[] = { data, NULL };
+    g_autoptr(GPtrArray) list = sfe_thumbnailers_load(dirs);
+    g_autoptr(GFile) file = write_png("sandbox/files/page.sfeescape", 300, 300);
+    g_autoptr(GdkPixbuf) thumb = sfe_thumb_generate(list, file, "text/x-sfe-escape", mtime_of(file), SFE_THUMB_NORMAL,
+        NULL, NULL);
+    g_assert_nonnull(thumb); /* its output came through */
+    g_autofree char* escaped = in_root("sandbox/files/page.sfeescape.escaped");
+    g_assert_false(g_file_test(escaped, G_FILE_TEST_EXISTS)); /* nothing else was written */
+}
+
 typedef struct {
     int done;
     int with_pixbuf;
@@ -265,6 +293,7 @@ int main(int argc, char** argv)
     g_test_add_func("/thumbs/image", test_image);
     g_test_add_func("/thumbs/failure", test_failure);
     g_test_add_func("/thumbs/thumbnailers", test_thumbnailers);
+    g_test_add_func("/thumbs/thumbnailer-sandbox", test_thumbnailer_sandbox);
     g_test_add_func("/thumbs/queue", test_queue);
     g_test_add_func("/thumbs/folder-cover", test_folder_cover);
     g_test_add_func("/thumbs/folder-queue", test_folder_queue);
