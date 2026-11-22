@@ -826,8 +826,30 @@ static gboolean monkey_fatal(const char* domain, GLogLevelFlags level, const cha
     return strstr(message, "Could not load a pixbuf from icon theme") == NULL;
 }
 
+/* GTK logs its own criticals as structured messages, which do not go
+ * through g_test_log_set_fatal_handler(): the same exceptions for those
+ * (set in main(), before anything is logged). */
+static bool monkey_running;
+static GLogWriterOutput monkey_writer(GLogLevelFlags level, const GLogField* fields, gsize n, gpointer data)
+{
+    const char* domain = NULL;
+    const char* message = NULL;
+    for (gsize i = 0; i < n; i++) {
+        if (strcmp(fields[i].key, "GLIB_DOMAIN") == 0 && fields[i].length < 0)
+            domain = fields[i].value;
+        else if (strcmp(fields[i].key, "MESSAGE") == 0 && fields[i].length < 0)
+            message = fields[i].value;
+    }
+    if (monkey_running && message != NULL && !monkey_fatal(domain, level, message, NULL)) {
+        fprintf(stderr, "# tolerated: %s-%s\n", domain ? domain : "?", message);
+        return G_LOG_WRITER_HANDLED;
+    }
+    return g_log_writer_default(level, fields, n, data);
+}
+
 static void test_monkey(void)
 {
+    monkey_running = true;
     g_test_log_set_fatal_handler(monkey_fatal, NULL);
     guint steps = (guint)g_ascii_strtoull(g_getenv("SFE_MONKEY_STEPS"), NULL, 10);
     const char* seed = g_getenv("SFE_MONKEY_SEED");
@@ -977,6 +999,8 @@ static void remove_tree(const char* path)
 int main(int argc, char** argv)
 {
     setlocale(LC_ALL, ""); /* (the ui-bg test runs this in a decimal-comma language) */
+    if (g_getenv("SFE_MONKEY_STEPS") != NULL)
+        g_log_set_writer_func(monkey_writer, NULL, NULL);
     root = g_dir_make_tmp("sfe-ui-XXXXXX", NULL);
     g_assert_nonnull(root); /* before GLib reads any of these: */
     g_setenv("HOME", root, TRUE);

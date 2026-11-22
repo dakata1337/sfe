@@ -72,7 +72,10 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   fitted into the monitor. The headless display's monitor is 0 x 0 (its
   size comes from a browser, and none connects), so a menu away from the
   corner gets a negative width; no real screen does that. **Harness:**
-  the monkey tolerates this critical while the monitor is empty.
+  the monkey tolerates this critical while the monitor is empty. (It
+  came once more: GTK logs its criticals as structured messages, which
+  skip the fatal handler of `g_test`; a log writer in monkey runs now
+  applies the same exceptions to those.)
 - "gtk_widget_get_has_tooltip: assertion 'GTK_IS_WIDGET (widget)'": once
   (under strace, so no action log or backtrace) in about 1.2 million
   actions. sfe has no tooltip code of its own; GTK's tooltips still
