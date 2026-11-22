@@ -73,6 +73,7 @@ struct _SfePane {
     double scroll_wanted[2]; /* where it was scrolled to */
     double content_end[2]; /* where its last row ends */
     bool padding; /* our own changes to the adjustments */
+    bool grid_drawing; /* inside the grid's "draw": its icons are painted, not measured */
     guint pull_source; /* a pending on_pull_back() */
     bool pull[2]; /* which views it sets back */
     gint64 cursor_scroll_until; /* a keyboard cursor move scrolls until then (monotonic time) */
@@ -2582,9 +2583,14 @@ static void icon_cell(GtkCellLayout* layout, GtkCellRenderer* cell, GtkTreeModel
 {
     (void)layout;
     SfePane* self = data;
+    bool grid = g_object_get_data(G_OBJECT(cell), "sfe-grid") != NULL;
+    /* The grid's icon has a fixed size: measuring needs no picture. GTK
+     * measures every item after any change (twice: 300 new files in a
+     * folder of 20,000 made 330,000 calls), and paints only those shown. */
+    if (grid && !self->grid_drawing)
+        return;
     g_autoptr(GFileInfo) info = NULL;
     gtk_tree_model_get(model, iter, SFE_COL_INFO, &info, -1);
-    bool grid = g_object_get_data(G_OBJECT(cell), "sfe-grid") != NULL;
     cairo_surface_t* surface = info ? sfe_dir_model_icon(self->model, info, grid) : NULL;
     g_object_set(cell, "surface", surface, NULL);
     if (surface)
@@ -2646,6 +2652,20 @@ static void sfe_name_renderer_init(SfeNameRenderer* self)
     (void)self;
 }
 
+static gboolean on_grid_draw(GtkWidget* grid, cairo_t* cr, gpointer data)
+{
+    (void)grid, (void)cr;
+    SFE_PANE(data)->grid_drawing = true;
+    return FALSE;
+}
+
+static gboolean on_grid_drawn(GtkWidget* grid, cairo_t* cr, gpointer data)
+{
+    (void)grid, (void)cr;
+    SFE_PANE(data)->grid_drawing = false;
+    return FALSE;
+}
+
 static GtkWidget* build_grid(SfePane* self)
 {
     GtkWidget* grid = gtk_icon_view_new();
@@ -2685,6 +2705,8 @@ static GtkWidget* build_grid(SfePane* self)
     g_signal_connect(grid, "button-press-event", G_CALLBACK(on_view_button_press), self);
     g_signal_connect(grid, "motion-notify-event", G_CALLBACK(on_view_motion), self);
     g_signal_connect(grid, "button-release-event", G_CALLBACK(on_view_release), self);
+    g_signal_connect(grid, "draw", G_CALLBACK(on_grid_draw), self);
+    g_signal_connect_after(grid, "draw", G_CALLBACK(on_grid_drawn), self);
     g_signal_connect_after(grid, "draw", G_CALLBACK(on_view_draw_after), self);
     g_signal_connect(grid, "popup-menu", G_CALLBACK(on_view_popup_menu), self);
     setup_dnd(self, grid);

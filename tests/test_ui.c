@@ -525,6 +525,41 @@ static void test_columns_make_way(void)
     close_window(win);
 }
 
+/* The grid looks its icons up only to paint them (measuring a fixed-size
+ * icon needs none): drawing the grid must still set them. */
+static void test_grid_paints_icons(void)
+{
+    g_autofree char* dir = make_folder("grid-icons");
+    SfeWindow* win = open_window(dir);
+    run(win, "view grid");
+    sfe_pane_focus_view(active(win));
+    GtkWidget* grid = gtk_window_get_focus(GTK_WINDOW(win));
+    g_assert_true(GTK_IS_ICON_VIEW(grid));
+    settle(200);
+    GList* cells = gtk_cell_layout_get_cells(GTK_CELL_LAYOUT(grid));
+    GtkCellRenderer* icon = NULL;
+    for (GList* l = cells; l != NULL; l = l->next)
+        if (GTK_IS_CELL_RENDERER_PIXBUF(l->data))
+            icon = l->data;
+    g_list_free(cells);
+    g_assert_nonnull(icon);
+    gtk_widget_queue_resize(grid); /* measured again: no picture needed */
+    settle(100);
+    g_object_set(icon, "surface", NULL, NULL);
+
+    cairo_surface_t* image = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, gtk_widget_get_allocated_width(grid),
+        gtk_widget_get_allocated_height(grid));
+    cairo_t* cr = cairo_create(image);
+    gtk_widget_draw(grid, cr);
+    cairo_destroy(cr);
+    cairo_surface_destroy(image);
+    cairo_surface_t* painted = NULL;
+    g_object_get(icon, "surface", &painted, NULL);
+    g_assert_nonnull(painted);
+    cairo_surface_destroy(painted);
+    close_window(win);
+}
+
 /* Every widget in the Settings window that edits an option (found by
  * their "sfe-option" data), with its internal children. */
 static void collect_options(GtkWidget* w, gpointer list)
@@ -1118,6 +1153,7 @@ int main(int argc, char** argv)
     g_test_add_func("/ui/question-gone-without-answer", test_question_gone_without_answer);
     g_test_add_func("/ui/menu-gone-before-destroy", test_menu_gone_before_destroy);
     g_test_add_func("/ui/columns-make-way", test_columns_make_way);
+    g_test_add_func("/ui/grid-paints-icons", test_grid_paints_icons);
     g_test_add_func("/ui/split-during-scroll", test_split_during_scroll);
     if (monkey)
         g_test_add_func("/ui/monkey", test_monkey);
