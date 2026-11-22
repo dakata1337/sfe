@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
 #ifdef __linux__
 #include <sys/prctl.h>
 #endif
@@ -747,26 +748,39 @@ static bool start_broadway(void)
     g_autofree char* program = g_find_program_in_path("broadwayd");
     if (program == NULL)
         return false;
-    int display = 100 + (int)(getpid() % 800);
-    g_autofree char* arg = g_strdup_printf(":%d", display);
-    char* argv[] = { program, arg, NULL };
-    int out = -1;
-    if (!g_spawn_async_with_pipes(NULL, argv, NULL, G_SPAWN_STDERR_TO_DEV_NULL | G_SPAWN_DO_NOT_REAP_CHILD,
-            die_with_parent, NULL, &broadway, NULL, &out, NULL, NULL))
-        return false;
-    GIOChannel* channel = g_io_channel_unix_new(out);
-    g_io_channel_set_close_on_unref(channel, TRUE);
-    char* line = NULL;
-    bool ready = g_io_channel_read_line(channel, &line, NULL, NULL, NULL) == G_IO_STATUS_NORMAL
-        && line != NULL && g_str_has_prefix(line, "Listening on");
-    g_free(line);
-    g_io_channel_unref(channel);
-    if (!ready) {
+    /* Runs at the same time (tools/ui-monkey.sh -j) may pick the same
+     * display: the next one is tried when broadwayd cannot listen there. */
+    int first = 100 + (int)(getpid() % 800);
+    for (int display = first; display < first + 20; display++) {
+        g_autofree char* arg = g_strdup_printf(":%d", display);
+        char* argv[] = { program, arg, NULL };
+        int out = -1;
+        if (!g_spawn_async_with_pipes(NULL, argv, NULL, G_SPAWN_STDERR_TO_DEV_NULL | G_SPAWN_DO_NOT_REAP_CHILD,
+                die_with_parent, NULL, &broadway, NULL, &out, NULL, NULL))
+            return false;
+        GIOChannel* channel = g_io_channel_unix_new(out);
+        g_io_channel_set_close_on_unref(channel, TRUE);
+        char* line = NULL;
+        bool ready = g_io_channel_read_line(channel, &line, NULL, NULL, NULL) == G_IO_STATUS_NORMAL
+            && line != NULL && g_str_has_prefix(line, "Listening on");
+        g_free(line);
+        g_io_channel_unref(channel);
+        /* It prints that line before binding its HTTP port (8080 + display),
+         * and exits when another one has it: still running a moment later? */
+        for (int i = 0; ready && i < 10; i++) {
+            g_usleep(20000);
+            if (waitpid(broadway, NULL, WNOHANG) == broadway) {
+                broadway = 0; /* exited (and reaped) */
+                ready = false;
+            }
+        }
+        if (ready) {
+            g_setenv("BROADWAY_DISPLAY", arg, TRUE);
+            return true;
+        }
         stop_broadway();
-        return false;
     }
-    g_setenv("BROADWAY_DISPLAY", arg, TRUE);
-    return true;
+    return false;
 }
 
 static void remove_tree(const char* path)

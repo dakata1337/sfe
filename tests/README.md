@@ -39,7 +39,13 @@ over GTK itself), and runs as long as you like:
 ```bash
 tools/ui-monkey.sh -b build -n 2000 -r 10    # 10 runs of 2000 actions
 tools/ui-monkey.sh -b build -s 8 -n 500      # replay seed 8
+tools/ui-monkey.sh -b build -n 2000 -r 48 -j 24   # 24 at a time
 ```
+
+With `-j` each run gets its own core, spread over every CCD (the order of
+`tools/fuzz.sh -p`, from `tools/cpus.sh`), and its own headless display. A
+monkey mostly waits for sfe to settle (about 20% of a core), so more jobs
+than cores is fine: beyond the CPU count, jobs share CPUs in the same order.
 
 On a failure it prints the seed and the last 40 actions (with the focused
 widget of each key). Timing still varies, so a replay may need a few tries.
