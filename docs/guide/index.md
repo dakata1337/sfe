@@ -97,7 +97,10 @@ instead of their icon, in the grid and the list.
 - Images are read directly. Videos, documents and other types use the
   thumbnailers installed on the system (`ffmpegthumbnailer`,
   `gsf-office-thumbnailer`, …); videos fall back to `ffmpeg` when no
-  thumbnailer is installed for them.
+  thumbnailer is installed for them. When `bwrap` (bubblewrap) is
+  installed, these programs run in a sandbox, as in GNOME: they see the
+  system read-only, have no network, and can write only their thumbnail,
+  so a crafted file cannot reach your files through a thumbnailer bug.
 - A file that cannot be thumbnailed (damaged, unsupported) keeps its icon
   and isn't tried again until it changes.
 - *Settings → Thumbnails* (or `[preview]` in `config.toml`) switches thumbnails off
@@ -279,7 +282,8 @@ it; going to another folder ends it.
   folders, never replacing a file that took its place), **Delete** /
   **Shift+Delete** removes items for good, and *Empty Trash…* in the menu of
   empty space clears it. Files trashed on other drives stay in that drive's
-  own trash folder (`.Trash-1000`).
+  own trash folder (`.Trash-1000`): the Trash view shows the home trash,
+  but **Ctrl+Z** brings them back and *Empty Trash…* empties those too.
 
 ### Custom commands
 

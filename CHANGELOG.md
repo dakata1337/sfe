@@ -18,6 +18,19 @@ release: see the top of that script).
 - A context menu item that closes the window (or the window closing while
   a menu was just closed) made sfe destroy the freed menu a moment later.
   Found by the UI monkey.
+- Undo of a trash on a USB stick or another partition works: sfe looked in
+  the home trash only and said the files were gone. Empty Trash also
+  empties the drives' trash folders. Undoing a big trash no longer reads
+  the whole trash once per file (minutes with a full trash).
+- Custom actions: a folder with `%f` in its name is passed as it is (the
+  `%f` in it was replaced too).
+- Thumbnailers run in a bubblewrap sandbox when `bwrap` works (as GNOME's
+  do): read-only system, no network, only their output folder writable.
+  A crafted file can no longer reach your files through a thumbnailer bug.
+- Big folders (100,000 files): the list view starts 3.5× faster and keeps
+  up with files being added (it measured every name after each change);
+  ending a search takes half as long; opening, sorting and new files in
+  the grid are 20–30% faster.
 
 ## 3.2.5
 
