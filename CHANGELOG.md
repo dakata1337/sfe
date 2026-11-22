@@ -31,6 +31,9 @@ release: see the top of that script).
   up with files being added (it measured every name after each change);
   ending a search takes half as long; opening, sorting and new files in
   the grid are 20–30% faster.
+- Folders on slow network drives no longer stall the window at every
+  change (each new file was checked on disk once more), and a thumbnail
+  that cannot be written (a full disk) leaves no temporary file behind.
 
 ## 3.2.5
 
