@@ -47,6 +47,7 @@ or let pacman take the files over:
 
 Build: meson, ninja, a C17 compiler, gtk3 and glib2 headers (tomlc17 is
 included in the source). Runtime: gtk3, glib2, udisks2 + polkit (mounting), xdg-utils
-(opening files) and ffmpeg (video thumbnails); archive tools, thumbnailers
+(opening files) and ffmpeg (video thumbnails); archive tools, thumbnailers,
+bubblewrap (runs the thumbnailers in a sandbox),
 xdg-desktop-portal (sfe as other programs' Open / Save dialog) and
 ntfs-3g (NTFS drives the kernel driver refuses) are optional. See the PKGBUILDs for the full, annotated list.
