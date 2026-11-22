@@ -485,6 +485,46 @@ static void test_menu_gone_before_destroy(void)
     settle(100);
 }
 
+static int visible_columns(SfeWindow* win)
+{
+    sfe_pane_focus_view(active(win));
+    GtkWidget* list = gtk_window_get_focus(GTK_WINDOW(win));
+    g_assert_true(GTK_IS_TREE_VIEW(list));
+    GList* columns = gtk_tree_view_get_columns(GTK_TREE_VIEW(list));
+    int n = 0;
+    for (GList* l = columns; l != NULL; l = l->next)
+        n += gtk_tree_view_column_get_visible(l->data);
+    g_list_free(columns);
+    return n;
+}
+
+/* The list view makes way for the widest name, measured from the longest
+ * names only (laying out all of them took most of a big folder's start):
+ * a long name among many short ones still counts, wherever it sorts. */
+static void test_columns_make_way(void)
+{
+    g_autofree char* dir = make_folder("columns");
+    for (int i = 0; i < 300; i++) {
+        g_autofree char* path = g_strdup_printf("%s/f%03d", dir, i);
+        g_file_set_contents(path, "x", 1, NULL);
+    }
+    SfeWindow* win = open_window(dir);
+    run(win, "view list");
+    int width = 600; /* just wide enough for all four with these names (the scale may differ) */
+    for (; width <= 2000; width += 100) {
+        gtk_window_resize(GTK_WINDOW(win), width, 500);
+        settle(300);
+        if (visible_columns(win) == 4) /* Name, Size, Modified, Type */
+            break;
+    }
+    g_assert_cmpint(visible_columns(win), ==, 4);
+    g_autofree char* last = g_strdup_printf("%s/zz the very last and much longer name.txt", dir);
+    g_file_set_contents(last, "x", 1, NULL);
+    settle(800);
+    g_assert_cmpint(visible_columns(win), <, 4);
+    close_window(win);
+}
+
 /* Every widget in the Settings window that edits an option (found by
  * their "sfe-option" data), with its internal children. */
 static void collect_options(GtkWidget* w, gpointer list)
@@ -1077,6 +1117,7 @@ int main(int argc, char** argv)
     g_test_add_func("/ui/new-window-list-view", test_new_window_list_view);
     g_test_add_func("/ui/question-gone-without-answer", test_question_gone_without_answer);
     g_test_add_func("/ui/menu-gone-before-destroy", test_menu_gone_before_destroy);
+    g_test_add_func("/ui/columns-make-way", test_columns_make_way);
     g_test_add_func("/ui/split-during-scroll", test_split_during_scroll);
     if (monkey)
         g_test_add_func("/ui/monkey", test_monkey);

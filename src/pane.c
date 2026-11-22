@@ -943,15 +943,37 @@ static void measure_columns(SfePane* self)
     g_autoptr(GHashTable) types = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
     int cap = text_width(layout, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN");
     int widest = 0;
+    /* Laying a name out costs far more than counting its characters (90%
+     * of a list view's start in a big folder): only the longest are laid
+     * out. shortcut: a name of fewer but wider letters can be missed;
+     * measure more if columns ever hide too late. */
+    enum { LONGEST = 64 };
+    char* longest[LONGEST] = { NULL };
+    glong lengths[LONGEST] = { 0 };
+    int shortest = 0; /* the slot to replace next */
 
     for (bool ok = model && gtk_tree_model_get_iter_first(model, &iter); ok; ok = gtk_tree_model_iter_next(model, &iter)) {
-        g_autofree char* name = NULL;
+        char* name = NULL;
         g_autoptr(GFileInfo) info = NULL;
         gtk_tree_model_get(model, &iter, SFE_COL_NAME, &name, SFE_COL_INFO, &info, -1);
-        if (name != NULL && widest < cap)
-            widest = MAX(widest, text_width(layout, name));
+        glong length = name ? g_utf8_strlen(name, -1) : 0;
+        if (name != NULL && (longest[shortest] == NULL || length > lengths[shortest])) {
+            g_free(longest[shortest]);
+            longest[shortest] = name;
+            lengths[shortest] = length;
+            for (int i = 0; i < LONGEST; i++) /* (only when a longer name comes) */
+                if (longest[i] == NULL || lengths[i] < lengths[shortest])
+                    shortest = i;
+        } else {
+            g_free(name);
+        }
         if (info != NULL)
             g_hash_table_add(types, sfe_dir_model_text(info, SFE_SORT_TYPE)); /* takes it */
+    }
+    for (int i = 0; i < LONGEST; i++) {
+        if (longest[i] != NULL && widest < cap)
+            widest = MAX(widest, text_width(layout, longest[i]));
+        g_free(longest[i]);
     }
     self->name_width = MIN(widest, cap);
 
