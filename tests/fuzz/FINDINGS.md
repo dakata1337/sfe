@@ -6,6 +6,31 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 
 ## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
 
+### M10. In the tests, worker threads ran GTK code (harness; sfe hardened)
+
+- **Found by:** `/ui/question-gone-without-answer` (M9) failing now and
+  then in `meson test` while the monkey loaded the machine: an abort in
+  `gtk_widget_get_frame_clock`; looped under load, 3 of 20 runs failed,
+  each differently (`g_object_ref` on a non-object, realize and map
+  assertions, a heap corruption in `calloc`).
+- **Cause:** the backtrace showed the file-exists question being built on
+  the copy's worker thread. Workers hand work to the main thread with
+  `g_main_context_invoke()`, which calls the function in place when the
+  calling thread can take the main context at that moment. sfe proper
+  never lets it: `g_application_run()` holds the context for the whole
+  run. The widget tests start sfe without it, so between two main loop
+  iterations a worker could take the context and run GTK code next to the
+  main thread. This probably explains several earlier one-off monkey
+  crashes with no sfe code at fault: the heap corruption ("free():
+  invalid size"), and the finalized or invalid objects in M8 and in the
+  first parallel runs.
+- **Fix:** the test holds the main context for its whole run, as
+  `g_application_run()` does. sfe no longer relies on that either: both
+  hand-offs (`fileops.c`, `thumbs.c`) go through `sfe_on_main_thread()`
+  (`util.c`), which always queues to the main loop.
+- **Test:** the M9 test looped under load: 0 of 20 failures with the sfe
+  change alone (3 of 20 before), and `meson test` with both.
+
 ### M9. A file-exists question closed with its window left the copy waiting
 
 - **Found by:** reading the code after a monkey run (seed 1178423665) that
@@ -42,7 +67,7 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 - "object_ref: assertion '!object_already_finalized'": once (seed
   1178423665, right after `action bookmark-selection`, 15 actions after
   the monkey destroyed a file-exists question, M9); 12 replays under gdb
-  did not hit it, so there is no backtrace.
+  did not hit it, so there is no backtrace. Probably M10.
 - The tooltip one is left open: it did not come back in 720,000 actions
   under gdb, nor in 1,080,000 more.
 

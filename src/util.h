@@ -15,3 +15,8 @@ char* sfe_contract_home(const char* path);
  * ".jpg", "a.tar.gz" -> "a" + ".tar.gz". Directories and dot files such as
  * ".bashrc" have no extension. Both results are newly allocated. */
 void sfe_split_extension(const char* name, bool is_dir, char** stem, char** ext);
+
+/* Runs `func` from `context`'s loop, never at once: g_main_context_invoke()
+ * calls it in place, on the calling (worker) thread, whenever no thread
+ * holds the context at that moment. */
+void sfe_on_main_thread(GMainContext* context, GSourceFunc func, gpointer data, GDestroyNotify notify);

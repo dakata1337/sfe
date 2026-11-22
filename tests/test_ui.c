@@ -1016,6 +1016,10 @@ int main(int argc, char** argv)
     app = sfe_application_new();
     g_application_set_flags(G_APPLICATION(app), g_application_get_flags(G_APPLICATION(app)) | G_APPLICATION_NON_UNIQUE);
     g_autoptr(GError) error = NULL;
+    /* Held for the whole run, as g_application_run() holds it: otherwise
+     * worker threads (copies, thumbnails) handing work to the main thread
+     * with g_main_context_invoke() can run it themselves (M10). */
+    g_main_context_acquire(NULL);
     if (!g_application_register(G_APPLICATION(app), NULL, &error)) /* runs startup: GTK, config, theme */
         g_error("cannot start: %s", error->message);
     g_application_hold(G_APPLICATION(app));

@@ -1,4 +1,5 @@
 #include "thumbs.h"
+#include "util.h"
 
 #include <errno.h>
 #include <glib/gstdio.h>
@@ -597,7 +598,7 @@ static void work(gpointer data, gpointer user_data)
             job->result = sfe_thumb_generate(q->thumbnailers, job->file, job->content_type, job->mtime, job->size,
                 NULL, NULL);
     }
-    g_main_context_invoke(q->context, deliver, job);
+    sfe_on_main_thread(q->context, deliver, job, NULL);
 }
 
 static gint newest_first(gconstpointer a, gconstpointer b, gpointer data)

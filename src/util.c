@@ -35,3 +35,12 @@ void sfe_split_extension(const char* name, bool is_dir, char** stem, char** ext)
     *stem = g_strndup(name, dot - name);
     *ext = g_strdup(dot);
 }
+
+void sfe_on_main_thread(GMainContext* context, GSourceFunc func, gpointer data, GDestroyNotify notify)
+{
+    GSource* source = g_idle_source_new();
+    g_source_set_priority(source, G_PRIORITY_DEFAULT);
+    g_source_set_callback(source, func, data, notify);
+    g_source_attach(source, context);
+    g_source_unref(source);
+}

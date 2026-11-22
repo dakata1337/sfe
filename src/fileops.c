@@ -107,9 +107,10 @@ static gboolean emit_progress(gpointer data)
     return G_SOURCE_REMOVE;
 }
 
+/* Runs `func` on the main thread (not at once, here in the worker). */
 static void invoke(SfeFileOp* op, GSourceFunc func)
 {
-    g_main_context_invoke_full(op->context, G_PRIORITY_DEFAULT, func, g_object_ref(op), g_object_unref);
+    sfe_on_main_thread(op->context, func, g_object_ref(op), g_object_unref);
 }
 
 /* Updates the status line; signals at most every REPORT_INTERVAL_US. */
