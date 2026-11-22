@@ -1,3 +1,4 @@
+#define _DEFAULT_SOURCE /* realpath() */
 #include "fileops.h"
 
 #include "archive.h"
@@ -330,10 +331,34 @@ static TargetMode resolve_target(SfeFileOp* op, GFile* src, GFile** dest)
     }
 }
 
+/* `file` with every symlink resolved, or NULL (not local, or missing). */
+static GFile* real_file(GFile* file)
+{
+    g_autofree char* path = g_file_get_path(file);
+    g_autofree char* real = path ? realpath(path, NULL) : NULL;
+    return real ? g_file_new_for_path(real) : NULL;
+}
+
+/* Whether `dest` lies inside the folder `src`, also when a symlink leads
+ * there: the paths alone missed `cp Projects Work` with Work -> Projects,
+ * and the copy then copied its own output until the paths grew too long
+ * (found by the UI monkey: 1351 levels). */
+static bool lies_inside(GFile* src, GFile* dest)
+{
+    if (g_file_has_prefix(dest, src))
+        return true;
+    if (file_type(src) != G_FILE_TYPE_DIRECTORY)
+        return false; /* (a symlink is copied as one: it cannot recurse) */
+    g_autoptr(GFile) parent = g_file_get_parent(dest);
+    g_autoptr(GFile) real_src = real_file(src);
+    g_autoptr(GFile) real_parent = parent ? real_file(parent) : NULL;
+    return real_src && real_parent && (g_file_equal(real_parent, real_src) || g_file_has_prefix(real_parent, real_src));
+}
+
 /* Refuses to put a folder inside itself. */
 static bool inside_itself(SfeFileOp* op, GFile* src, GFile* dest)
 {
-    if (!g_file_has_prefix(dest, src))
+    if (!lies_inside(src, dest))
         return false;
     ask(op, SFE_QUESTION_ERROR, src, NULL, "A folder cannot be copied or moved into itself.");
     return true;

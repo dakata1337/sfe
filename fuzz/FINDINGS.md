@@ -6,6 +6,24 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 
 ## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
 
+### M5. Copying a folder into a symlink to itself copied endlessly
+
+- **Found by:** the monkey, seed 3995308520 (passed, but left a folder
+  its cleanup could not delete): `Trash/files/sub (4)/f0/f0/…`, 1351
+  levels deep, until the path reached the 4096-byte limit.
+- **Cause:** the check that refuses a folder inside itself
+  (`inside_itself`, `src/fileops.c`) compared paths only. Reached through
+  a symlink, the destination looks unrelated: with `link -> f0`,
+  `:cp f0 link` puts `f0` inside itself, and the copy then copies its own
+  output level by level. In real use: `cp Projects Work` with
+  `Work -> ~/Projects` (or a paste or drop there) fills the disk with
+  nested copies until the paths are too long.
+- **Fix:** the check also compares the real locations (symlinks resolved
+  with `realpath`) of the source folder and the destination's folder. A
+  symlink as the source is still allowed (it is copied as a link).
+- **Test:** `/fileops/into-itself-through-symlink` (copy and move; fails
+  without the fix).
+
 ### M4. Cursor keys in a view showing a message moved the focus out of sight
 
 - **Found by:** the monkey, seed 4146712566, at action 193

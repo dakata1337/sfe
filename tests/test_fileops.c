@@ -1,6 +1,8 @@
+#define _DEFAULT_SOURCE /* symlink() */
 #include "fileops.h"
 
 #include <glib/gstdio.h>
+#include <unistd.h>
 
 /* ------------------------------------------------------------------------ */
 /* Helpers                                                                   */
@@ -233,6 +235,36 @@ static void test_move_and_delete(void)
     remove_root(root);
 }
 
+/* Found by the UI monkey: into a symlink to itself (Work -> Projects), a
+ * folder's copy copied its own output until the paths were too long. */
+static void test_into_itself_through_symlink(void)
+{
+    g_autofree char* root = make_root();
+    write_file(root, "projects/a.txt", "A");
+    g_autofree char* target = path(root, "projects");
+    g_autofree char* link = path(root, "work");
+    g_assert_cmpint(symlink(target, link), ==, 0);
+
+    g_autoptr(GFile) projects = file_at(root, "projects");
+    g_autoptr(GFile) work = file_at(root, "work");
+    for (int kind = SFE_OP_COPY; kind <= SFE_OP_MOVE; kind++) {
+        g_autoptr(GList) list = one(projects);
+        Run run = run_op(kind, list, work, SFE_ANSWER_SKIP, false);
+        g_assert_cmpint(run.questions, ==, 1);
+        g_assert_cmpint(run.last_kind, ==, SFE_QUESTION_ERROR);
+        g_assert_false(exists(root, "projects/projects"));
+        g_assert_true(exists(root, "projects/a.txt"));
+    }
+
+    /* The symlink itself can go into its target (it is copied as a link). */
+    g_autoptr(GList) the_link = one(work);
+    Run run = run_op(SFE_OP_COPY, the_link, projects, SFE_ANSWER_SKIP, false);
+    g_assert_cmpint(run.questions, ==, 0);
+    g_autofree char* copied = path(root, "projects/work");
+    g_assert_true(g_file_test(copied, G_FILE_TEST_IS_SYMLINK));
+    remove_root(root);
+}
+
 static void test_cancel_from_question(void)
 {
     g_autofree char* root = make_root();
@@ -284,5 +316,6 @@ int main(int argc, char** argv)
     g_test_add_func("/fileops/merge-apply-to-all", test_merge_apply_to_all);
     g_test_add_func("/fileops/move-and-delete", test_move_and_delete);
     g_test_add_func("/fileops/cancel", test_cancel_from_question);
+    g_test_add_func("/fileops/into-itself-through-symlink", test_into_itself_through_symlink);
     return g_test_run();
 }
