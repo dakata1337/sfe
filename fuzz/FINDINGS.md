@@ -77,6 +77,10 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   the input that cannot happen (a user's keys go to the menu), and the next
   key reached the closed view's menu (`WIDGET_REALIZED_FOR_EVENT`). While a
   menu or other grab is active, the monkey now only presses keys.
+- After `:q` closed the last window, the monkey reopened it and waited for
+  files to show; by then its folder was unreadable (the Properties dialog)
+  or empty, so it timed out (seed 3419482463, action 1262). Reopening now
+  restores the folder's permissions and waits only for the window.
 
 ## Round 8 (2026-11-22, 14400 s, all 11 targets with `-p`)
 

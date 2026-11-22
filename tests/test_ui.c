@@ -664,7 +664,11 @@ static SfeWindow* monkey_tidy(SfeWindow* main, const char* dir, bool close_dialo
     g_list_free_full(tops, g_object_unref);
     if (!main_alive) { /* :q on the last view closed it */
         monkey_note("(window closed: a new one)");
-        main = open_window(dir);
+        g_chmod(dir, 0755); /* (the folder may be empty, or unreadable after the Properties dialog) */
+        g_autoptr(GFile) file = g_file_new_for_path(dir);
+        main = sfe_window_new(app, file);
+        gtk_window_present(GTK_WINDOW(main));
+        WAIT_UNTIL(gtk_widget_get_mapped(GTK_WIDGET(main)));
     }
     return main;
 }
