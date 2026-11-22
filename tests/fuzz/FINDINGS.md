@@ -6,7 +6,25 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 
 ## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
 
-### M8. Two rare GTK criticals: one from the headless display, one open
+### M9. A file-exists question closed with its window left the copy waiting
+
+- **Found by:** reading the code after a monkey run (seed 1178423665) that
+  closed this question by destroying it and crashed 15 actions later
+  ("object_ref: assertion '!object_already_finalized'", not reproduced in
+  12 replays; see M8).
+- **Cause:** the question ("“a.txt” already exists", or a failed step)
+  answers the copy only from its buttons (`response`). It goes with its
+  window (destroy with parent) without one: the copy then waited for an
+  answer for ever and its reference leaked. Closing the window cancels
+  the window's jobs, so a user mostly met the leak; the monkey, closing
+  the dialog alone, left the copy hanging in the bar.
+- **Fix:** `opsbar.c` answers Cancel when the dialog is destroyed (a second
+  answer is ignored) and drops its reference there.
+- **Test:** `/ui/question-gone-without-answer`: paste onto an existing
+  file, destroy the question; the copy must end, the file untouched. Fails
+  without the fix (the bar keeps the job).
+
+### M8. Rare criticals: one from the headless display, two open
 
 - "gtk_widget_get_preferred_height_for_width: assertion 'width >= 0'":
   twice in one gdb batch (120 runs of 6000 actions), then once in 72 runs
@@ -21,6 +39,10 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   actions. sfe has no tooltip code of its own; GTK's tooltips still
   pointed at a destroyed widget. Keyboard tooltip mode (Ctrl+F1) with the
   focused pane closed was probed and is fine.
+- "object_ref: assertion '!object_already_finalized'": once (seed
+  1178423665, right after `action bookmark-selection`, 15 actions after
+  the monkey destroyed a file-exists question, M9); 12 replays under gdb
+  did not hit it, so there is no backtrace.
 - The tooltip one is left open: it did not come back in 720,000 actions
   under gdb, nor in 1,080,000 more.
 

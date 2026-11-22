@@ -73,8 +73,17 @@ static void on_question_response(GtkDialog* dialog, int response, gpointer data)
 
     if (response < 0) /* closed */
         response = SFE_ANSWER_CANCEL;
-    gtk_widget_destroy(GTK_WIDGET(dialog));
     sfe_file_op_answer(op, response, apply);
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+}
+
+/* Also when it goes without an answer (with its window: destroy with
+ * parent): the operation would wait forever. A second answer is ignored. */
+static void on_question_destroy(GtkWidget* dialog, gpointer data)
+{
+    (void)dialog;
+    SfeFileOp* op = data;
+    sfe_file_op_answer(op, SFE_ANSWER_CANCEL, false);
     g_object_unref(op);
 }
 
@@ -121,7 +130,8 @@ static void on_question(SfeFileOp* op, int kind, GFile* src, GFile* dest, const 
     gtk_box_pack_start(GTK_BOX(gtk_message_dialog_get_message_area(GTK_MESSAGE_DIALOG(dialog))), all, FALSE, FALSE, 0);
     g_object_set_data(G_OBJECT(dialog), "sfe-all", all);
 
-    g_signal_connect(dialog, "response", G_CALLBACK(on_question_response), g_object_ref(op));
+    g_signal_connect(dialog, "response", G_CALLBACK(on_question_response), op);
+    g_signal_connect(dialog, "destroy", G_CALLBACK(on_question_destroy), g_object_ref(op));
     gtk_widget_show_all(dialog);
 }
 

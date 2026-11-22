@@ -12,6 +12,9 @@ release: see the top of that script).
 - With list as the default view, a new window showed the grid until its
   files loaded, and a key pressed in that moment was lost. Found by the UI
   monkey.
+- Closing a window while it asked about a file that already exists left
+  that copy waiting for an answer in the background. Found by the UI
+  monkey.
 
 ## 3.2.5
 

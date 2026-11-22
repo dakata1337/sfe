@@ -26,11 +26,14 @@ one_run() {
         rm -f "$log"
         return 0
     fi
-    if [ $status = 137 ] || grep -q "broadwayd killed by signal 9" "$log"; then
+    # (broadwayd also complains when a run aborts: sfe's failure comes first)
+    local own=0
+    grep -q -E "^not ok|\*\*\* monkey: signal|AddressSanitizer|runtime error" "$log" && own=1
+    if [ $own = 0 ] && { [ $status = 137 ] || grep -q "broadwayd killed by signal 9" "$log"; }; then
         echo "seed $s: killed from outside (SIGKILL), not counted (log: $log)"
         return 0
     fi
-    if grep -q "can't write to client" "$log"; then
+    if [ $own = 0 ] && grep -q "can't write to client" "$log"; then
         echo "seed $s: broadwayd dropped the display (its own bug, under load), not counted (log: $log)"
         return 0
     fi

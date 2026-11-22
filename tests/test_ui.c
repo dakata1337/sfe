@@ -11,6 +11,7 @@
 #include "cmdline.h"
 #include "app.h"
 #include "commands.h"
+#include "opsbar.h"
 #include "pane.h"
 #include "prefs.h"
 #include "split.h"
@@ -421,6 +422,51 @@ static void test_new_window_list_view(void)
     cfg = sfe_application_dup_config(app);
     cfg->view = was;
     sfe_application_set_config(app, cfg);
+}
+
+static void find_ops_bar(GtkWidget* w, gpointer found)
+{
+    if (SFE_IS_OPS_BAR(w))
+        *(GtkWidget**)found = w;
+    else if (GTK_IS_CONTAINER(w))
+        gtk_container_forall(GTK_CONTAINER(w), find_ops_bar, found);
+}
+
+static GtkWidget* message_dialog(void)
+{
+    GList* tops = gtk_window_list_toplevels();
+    GtkWidget* found = NULL;
+    for (GList* l = tops; l != NULL; l = l->next)
+        if (GTK_IS_MESSAGE_DIALOG(l->data) && gtk_widget_get_mapped(l->data))
+            found = l->data;
+    g_list_free(tops);
+    return found;
+}
+
+/* Found by the UI monkey: the question about a file that already exists,
+ * gone without an answer (its window closed: it goes with it), left the
+ * copy waiting for one for ever (and its reference to the copy leaked). */
+static void test_question_gone_without_answer(void)
+{
+    g_autofree char* dir = make_folder("question");
+    g_autofree char* there = g_build_filename(dir, "sub", "a.txt", NULL);
+    g_file_set_contents(there, "other", -1, NULL);
+    SfeWindow* win = open_window(dir);
+    run(win, "yank a.txt");
+    run(win, "cd sub");
+    WAIT_UNTIL(n_entries(active(win)) > 0);
+    run(win, "paste");
+    WAIT_UNTIL(message_dialog() != NULL);
+    gtk_widget_destroy(message_dialog());
+    settle(800); /* (past the delay before the bar shows a job) */
+    GtkWidget* bar = NULL;
+    find_ops_bar(GTK_WIDGET(win), &bar);
+    g_assert_nonnull(bar);
+    g_assert_false(gtk_revealer_get_reveal_child(GTK_REVEALER(bar))); /* the copy ended */
+    g_autofree char* text = NULL;
+    g_file_get_contents(there, &text, NULL, NULL);
+    g_assert_cmpstr(text, ==, "other"); /* as with Cancel */
+    close_window(win);
 }
 
 /* Every widget in the Settings window that edits an option (found by
@@ -985,6 +1031,7 @@ int main(int argc, char** argv)
     g_test_add_func("/ui/open-with-gone-file", test_open_with_gone_file);
     g_test_add_func("/ui/keys-in-message-view", test_keys_in_message_view);
     g_test_add_func("/ui/new-window-list-view", test_new_window_list_view);
+    g_test_add_func("/ui/question-gone-without-answer", test_question_gone_without_answer);
     g_test_add_func("/ui/split-during-scroll", test_split_during_scroll);
     if (monkey)
         g_test_add_func("/ui/monkey", test_monkey);
