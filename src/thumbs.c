@@ -103,8 +103,10 @@ static bool save(GdkPixbuf* pixbuf, const char* path, const char* uri, gint64 mt
     g_autofree char* size_text = g_strdup_printf("%" G_GUINT64_FORMAT, size);
     char* keys[] = { "tEXt::Thumb::URI", "tEXt::Thumb::MTime", "tEXt::Thumb::Size", "tEXt::Software", NULL };
     char* values[] = { (char*)uri, mtime_text, size_text, "sfe", NULL };
-    if (!gdk_pixbuf_savev(pixbuf, tmp, "png", keys, values, error))
+    if (!gdk_pixbuf_savev(pixbuf, tmp, "png", keys, values, error)) {
+        g_unlink(tmp); /* (a disk full: no half-written files left behind) */
         return false;
+    }
     g_chmod(tmp, 0600);
     if (g_rename(tmp, path) != 0) {
         g_unlink(tmp);
