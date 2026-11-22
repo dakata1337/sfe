@@ -28,6 +28,7 @@ enum {
     SFE_COL_INFO, /* GFileInfo* */
     SFE_COL_NAME, /* display name */
     SFE_COL_IS_DIR, /* gboolean */
+    SFE_COL_SORT, /* what rows are sorted by (dirmodel.c's own, on the info) */
     SFE_N_COLUMNS,
 };
 

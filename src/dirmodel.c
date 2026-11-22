@@ -9,7 +9,6 @@
 #include <string.h>
 
 #define BATCH_SIZE 256
-#define COLLATE_KEY_ATTR "sfe::collate-key" /* in-memory only, never written */
 
 /* One directory's contents, shared by every pane showing it: the files, the
  * rows without search or file-dialog filter, the thumbnails and the change
@@ -126,6 +125,40 @@ static void thumb_unref(gpointer value)
 {
     if (value != NO_THUMB)
         g_object_unref(value);
+}
+
+/* What a row is sorted by, kept on its info: the sort compares rows about
+ * n log n times, and reading the info from the store and its attributes
+ * by name each time was a fifth of opening a big folder. */
+typedef struct {
+    GFileInfo* info; /* the one it is on (not referenced) */
+    char* collate; /* name, for sorting */
+    const char* type; /* content type (the info's) */
+    guint64 size, mtime;
+    bool dir;
+} SortKey;
+
+static void sort_key_free(gpointer p)
+{
+    SortKey* k = p;
+    g_free(k->collate);
+    g_free(k);
+}
+
+/* Once the info is complete (its name and type do not change after); kept
+ * when it has one (rows point to it). */
+static void add_sort_key(GFileInfo* info)
+{
+    if (g_object_get_data(G_OBJECT(info), "sfe-sort-key") != NULL)
+        return;
+    SortKey* k = g_new0(SortKey, 1);
+    k->info = info;
+    k->collate = g_utf8_collate_key_for_filename(g_file_info_get_display_name(info), -1);
+    k->type = g_file_info_get_attribute_string(info, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE);
+    k->size = (guint64)g_file_info_get_size(info);
+    k->mtime = g_file_info_get_attribute_uint64(info, G_FILE_ATTRIBUTE_TIME_MODIFIED);
+    k->dir = g_file_info_get_file_type(info) == G_FILE_TYPE_DIRECTORY;
+    g_object_set_data_full(G_OBJECT(info), "sfe-sort-key", k, sort_key_free);
 }
 
 static bool own_rows(SfeDirModel* self)
@@ -277,12 +310,13 @@ static void row_changed(GtkListStore* store, GtkTreeIter* iter)
 static void store_row(Folder* f, GtkListStore* store, GtkTreeIter* iter, bool insert, GFileInfo* info)
 {
     g_autoptr(GFile) file = g_file_resolve_relative_path(f->dir, g_file_info_get_name(info)); /* "sub/x.txt" too */
-    int columns[] = { SFE_COL_FILE, SFE_COL_INFO, SFE_COL_NAME, SFE_COL_IS_DIR };
+    int columns[] = { SFE_COL_FILE, SFE_COL_INFO, SFE_COL_NAME, SFE_COL_IS_DIR, SFE_COL_SORT };
     GValue values[G_N_ELEMENTS(columns)] = { G_VALUE_INIT };
     g_value_set_object(g_value_init(&values[0], G_TYPE_FILE), file);
     g_value_set_object(g_value_init(&values[1], G_TYPE_FILE_INFO), info);
     g_value_set_string(g_value_init(&values[2], G_TYPE_STRING), g_file_info_get_display_name(info));
     g_value_set_boolean(g_value_init(&values[3], G_TYPE_BOOLEAN), info_is_dir(info));
+    g_value_set_pointer(g_value_init(&values[4], G_TYPE_POINTER), g_object_get_data(G_OBJECT(info), "sfe-sort-key"));
 
     if (insert)
         gtk_list_store_insert_with_valuesv(store, iter, -1, columns, values, G_N_ELEMENTS(columns));
@@ -377,8 +411,7 @@ static GList* shown_by(Folder* f)
 static void add_or_update(Folder* f, GFileInfo* info)
 {
     const char* name = g_file_info_get_name(info);
-    g_autofree char* collate = g_utf8_collate_key_for_filename(g_file_info_get_display_name(info), -1);
-    g_file_info_set_attribute_string(info, COLLATE_KEY_ATTR, collate);
+    add_sort_key(info);
 
     g_hash_table_replace(f->infos, g_strdup(name), g_object_ref(info));
     if (!f->building)
@@ -429,14 +462,11 @@ static void refresh_icons(Folder* f)
 /* Sorting                                                                   */
 /* ------------------------------------------------------------------------ */
 
-/* The store keeps its own reference, so the returned info is borrowed. */
-static GFileInfo* row_info(GtkTreeModel* model, GtkTreeIter* iter)
+static SortKey* row_key(GtkTreeModel* model, GtkTreeIter* iter)
 {
-    GFileInfo* info = NULL;
-    gtk_tree_model_get(model, iter, SFE_COL_INFO, &info, -1);
-    if (info != NULL)
-        g_object_unref(info);
-    return info;
+    SortKey* key = NULL;
+    gtk_tree_model_get(model, iter, SFE_COL_SORT, &key, -1);
+    return key;
 }
 
 static int compare_numbers(guint64 a, guint64 b)
@@ -450,55 +480,52 @@ static int score_of(GHashTable* scores, GFileInfo* info)
 }
 
 /* `scores` while searching (the best match comes first, whatever the sort). */
-static int compare_infos(Folder* f, GHashTable* scores, GFileInfo* a, GFileInfo* b)
+static int compare_keys(Folder* f, GHashTable* scores, const SortKey* a, const SortKey* b)
 {
     int result = 0;
 
+    if (a == NULL || b == NULL) /* (a row being written) */
+        return (a != NULL) - (b != NULL);
     if (scores != NULL) {
-        result = compare_numbers(score_of(scores, b), score_of(scores, a));
+        result = compare_numbers(score_of(scores, b->info), score_of(scores, a->info));
         if (result != 0)
             return f->sort_order == GTK_SORT_DESCENDING ? -result : result;
     }
 
-    if (f->dirs_first && info_is_dir(a) != info_is_dir(b)) {
+    if (f->dirs_first && a->dir != b->dir) {
         /* Directories stay on top in both sort orders. The store inverts
          * our result for descending order, so pre-invert it here. */
-        result = info_is_dir(a) ? -1 : 1;
+        result = a->dir ? -1 : 1;
         return f->sort_order == GTK_SORT_DESCENDING ? -result : result;
     }
 
     switch (f->sort_key) {
     case SFE_SORT_SIZE:
-        result = compare_numbers(g_file_info_get_size(a), g_file_info_get_size(b));
+        result = compare_numbers(a->size, b->size);
         break;
     case SFE_SORT_MODIFIED:
-        result = compare_numbers(
-            g_file_info_get_attribute_uint64(a, G_FILE_ATTRIBUTE_TIME_MODIFIED),
-            g_file_info_get_attribute_uint64(b, G_FILE_ATTRIBUTE_TIME_MODIFIED));
+        result = compare_numbers(a->mtime, b->mtime);
         break;
     case SFE_SORT_TYPE:
-        result = g_strcmp0(
-            g_file_info_get_attribute_string(a, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE),
-            g_file_info_get_attribute_string(b, G_FILE_ATTRIBUTE_STANDARD_FAST_CONTENT_TYPE));
+        result = g_strcmp0(a->type, b->type);
         break;
     case SFE_SORT_NAME:
         break;
     }
     if (result == 0)
-        result = g_strcmp0(g_file_info_get_attribute_string(a, COLLATE_KEY_ATTR),
-            g_file_info_get_attribute_string(b, COLLATE_KEY_ATTR));
+        result = g_strcmp0(a->collate, b->collate);
     return result;
 }
 
 static int compare_folder_rows(GtkTreeModel* model, GtkTreeIter* ia, GtkTreeIter* ib, gpointer data)
 {
-    return compare_infos(data, NULL, row_info(model, ia), row_info(model, ib));
+    return compare_keys(data, NULL, row_key(model, ia), row_key(model, ib));
 }
 
 static int compare_own_rows(GtkTreeModel* model, GtkTreeIter* ia, GtkTreeIter* ib, gpointer data)
 {
     SfeDirModel* self = data;
-    return compare_infos(self->folder, self->query ? self->scores : NULL, row_info(model, ia), row_info(model, ib));
+    return compare_keys(self->folder, self->query ? self->scores : NULL, row_key(model, ia), row_key(model, ib));
 }
 
 static void sort_store(Folder* f, GtkListStore* store)
@@ -517,7 +544,7 @@ static void sort_store(Folder* f, GtkListStore* store)
 static GtkListStore* new_store(void)
 {
     return gtk_list_store_new(SFE_N_COLUMNS,
-        G_TYPE_FILE, G_TYPE_FILE_INFO, G_TYPE_STRING, G_TYPE_BOOLEAN);
+        G_TYPE_FILE, G_TYPE_FILE_INFO, G_TYPE_STRING, G_TYPE_BOOLEAN, G_TYPE_POINTER);
 }
 
 static GHashTable* new_rows(void)
@@ -956,10 +983,9 @@ static void walk_thread(GTask* task, gpointer source, gpointer data, GCancellabl
                 continue;
             }
             g_autofree char* display = g_filename_display_name(path);
-            g_autofree char* collate = g_utf8_collate_key_for_filename(display, -1);
             g_file_info_set_name(info, path);
             g_file_info_set_display_name(info, display);
-            g_file_info_set_attribute_string(info, COLLATE_KEY_ATTR, collate);
+            add_sort_key(info);
             g_ptr_array_add(found, info);
             g_free(path);
         }

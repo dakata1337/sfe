@@ -171,6 +171,47 @@ static void test_shared(void)
 /* Recursive search: files in the folders below match by their path, rows
  * carry the right file; hidden folders and the folder's own files are not
  * walked twice. */
+/* Sorting: by each key, folders first in both orders, names as the tie. */
+static void test_sort(void)
+{
+    g_autofree char* path = g_dir_make_tmp("sfe-dirmodel-XXXXXX", NULL);
+    const struct { const char* name; const char* text; gint64 age; } files[] = {
+        { "b.txt", "xx", 300 }, { "a.png", "xxxx", 100 }, { "c.c", "x", 200 },
+    };
+    for (size_t i = 0; i < G_N_ELEMENTS(files); i++) {
+        g_autofree char* file = g_build_filename(path, files[i].name, NULL);
+        g_file_set_contents(file, files[i].text, -1, NULL);
+        g_autoptr(GFile) f = g_file_new_for_path(file);
+        guint64 when = (guint64)(g_get_real_time() / G_USEC_PER_SEC - files[i].age);
+        g_file_set_attribute_uint64(f, G_FILE_ATTRIBUTE_TIME_MODIFIED, when, G_FILE_QUERY_INFO_NONE, NULL, NULL);
+    }
+    g_autofree char* sub = g_build_filename(path, "zdir", NULL);
+    g_mkdir(sub, 0755);
+    g_autoptr(GFile) dir = g_file_new_for_path(path);
+    Counts c = { 0 };
+    SfeDirModel* model = open_model(dir, &c);
+
+    struct { SfeSortKey key; GtkSortType order; const char* want; } cases[] = {
+        { SFE_SORT_NAME, GTK_SORT_ASCENDING, "zdir a.png b.txt c.c" },
+        { SFE_SORT_NAME, GTK_SORT_DESCENDING, "zdir c.c b.txt a.png" },
+        { SFE_SORT_SIZE, GTK_SORT_ASCENDING, "zdir c.c b.txt a.png" },
+        { SFE_SORT_MODIFIED, GTK_SORT_ASCENDING, "zdir b.txt c.c a.png" }, /* oldest first */
+    };
+    for (size_t i = 0; i < G_N_ELEMENTS(cases); i++) {
+        sfe_dir_model_set_sort(model, cases[i].key, cases[i].order, true);
+        GtkTreeModel* m = sfe_dir_model_get_model(model);
+        g_autoptr(GString) order = g_string_new(NULL);
+        GtkTreeIter iter;
+        for (bool ok = gtk_tree_model_get_iter_first(m, &iter); ok; ok = gtk_tree_model_iter_next(m, &iter)) {
+            g_autofree char* name = NULL;
+            gtk_tree_model_get(m, &iter, SFE_COL_NAME, &name, -1);
+            g_string_append_printf(order, "%s%s", order->len ? " " : "", name);
+        }
+        g_assert_cmpstr(order->str, ==, cases[i].want);
+    }
+    g_object_unref(model);
+}
+
 static void test_recursive(void)
 {
     ((SfeConfig*)sfe_config())->search_recursive = true;
@@ -290,6 +331,7 @@ int main(int argc, char** argv)
         return 77; /* skipped */
     }
     g_test_add_func("/dirmodel/shared", test_shared);
+    g_test_add_func("/dirmodel/sort", test_sort);
     g_test_add_func("/dirmodel/recursive", test_recursive);
     g_test_add_func("/dirmodel/cache", test_cache);
     return g_test_run();
