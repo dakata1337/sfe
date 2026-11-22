@@ -241,6 +241,12 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   client" twice and then aborted on its own assertion (`client_free`:
   `client->disconnect_idle == 0`), taking the run's display. A broadwayd
   bug; the script reports these runs apart too.
+- Once in 72 runs of 15000 actions (seed 181777084): GTK aborted in
+  `ensure_surface_for_gicon` because its sandboxed image loader (glycin)
+  failed to load even the fallback icon (`image-missing.svg`: "Remote
+  error: zbus i/o error"). The same loader timeout under load as the
+  tolerated "Could not load a pixbuf" warning, but in a place where GTK
+  treats it as an assertion, which cannot be tolerated. Not sfe.
 
 ## Round 8 (2026-11-22, 14400 s, all 11 targets with `-p`)
 
