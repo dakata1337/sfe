@@ -14,7 +14,8 @@ set -euo pipefail
 source "$(dirname "$0")/cpus.sh"
 
 # One run; prints one line (and the failure's details). A run killed from
-# outside (SIGKILL to it or its display) is reported but not a failure.
+# outside (SIGKILL to it or its display), or whose display broadwayd
+# dropped, is reported but not a failure (tests/README.md, Monkey).
 one_run() {
     local s=$1 cpu=$2
     local log=$build/ui-monkey-$s.log pin=() status=0
@@ -27,6 +28,10 @@ one_run() {
     fi
     if [ $status = 137 ] || grep -q "broadwayd killed by signal 9" "$log"; then
         echo "seed $s: killed from outside (SIGKILL), not counted (log: $log)"
+        return 0
+    fi
+    if grep -q "can't write to client" "$log"; then
+        echo "seed $s: broadwayd dropped the display (its own bug, under load), not counted (log: $log)"
         return 0
     fi
     echo "seed $s: FAILED (log: $log)"

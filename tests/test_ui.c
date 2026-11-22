@@ -736,15 +736,30 @@ static SfeWindow* monkey_tidy(SfeWindow* main, const char* dir, bool close_dialo
     return main;
 }
 
-/* Warnings stay fatal, except two of GTK's own: about icon loading (its
+/* The headless display's monitor: 0 x 0 until a browser connects. */
+static bool monitor_empty(void)
+{
+    GdkMonitor* monitor = gdk_display_get_monitor(gdk_display_get_default(), 0);
+    GdkRectangle geometry = { 0 };
+    if (monitor != NULL)
+        gdk_monitor_get_geometry(monitor, &geometry);
+    return geometry.width <= 0 || geometry.height <= 0;
+}
+
+/* Warnings stay fatal, except some of GTK's own: about icon loading (its
  * image loaders run in a sandbox with a timeout, which a busy machine can
- * miss), and its emoji chooser (Ctrl+. in a text field) freeing data it had
- * not loaded yet when its dialog closes quickly (FINDINGS.md, M6). sfe's own
- * GVariants all go through g_autoptr, which takes NULL. */
+ * miss); its emoji chooser (Ctrl+. in a text field) freeing data it had not
+ * loaded yet when its dialog closes quickly (FINDINGS.md, M6; sfe's own
+ * GVariants all go through g_autoptr, which takes NULL); and a menu fitted
+ * into the headless display's empty monitor getting a negative width (M8),
+ * which no real screen gives. */
 static gboolean monkey_fatal(const char* domain, GLogLevelFlags level, const char* message, gpointer data)
 {
     (void)level, (void)data;
     if (g_strcmp0(domain, "GLib") == 0 && strstr(message, "g_variant_unref: assertion 'value != NULL'") != NULL)
+        return FALSE;
+    if (g_strcmp0(domain, "Gtk") == 0 && strstr(message, "get_preferred_height_for_width: assertion 'width >= 0'") != NULL
+        && monitor_empty())
         return FALSE;
     return strstr(message, "Could not load a pixbuf from icon theme") == NULL;
 }

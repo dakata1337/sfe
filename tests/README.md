@@ -52,7 +52,10 @@ gives it back only when the run ends, so mind jobs x steps (24 jobs of
 killed with SIGKILL from outside the test (not for memory: the kernel's
 OOM count stays 0, and nothing in the test sends it; seen about once in 40
 runs of 10000 actions with `-j 24`); the script reports such a run as
-killed from outside and does not count it as a failure.
+killed from outside and does not count it as a failure. Likewise when
+broadwayd itself drops the display ("can't write to client", then its own
+assertion in `client_free`): a broadwayd bug, seen with the slower ASan
+build under full load.
 
 On a failure it prints the seed and the last 40 actions (with the focused
 widget of each key). Timing still varies, so a replay may need a few tries.

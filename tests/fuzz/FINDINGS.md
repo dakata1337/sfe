@@ -6,20 +6,23 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 
 ## UI monkey (2026-11-21, `tools/ui-monkey.sh`)
 
-### M8. Two GTK criticals seen too rarely to trace (open)
+### M8. Two rare GTK criticals: one from the headless display, one open
 
 - "gtk_widget_get_preferred_height_for_width: assertion 'width >= 0'":
-  twice in one gdb batch (120 runs of 6000 actions), never since. The
-  stack is all GTK: a text field's context menu (the Menu key) being
-  placed (`gtk_menu_popup_at_rect`) and sized with a negative width;
-  probably menu placement on the headless display, which has no real
-  monitor geometry.
+  twice in one gdb batch (120 runs of 6000 actions), then once in 72 runs
+  of 15000 (seed 4029520165: the Menu key in Settings, Keys). The stack is
+  all GTK: a context menu being placed (`gtk_menu_popup_at_rect`) and
+  fitted into the monitor. The headless display's monitor is 0 x 0 (its
+  size comes from a browser, and none connects), so a menu away from the
+  corner gets a negative width; no real screen does that. **Harness:**
+  the monkey tolerates this critical while the monitor is empty.
 - "gtk_widget_get_has_tooltip: assertion 'GTK_IS_WIDGET (widget)'": once
   (under strace, so no action log or backtrace) in about 1.2 million
   actions. sfe has no tooltip code of its own; GTK's tooltips still
   pointed at a destroyed widget. Keyboard tooltip mode (Ctrl+F1) with the
   focused pane closed was probed and is fine.
-- Left open: neither came back in 720,000 actions under gdb afterwards.
+- The tooltip one is left open: it did not come back in 720,000 actions
+  under gdb, nor in 1,080,000 more.
 
 ### M7. With list as the default view, a new window's first key went nowhere
 
@@ -169,6 +172,11 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   any SIGKILL: something outside the test (not found; tracing other
   processes' signals needs root). `tools/ui-monkey.sh` reports these runs
   as killed from outside and does not count them.
+- With broadwayd's errors now in the log: on the ASan build under full
+  load (2 of 48 runs of 6000 actions), broadwayd printed "can't write to
+  client" twice and then aborted on its own assertion (`client_free`:
+  `client->disconnect_idle == 0`), taking the run's display. A broadwayd
+  bug; the script reports these runs apart too.
 
 ## Round 8 (2026-11-22, 14400 s, all 11 targets with `-p`)
 
