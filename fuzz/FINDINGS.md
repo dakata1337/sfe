@@ -57,9 +57,19 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
 - **Where:** inside GTK while handling events; no sfe function is on the
   stack. sfe's own disconnects (`split.c` one-shot size handler,
   `prefs.c` config handler on destroy) were read and look correct.
-- **Status:** open. Needs GTK's debug symbols to see which GTK code
-  disconnects, and whether it happens on Wayland too or only on the
-  headless broadway display.
+- **Investigated (2026-11-22):** the code from when it was found
+  (`ace90ad`) still hits it on the first replay of seed 8. No debug
+  symbols exist for this system's GTK 3 and GLib: they are Artix's own
+  builds, which neither debuginfod.archlinux.org nor
+  debuginfod.artixlinux.org knows, and Artix has no debug packages. A gdb
+  breakpoint on `g_signal_handler_disconnect` with handler 0 (to print the
+  object's type without symbols) slows every disconnect enough that the
+  bug no longer happens: 6 runs clean. It depends on timing.
+- **Status:** not seen on the current code: the same seed now takes another
+  path (M2–M4 fixes, harness changes), and about 60,000 random actions
+  since have not hit it. Left open as a probable GTK-internal race; finding
+  it would need GTK 3.24.52 built with symbols (no install needed:
+  `LD_LIBRARY_PATH`).
 
 ### Harness mistakes (not sfe)
 
