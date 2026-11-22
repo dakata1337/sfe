@@ -7,6 +7,9 @@ release: see the top of that script).
 
 ## Unreleased
 
+- A config.toml with a `\U` escape beyond Unicode (above U+10FFFF) is
+  reported as an error instead of loading and then crashing sfe at the
+  next change in Settings. Found by fuzzing.
 - A config.toml that is not UTF-8 (a stray byte from an editor saving in
   another encoding) is reported as an error with its line, instead of
   making sfe read past the end of a key binding. Found by fuzzing.

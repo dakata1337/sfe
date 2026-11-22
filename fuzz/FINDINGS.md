@@ -78,6 +78,25 @@ harness (not in sfe) are listed too, so the same mistake is not repeated.
   key reached the closed view's menu (`WIDGET_REALIZED_FOR_EVENT`). While a
   menu or other grab is active, the monkey now only presses keys.
 
+## Round 8 (2026-11-22, 14400 s, all 11 targets with `-p`)
+
+### 11. A TOML escape above U+10FFFF brought back the Settings abort (`config`)
+
+- **Found by:** `fuzz-config` (round trip: the written config did not
+  parse, "(line 91) not valid UTF-8"), after 27 minutes.
+- **Input:** a string with the escape `\U001FFFF0` (above U+10FFFF, the
+  last Unicode code point).
+- **Cause:** the vendored tomlc17's `ucs_to_utf8` encoded code points up
+  to U+1FFFFF as four bytes; above U+10FFFF those bytes are not UTF-8. The
+  file itself is plain ASCII, so sfe's UTF-8 check (finding 1) passed, the
+  config loaded, and the first Settings change aborted in
+  `sfe_config_copy`, which writes the config out and parses it back — the
+  3.2.4 crash by another route.
+- **Fix:** `ucs_to_utf8` stops at U+10FFFF (a local change in
+  `thirdparty/tomlc17/src/tomlc17.c`, marked "sfe:"), so such an escape is
+  a parse error reported with its line, like any other mistake in the file.
+- **Test:** `/config/escape-beyond-unicode` (fails without the fix).
+
 ## Round 7 (2026-11-22, 7200 s, all 11 targets with `-p`)
 
 Nothing found. Corpora: config 16,653 inputs, thumbnailer 5,487, rename

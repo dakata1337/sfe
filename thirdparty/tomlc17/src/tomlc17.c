@@ -3250,10 +3250,12 @@ static int ucs_to_utf8(uint32_t code, char buf[4]) {
     return 3;
   }
 
-  /* 0x00010000 - 0x001FFFFF:
+  /* 0x00010000 - 0x0010FFFF:
      11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+     sfe: was 0x001FFFFF, but UTF-8 (and TOML's escapes) end at U+10FFFF;
+     "\U0011FFFF" gave a string that is not UTF-8 (found by fuzzing).
   */
-  if (code <= 0x001FFFFF) {
+  if (code <= 0x0010FFFF) {
     buf[0] = (unsigned char)(0xf0 | (code >> 18));
     buf[1] = (unsigned char)(0x80 | ((code >> 12) & 0x3f));
     buf[2] = (unsigned char)(0x80 | ((code >> 6) & 0x3f));

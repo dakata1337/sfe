@@ -247,6 +247,24 @@ static void test_invalid_utf8(void)
     g_assert_true(g_str_has_prefix(error->message, "(line 4) "));
 }
 
+/* Found by fuzzing: a \U escape above U+10FFFF decoded to bytes that are
+ * not UTF-8, so the config loaded but every Settings change aborted when
+ * copying it (it did not parse again). Now it is a parse error. */
+static void test_escape_beyond_unicode(void)
+{
+    g_autoptr(GError) error = NULL;
+    const char* text = "[[actions.files]]\nname = \"x\"\ncommand = \"a\\U001FFFF0b\"\n";
+    SfeConfig* cfg = sfe_config_parse(text, strlen(text), &error);
+    g_assert_null(cfg);
+    g_assert_error(error, SFE_CONFIG_ERROR, 0);
+
+    const char* highest = "[[actions.files]]\nname = \"x\"\ncommand = \"\\U0010FFFF\"\n";
+    g_autoptr(SfeConfig) ok = sfe_config_parse(highest, strlen(highest), NULL);
+    g_assert_nonnull(ok);
+    g_autoptr(SfeConfig) copy = sfe_config_copy(ok); /* (aborted before) */
+    g_assert_nonnull(copy);
+}
+
 static void test_missing_file_gives_defaults(void)
 {
     g_autoptr(GError) error = NULL;
@@ -332,6 +350,7 @@ int main(int argc, char** argv)
     g_test_add_func("/config/visual-keys", test_visual_keys);
     g_test_add_func("/config/syntax-error", test_syntax_error);
     g_test_add_func("/config/invalid-utf8", test_invalid_utf8);
+    g_test_add_func("/config/escape-beyond-unicode", test_escape_beyond_unicode);
     g_test_add_func("/config/missing-file", test_missing_file_gives_defaults);
     g_test_add_func("/config/save-and-load", test_save_and_load);
     g_test_add_func("/config/decimal-comma-locale", test_decimal_comma_locale);
