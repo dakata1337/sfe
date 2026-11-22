@@ -1,7 +1,8 @@
 #pragma once
 
-/* The home trash (~/.local/share/Trash, the freedesktop.org trash spec),
- * read directly so it works without GVfs. g_file_trash() puts files there:
+/* The trash (the freedesktop.org trash spec), read directly so it works
+ * without GVfs. g_file_trash() puts files in the home trash
+ * (~/.local/share/Trash), or a drive's own (sfe_trash_dirs()):
  *
  *   files/NAME              the trashed item
  *   info/NAME.trashinfo     where it came from (Path=) and when
@@ -20,6 +21,7 @@ bool sfe_trash_contains(GFile* file);
 /* Whether `dir` is the trash folder itself. */
 bool sfe_trash_is_trash_dir(GFile* dir);
 
+/* Whether every trash folder is empty. */
 bool sfe_trash_is_empty(void);
 
 /* The info file of a trashed item: info/NAME.trashinfo. */
@@ -33,12 +35,17 @@ GFile* sfe_trash_original_location(GFile* item, GError** error);
  * than replacing something. */
 bool sfe_trash_restore(GFile* item, GError** error);
 
-/* The newest trashed item that came from `original`, or NULL. */
-GFile* sfe_trash_find(GFile* original);
+/* The trash folders: the home one, then every mounted drive's own
+ * ($top/.Trash/UID, $top/.Trash-UID) that exists. GFile* list. */
+GList* sfe_trash_dirs(void);
+
+/* Every item in the trash folders `dirs`, by where it came from: original
+ * path -> the newest item from there (GFile*). Read once for many look-ups. */
+GHashTable* sfe_trash_index(GList* dirs);
 
 /* Items (GFile*) to delete to empty the trash or to delete `items` from it:
  * the items plus their info files. */
 GList* sfe_trash_with_info(GList* items);
 
-/* Everything in files/ and info/, to empty the trash. */
+/* Everything in files/ and info/ of every trash folder, to empty the trash. */
 GList* sfe_trash_everything(void);

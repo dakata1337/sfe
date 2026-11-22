@@ -134,7 +134,11 @@ static void test_trash(void)
     list = g_list_append(NULL, file);
     e = run_recorded(SFE_OP_TRASH, list, NULL);
     g_list_free(list);
-    g_autoptr(GFile) item = sfe_trash_find(file);
+    GList* dirs = sfe_trash_dirs();
+    g_autoptr(GHashTable) index = sfe_trash_index(dirs);
+    g_list_free_full(dirs, g_object_unref);
+    g_autofree char* path = g_file_get_path(file);
+    GFile* item = g_hash_table_lookup(index, path);
     g_assert_nonnull(item);
     g_assert_true(g_file_delete(item, NULL, NULL));
     g_autoptr(GError) error = NULL;

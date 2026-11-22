@@ -241,9 +241,13 @@ static bool undo_trash(SfeUndoEntry* e, guint* missing, GError** error)
 {
     GError* first = NULL;
     guint restored = 0;
+    GList* dirs = sfe_trash_dirs();
+    g_autoptr(GHashTable) index = sfe_trash_index(dirs); /* once: not per file */
+    g_list_free_full(dirs, g_object_unref);
     for (guint i = 0; i < e->pairs->len; i++) {
         const SfeUndoPair* p = g_ptr_array_index(e->pairs, i);
-        g_autoptr(GFile) item = p->before ? sfe_trash_find(p->before) : NULL;
+        g_autofree char* path = p->before ? g_file_get_path(p->before) : NULL;
+        GFile* item = path ? g_hash_table_lookup(index, path) : NULL;
         if (item == NULL) {
             (*missing)++;
             continue;

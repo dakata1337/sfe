@@ -33,9 +33,12 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size)
     if (original != NULL) {
         char* path = g_file_get_path(original);
         FUZZ_CHECK(path != NULL && g_path_is_absolute(path), "original location is not an absolute path");
-        GFile* found = sfe_trash_find(original);
+        GList* dirs = sfe_trash_dirs();
+        GHashTable* index = sfe_trash_index(dirs);
+        GFile* found = g_hash_table_lookup(index, path);
         FUZZ_CHECK(found != NULL && g_file_equal(found, item), "the item is not found by its own original location");
-        g_object_unref(found);
+        g_hash_table_unref(index);
+        g_list_free_full(dirs, g_object_unref);
         g_free(path);
         g_object_unref(original);
     }

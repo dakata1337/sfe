@@ -2,6 +2,7 @@
 
 #include <glib/gstdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static char* root; /* a temporary XDG_DATA_HOME, so the real trash is never touched */
 
@@ -92,6 +93,54 @@ static void test_delete_lists(void)
     g_assert_true(sfe_trash_is_empty());
 }
 
+/* A drive's own trash ($top/.Trash-UID): g_file_trash() puts files from a
+ * USB stick there, with Path= relative to the drive's top folder. Undo
+ * looks there too (the index), the newest item wins, and restoring puts
+ * it back on the drive. A relative Path= cannot leave the drive. */
+static void write_item(const char* trash, const char* name, const char* path, const char* date)
+{
+    g_autofree char* files = g_build_filename(trash, "files", NULL);
+    g_autofree char* info = g_build_filename(trash, "info", NULL);
+    g_mkdir_with_parents(files, 0700);
+    g_mkdir_with_parents(info, 0700);
+    g_autofree char* item = g_build_filename(files, name, NULL);
+    g_file_set_contents(item, date, -1, NULL);
+    g_autofree char* info_name = g_strconcat(name, ".trashinfo", NULL);
+    g_autofree char* info_path = g_build_filename(info, info_name, NULL);
+    g_autofree char* text = g_strdup_printf("[Trash Info]\nPath=%s\nDeletionDate=%s\n", path, date);
+    g_file_set_contents(info_path, text, -1, NULL);
+}
+
+static void test_drive_trash(void)
+{
+    g_autofree char* drive = g_build_filename(root, "drive", NULL);
+    g_autofree char* own = g_strdup_printf(".Trash-%u", (unsigned)getuid());
+    g_autofree char* trash_path = g_build_filename(drive, own, NULL);
+    write_item(trash_path, "notes.txt", "docs/notes.txt", "2026-01-01T10:00:00");
+    write_item(trash_path, "notes.2.txt", "docs/notes.txt", "2026-02-01T10:00:00"); /* the newer one */
+    write_item(trash_path, "evil.txt", "../outside.txt", "2026-03-01T10:00:00");
+
+    g_autoptr(GFile) trash_dir = g_file_new_for_path(trash_path);
+    GList* dirs = g_list_append(NULL, trash_dir);
+    g_autoptr(GHashTable) index = sfe_trash_index(dirs);
+    g_list_free(dirs);
+    g_autofree char* original = g_build_filename(drive, "docs", "notes.txt", NULL);
+    GFile* item = g_hash_table_lookup(index, original);
+    g_assert_nonnull(item);
+    g_autofree char* name = g_file_get_basename(item);
+    g_assert_cmpstr(name, ==, "notes.2.txt");
+    g_assert_cmpuint(g_hash_table_size(index), ==, 1); /* not the one leaving the drive */
+
+    g_autoptr(GError) error = NULL;
+    g_assert_true(sfe_trash_restore(item, &error));
+    g_assert_no_error(error);
+    g_autofree char* text = NULL;
+    g_assert_true(g_file_get_contents(original, &text, NULL, NULL));
+    g_assert_cmpstr(text, ==, "2026-02-01T10:00:00");
+    g_autofree char* info = g_build_filename(trash_path, "info", "notes.2.txt.trashinfo", NULL);
+    g_assert_false(g_file_test(info, G_FILE_TEST_EXISTS)); /* its own info file went */
+}
+
 int main(int argc, char** argv)
 {
     root = g_dir_make_tmp("sfe-trash-XXXXXX", NULL);
@@ -100,6 +149,7 @@ int main(int argc, char** argv)
     g_test_init(&argc, &argv, NULL);
     g_test_add_func("/trash/restore", test_restore);
     g_test_add_func("/trash/delete-lists", test_delete_lists);
+    g_test_add_func("/trash/drive-trash", test_drive_trash);
     int status = g_test_run();
 
     g_autofree char* cmd = g_strdup_printf("rm -rf '%s'", root);
