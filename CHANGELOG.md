@@ -7,6 +7,8 @@ release: see the top of that script).
 
 ## Unreleased
 
+## 3.2.5
+
 - A config.toml with a `\U` escape beyond Unicode (above U+10FFFF) is
   reported as an error instead of loading and then crashing sfe at the
   next change in Settings. Found by fuzzing.

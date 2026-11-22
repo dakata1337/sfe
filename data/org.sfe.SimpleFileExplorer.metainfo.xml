@@ -45,6 +45,11 @@
   </provides>
   <content_rating type="oars-1.1"/>
   <releases>
+    <release version="3.2.5" date="2026-11-22">
+      <description>
+        <p>Fixes found by fuzzing and UI testing: a config crash, a portal path escape, endless copies through symlinks, a mass-rename freeze, and more.</p>
+      </description>
+    </release>
     <release version="3.2.4" date="2026-11-21">
       <description>
         <p>Fixes a crash on every Settings change, and the config being ignored, in languages with a decimal comma.</p>
